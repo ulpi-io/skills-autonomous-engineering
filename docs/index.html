@@ -100,7 +100,7 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
   backdrop-filter:blur(8px); border-bottom:1px solid var(--rule)}
 .bar .wrap{display:flex; align-items:center; gap:20px; height:60px}
 .brand{display:flex; align-items:center; gap:11px; font-family:var(--mono); font-weight:600; letter-spacing:.02em; text-decoration:none; font-size:15px}
-.brand svg{width:26px; height:26px; flex:none}
+.brand .logo{width:26px; height:26px; flex:none; border-radius:6px}
 .bar nav{margin-left:auto; display:flex; gap:22px; align-items:center}
 .bar nav a{font-family:var(--mono); font-size:13px; color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
 .bar nav a:hover{color:var(--ink)}
@@ -229,7 +229,7 @@ section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
 .row2.empty::before{display:none}
 
 /* install */
-.cmdrow{display:flex;align-items:stretch;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--ground-2);margin-bottom:12px;max-width:760px}
+.cmdrow{display:flex;align-items:stretch;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--ground-2);margin-bottom:12px}
 .cmdrow code{font-family:var(--mono);font-size:14px;padding:14px 16px;overflow-x:auto;white-space:nowrap;flex:1;color:var(--ink)}
 .cmdrow .cp{font-family:var(--mono);font-size:12px;border:0;border-left:1px solid var(--rule);background:transparent;color:var(--ink-2);padding:0 16px;cursor:pointer;letter-spacing:.06em}
 .cmdrow .cp:hover{color:var(--accent)}
