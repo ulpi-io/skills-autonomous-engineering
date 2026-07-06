@@ -46,6 +46,21 @@ async function mapCapped(items, cap, fn) {
   return out
 }
 
+// Retry transient agent deaths (rate-limit storms) with fixed backoff — a dead reviewer must be a
+// RETRIED reviewer before it becomes a reported coverage gap (fail-closed, but not trigger-happy).
+const RETRY_DELAYS = [3000, 10000, 30000]
+const isRateLimit = (e) => /rate.?limit|429|overloaded|529|too many requests|quota/i.test(String((e && (e.message || e)) || ''))
+const sleep = (ms) => (typeof setTimeout === 'function' ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
+async function withRetry(fn, label) {
+  for (let attempt = 0; ; attempt++) {
+    try { const r = await fn(); if (r != null) return r }
+    catch (e) { if (!isRateLimit(e)) throw e }
+    if (attempt >= RETRY_DELAYS.length) return null
+    log(`${label || 'agent'} died (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — backing off ${RETRY_DELAYS[attempt] / 1000}s`)
+    await sleep(RETRY_DELAYS[attempt])
+  }
+}
+
 const FINDINGS = { type: 'object', required: ['findings'], properties: {
   findings: { type: 'array', items: { type: 'object', required: ['file', 'issue', 'severity'], properties: {
     file: { type: 'string' }, line: { type: 'integer' }, issue: { type: 'string' },
@@ -57,7 +72,7 @@ const VERDICT = { type: 'object', required: ['refuted'], properties: {
 
 // ── Review: one independent lens per dimension ────────────────────────────────────
 phase('Review')
-const results = await mapCapped(DIMENSIONS, MAX_PARALLEL, (dim, i) => agent(
+const results = await mapCapped(DIMENSIONS, MAX_PARALLEL, (dim, i) => withRetry(() => agent(
   `You are reviewer ${i + 1}/${DIMENSIONS.length}, lens: ${dim}.
    In ${ROOT}, run: ${DIFF}
    Review ONLY through your lens. Read the actual changed code (not just the diff hunks) where the
@@ -65,7 +80,7 @@ const results = await mapCapped(DIMENSIONS, MAX_PARALLEL, (dim, i) => agent(
    a file, a line, an honest severity (blocker = ship-stopping defect; concern = real but survivable;
    nit/fyi = minor), and a suggested fix. No style opinions, no unverifiable speculation.
    Return { findings: [...] } — an empty array is a valid, honest result.`,
-  { label: `review:${dim.split(' ')[0]}`, phase: 'Review', schema: FINDINGS }))
+  { label: `review:${dim.split(' ')[0]}`, phase: 'Review', schema: FINDINGS }), `review:${dim.split(' ')[0]}`))
 
 const coverage = DIMENSIONS.map((dim, i) => ({ dimension: dim.split(' ')[0], ran: !!results[i] }))
 const gaps = coverage.filter(c => !c.ran)
@@ -82,13 +97,13 @@ phase('Verify')
 const LENSES = ['correctness — trace the logic on a concrete input', 'reproduction — actually construct the failing input/state', 'regression — does the claimed defect really change observable behavior']
 const verified = await mapCapped(dedup, MAX_PARALLEL, async (f) => {
   const n = f.severity === 'blocker' ? Math.max(N_SKEPTICS, 3) : N_SKEPTICS
-  const votes = (await parallel(Array.from({ length: n }, (_, i) => () => agent(
+  const votes = (await parallel(Array.from({ length: n }, (_, i) => () => withRetry(() => agent(
     `Adversarial skeptic ${i + 1}/${n}, lens: ${LENSES[i % LENSES.length]}.
      Try to REFUTE this finding against the ACTUAL code in ${ROOT} (read the file, build the input):
      ${JSON.stringify(f).slice(0, 900)}
      Default refuted=true if you cannot POSITIVELY establish it with evidence.
      Return { refuted, confidence, evidence, counterexample? }.`,
-    { label: `verify:${(f.file || '?').split('/').pop()}`, phase: 'Verify', schema: VERDICT })))).filter(Boolean)
+    { label: `verify:${(f.file || '?').split('/').pop()}`, phase: 'Verify', schema: VERDICT }), 'skeptic')))).filter(Boolean)
   const confirms = votes.filter(v => !v.refuted).length
   const refutes = votes.filter(v => v.refuted).length
   const hardRefute = votes.some(v => v.refuted && v.confidence === 'high' && v.counterexample)
