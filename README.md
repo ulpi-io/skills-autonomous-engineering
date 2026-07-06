@@ -24,8 +24,8 @@ modes **mechanically impossible**, not just discouraged.
 ⏺ Fixing failing test 1/2: root cause is a real bug in session.ts:41 (clock injected
   nowhere) — surfacing it, NOT rewriting the assertion to match the wrong output.
 
-✗ Edit blocked by guard-test-integrity: this edit adds `.skip` to a test file — that
-  fakes the done-condition instead of fixing the failure.        ← the hook, not a promise
+✗ Edit blocked by guard-test-integrity: this edit weakens the test signal (skip/only/
+  suppression in a test file) — that fakes the done-condition.   ← the hook, not a promise
 
 ⏺ Converged: 54 tests green, 7 behaviors covered (all mutation-verified), 1 real bug
   surfaced, 0 tests skipped/weakened. Iterations 4/6, ~38k tokens of 150k budget.
@@ -91,8 +91,9 @@ npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill 
 
 - **Claude Code** reads each skill's `description` + `when_to_use` (≤1,536 chars combined — CI-enforced
   here, because past that it silently truncates and routing degrades) for model-invocation, and every
-  skill is a `/skill-name` slash command. Skills must be *installed* (`.claude/skills/`,
-  `~/.claude/skills/`, `.agents/skills/`, or a plugin) — a raw clone is not discovered.
+  skill is a `/skill-name` slash command. Skills must be *installed* — any of the five layouts the
+  guard resolvers also cover: project `.claude/skills/` or `.agents/skills/`, user `~/.claude/skills/`
+  or `~/.agents/skills/`, or a plugin — a raw clone is not discovered.
 - **Codex** supports the same SKILL.md anatomy natively (`name` + `description` are its entire routing
   surface) and is in skills.sh's universal install group. Codex-tuned briefs are phase 2.
 - **Enforcement travels with the skill**: guard hooks are declared in skill frontmatter (skill-scoped —
@@ -114,8 +115,9 @@ hook **blocks the tool call** (reason shown to the model):
 | `auto-ship/scripts/guard-ship-irreversibles.sh` | Unilateral irreversibles — plain `push --force`, `push --delete` |
 | `checkpoint-resume/scripts/checkpoint.mjs` | Destroying run state — refuses re-init over a live run, demoting `done` units, false `finalize done` |
 
-All behavior-tested in CI (`scripts/test-guards.sh` — 40 cases incl. resolver, fail-open, live-run
-staleness scoping, and the one-shot `.ulpi/allow-test-weaken` escape hatch — and
+All behavior-tested in CI (`scripts/test-guards.sh` — 52 cases incl. resolver, fail-open, live-run
+staleness scoping, multi-line/quoted/global-option command parsing, and the 2-minute
+`.ulpi/allow-test-weaken` approval window — and
 `scripts/test-checkpoint.sh` — the full contract incl. durable `item` persistence, `gc` retention, and
 zero lost writes under 20-way concurrency). Runs are resumable at ANY point (phase- and task-granular
 checkpoints), and when a Codex integration is installed you can delegate build/review/verify roles to it

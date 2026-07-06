@@ -113,8 +113,10 @@ CALLER creates and updates this file — pass the absolute `statusFile` path in.
 
 ## Step 2: Update as work lands (running)
 
-After each unit reaches a terminal state, patch the file — do NOT rewrite it wholesale (concurrent
-writers race). Prefer a read-modify-write with `jq`:
+After each unit reaches a terminal state, patch the file with the CLI (Step 0.5):
+`node <skill-dir>/scripts/checkpoint.mjs unit <file> <unit> done || true` — it owns locking,
+atomicity, and the refusals. The `jq` recipe below is the FALLBACK for environments without Node
+only; never prefer it when the CLI is available:
 
 ```bash
 jq --arg u "<unit-id>" --arg s "done" --arg t "$(date -u +%Y%m%dT%H%M%SZ)" \

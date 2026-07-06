@@ -36,8 +36,9 @@ const DIMENSIONS = CFG.dimensions || [
   'test adequacy (new behaviors without meaningful tests, vacuous assertions)',
   'API/contract compatibility (public interface changes, backward compat, error semantics)',
 ]
-const N_SKEPTICS = CFG.skeptics ?? 3
-const MAX_PARALLEL = CFG.maxParallel ?? 6
+const N_SKEPTICS = Math.max(1, Number(CFG.skeptics) || 3)
+const MAX_PARALLEL = Math.max(1, Number(CFG.maxParallel) || 6)
+if (!DIMENSIONS.length) throw new Error('auto-review: dimensions must be a non-empty array — zero reviewers would report a vacuous clean')
 
 async function mapCapped(items, cap, fn) {
   const out = []; let i = 0
@@ -50,13 +51,14 @@ async function mapCapped(items, cap, fn) {
 // RETRIED reviewer before it becomes a reported coverage gap (fail-closed, but not trigger-happy).
 const RETRY_DELAYS = [3000, 10000, 30000]
 const isRateLimit = (e) => /rate.?limit|429|overloaded|529|too many requests|quota/i.test(String((e && (e.message || e)) || ''))
-const sleep = (ms) => (typeof setTimeout === 'function' ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
+const HAS_TIMER = typeof setTimeout === 'function'   // sandbox may lack timers: retries still happen, just without backoff
+const sleep = (ms) => (HAS_TIMER ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
 async function withRetry(fn, label) {
   for (let attempt = 0; ; attempt++) {
     try { const r = await fn(); if (r != null) return r }
     catch (e) { if (!isRateLimit(e)) throw e }
     if (attempt >= RETRY_DELAYS.length) return null
-    log(`${label || 'agent'} died (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — backing off ${RETRY_DELAYS[attempt] / 1000}s`)
+    log(`${label || 'agent'} died (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — ${HAS_TIMER ? `backing off ${RETRY_DELAYS[attempt] / 1000}s` : 'no timer: immediate retry'}`)
     await sleep(RETRY_DELAYS[attempt])
   }
 }
@@ -100,7 +102,8 @@ log(`review: ${results.filter(Boolean).flatMap(r => r.findings || []).length} ra
 // ── Verify: majority-refute skeptic panel per finding ─────────────────────────────
 phase('Verify')
 const LENSES = ['correctness — trace the logic on a concrete input', 'reproduction — actually construct the failing input/state', 'regression — does the claimed defect really change observable behavior']
-const verified = await mapCapped(dedup, MAX_PARALLEL, async (f) => {
+// Verify runs n skeptics PER finding — bound total concurrency, not just finding-count
+const verified = await mapCapped(dedup, Math.max(1, Math.floor(MAX_PARALLEL / Math.min(3, N_SKEPTICS))), async (f) => {
   const n = f.severity === 'blocker' ? N_SKEPTICS + 2 : N_SKEPTICS   // blockers genuinely get a stronger panel
   const votes = (await parallel(Array.from({ length: n }, (_, i) => () => withRetry(() => agent(
     `Adversarial skeptic ${i + 1}/${n}, lens: ${LENSES[i % LENSES.length]}.
@@ -112,18 +115,23 @@ const verified = await mapCapped(dedup, MAX_PARALLEL, async (f) => {
   const confirms = votes.filter(v => !v.refuted).length
   const refutes = votes.filter(v => v.refuted).length
   const hardRefute = votes.some(v => v.refuted && v.confidence === 'high' && v.counterexample)
-  const survives = votes.length >= Math.ceil(n / 2) && confirms > refutes && !hardRefute
-  return { f, survives, votes: { confirms, refutes, of: votes.length } }
+  // FAIL CLOSED: a dead panel (below quorum) makes the finding UNVERIFIED — kept and flagged,
+  // never conflated with 'rejected'. Rejection requires a quorum that actually voted.
+  const quorum = votes.length >= Math.ceil(n / 2)
+  const verdict = !quorum ? 'unverified' : (confirms > refutes && !hardRefute ? 'confirmed' : 'rejected')
+  return { f, verdict, votes: { confirms, refutes, of: votes.length } }
 })
 
-const confirmed = verified.filter(v => v.survives).map(v => ({ ...v.f, votes: v.votes }))
-  .sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9))
-const rejected = verified.filter(v => !v.survives).map(v => ({ ...v.f, votes: v.votes }))
-log(`verify: ${confirmed.length} confirmed, ${rejected.length} rejected by the panel`)
+const bySev = (a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9)
+const confirmed  = verified.filter(v => v.verdict === 'confirmed').map(v => ({ ...v.f, votes: v.votes })).sort(bySev)
+const unverified = verified.filter(v => v.verdict === 'unverified').map(v => ({ ...v.f, votes: v.votes })).sort(bySev)
+const rejected   = verified.filter(v => v.verdict === 'rejected').map(v => ({ ...v.f, votes: v.votes }))
+log(`verify: ${confirmed.length} confirmed, ${unverified.length} unverified-kept (dead panels fail closed), ${rejected.length} rejected`)
 
 return {
-  clean: confirmed.length === 0 && gaps.length === 0,   // clean ONLY if every dimension ran AND nothing survived
+  clean: confirmed.length === 0 && unverified.length === 0 && gaps.length === 0,   // every dimension ran, every panel reached quorum, nothing survived
   confirmed,                                             // act on these
+  unverified,                                            // panels died below quorum — treat as OPEN, re-verify or review by hand
   rejected,                                              // the rejection ledger — filtering made visible
   coverage,                                              // which dimensions actually ran (fail-closed record)
 }

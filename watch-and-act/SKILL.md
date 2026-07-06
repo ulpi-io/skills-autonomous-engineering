@@ -39,6 +39,11 @@ A watcher that polls forever, or polls the wrong thing, is pure waste. Non-negot
 
 # Watch and Act
 
+## Inputs
+
+- `$signal`: the external signal to watch (e.g. "CI on branch X", "deploy status"), optionally with
+  an `until <condition/deadline>` clause that seeds the bound.
+
 ## Overview
 
 Bridge your run to something happening elsewhere: poll an external signal on a sensible cadence, react to

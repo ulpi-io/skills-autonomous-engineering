@@ -4,6 +4,7 @@ version: 0.1.0
 description: |
   Run a bounded, self-correcting loop that drives code toward a target state and STOPS honestly — until-green (validate → diagnose → minimal fix → re-run) or until-dry (find → act → re-find until N dry rounds). Every loop declares a termination set (done-condition, max iterations, budget, no-progress stop) and compiles onto native /goal + /loop. Use for any "repeat until a measurable condition holds" work instead of hand-rolling a keep-going loop.
 allowed-tools:
+  - Workflow
   - Bash
   - Read
   - Edit
@@ -188,9 +189,9 @@ Load `references/native-goal-loop.md` for the full field-by-field compilation (i
   The full termination-set rationale, the no-progress/oscillation detectors (failure-set hashing), and
   the budget-accounting recipe. Load when wiring a new loop or debugging one that won't stop.
 - `references/loop-patterns.md`
-  Concrete until-green and until-dry patterns — inline vs. Workflow-tool (`loop-until-count`,
-  `loop-until-dry`), single-agent vs. fan-out, and how the coordinator keeps termination control while
-  delegating the work. Load when the loop is non-trivial or parallel.
+  Concrete until-green and until-dry patterns — inline vs. Workflow-tool shapes (fan-out with
+  adversarial verify, per-unit bounded fix loops), and how the coordinator keeps termination control
+  while delegating the work. Load when the loop is non-trivial or parallel.
 
 ## Output Contract
 

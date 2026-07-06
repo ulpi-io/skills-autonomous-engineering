@@ -43,6 +43,11 @@ A recurring agent acts unattended, repeatedly, forever — the failure modes com
 
 # Schedule Recurring Agent
 
+## Inputs
+
+- `$job`: the recurring job description, optionally followed by a schedule ("weekday 9am", "hourly")
+  that seeds the cadence choice in Phase 2.
+
 ## Overview
 
 Stand up an agent that does a recurring job on a schedule, correctly: a self-contained idempotent brief,

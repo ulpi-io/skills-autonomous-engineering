@@ -53,7 +53,8 @@ is minimal, verified, and reverted-on-doubt.
 - Resolve scope (`$scope` — the diff by default; a path/module otherwise).
 - Establish the behavior baseline: the relevant tests are GREEN before you touch anything (if there are no
   tests around the target, that's a gap — consider `auto-test` first, or characterize behavior before
-  simplifying). Record a snapshot of observable behavior for the target (inputs→outputs, key side effects).
+  simplifying). In pipeline order this net already exists: `auto-build` lands a test with every task,
+  which is exactly why simplify runs after build. Record a snapshot of observable behavior for the target (inputs→outputs, key side effects).
 - Open a `checkpoint-resume` run.
 
 **Success criteria:** scope fixed; a green baseline + behavior snapshot exist as the safety net.

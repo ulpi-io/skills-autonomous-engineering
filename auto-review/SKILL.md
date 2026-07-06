@@ -57,6 +57,11 @@ finding survived a refutation attempt). The parallelism gives coverage; the adve
 signal — you get a short list of verified, severity-labeled, actionable findings instead of a long list
 you have to triage for hallucinations.
 
+## Inputs
+
+- `$scope`: the diff/branch/PR or path to review (default: the current branch diff). Append the
+  literal `--fix` to authorize resolving CONFIRMED blockers in place after the review.
+
 ## Phase 0: Scope and baseline
 
 - Resolve scope (`$scope` — the branch/PR diff by default; a path/module otherwise). Get the actual diff
@@ -142,7 +147,8 @@ in place with no regressions); coverage and rejections are honest.
 
 - `references/review-workflow.js` — the RUNNABLE Workflow for Phases 1–2: one reviewer per dimension →
   dedup (a genuine barrier) → majority-refute skeptic panel per finding → returns `{ clean, confirmed,
-  rejected, coverage }`, fail-closed on any dimension that didn't run. Launch via the Workflow tool
+  unverified, rejected, coverage }` — fail-closed on any dimension that didn't run AND on any skeptic
+  panel that died below quorum (those findings come back `unverified`, kept open, never dropped). Launch via the Workflow tool
   with `{ root, diffCmd }`; prefer it over hand-orchestrating the fan-out.
 - `fan-out-work` (skill) — parallel per-dimension review over the diff.
 - `adversarial-verify` (skill) — the per-finding refutation gate (Phase 2) — the core signal mechanism.

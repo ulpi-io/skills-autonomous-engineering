@@ -35,6 +35,11 @@ An autonomous run without a declared budget is a bug, not a feature. Non-negotia
 
 # Budget Guard
 
+## Inputs
+
+- `$run`: the run to bound — a phase, a loop, or the whole pipeline. Defaults to the run being
+  launched in the current turn.
+
 ## Overview
 
 Give every autonomous run a contract it cannot exceed. Budget-guard is not an action so much as a

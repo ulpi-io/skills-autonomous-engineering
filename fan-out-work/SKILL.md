@@ -28,7 +28,7 @@ when_to_use: |
   Use when you have (or can cheaply discover) a list of INDEPENDENT items that each need the same
   multi-step treatment, and doing them serially wastes wall-clock — broad audits, sweeping migrations,
   per-file review/test/simplify passes. Do NOT use for a handful of items (just do them inline), for work
-  with cross-item dependencies that force ordering (that's a DAG — use auto-build), or when the items
+  with cross-item dependencies that force ordering (that's a DAG — plan it with auto-plan, build it with auto-build), or when the items
   share write scope and would race (either isolate them or sequence them).
 ---
 
@@ -48,6 +48,11 @@ Parallelism multiplies throughput AND the ways to lie about coverage. Non-negoti
 </EXTREMELY-IMPORTANT>
 
 # Fan-Out Work
+
+## Inputs
+
+- `$work`: the work-list request — a description of the same treatment to apply to N items, or a path
+  to an existing item list.
 
 ## Overview
 

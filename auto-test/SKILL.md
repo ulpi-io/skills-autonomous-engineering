@@ -201,7 +201,9 @@ While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-t
 every Edit/Write: adding `.only`/`.skip`/`xit`/`@pytest.mark.skip`/`#[ignore]`/`@ts-ignore`/
 `eslint-disable` to a test file is BLOCKED at the tool layer. The cardinal sin (gaming the suite
 green) is mechanically impossible, not merely discouraged. Genuine, user-approved weakening goes
-through the explicit `AUTO_TEST_ALLOW_WEAKEN=1` escape with a stated reason.
+through the explicit escape hatch — `touch <project>/.ulpi/allow-test-weaken` opens a 2-minute
+approval window (then expires; `AUTO_TEST_ALLOW_WEAKEN=1` exists for settings-level use) — with the
+reason stated in the reply.
 
 ## Guardrails
 
@@ -240,7 +242,7 @@ Before reporting done, confirm:
 
 Report:
 
-1. scope + suite command used; baseline → final signal (pass/fail counts, coverage delta)
+1. scope + suite command used; baseline → final signal (pass/fail counts; coverage delta when the repo tracks coverage)
 2. tests added (by behavior), each noted mutation-verified
 3. real bugs surfaced (and whether fixed in scope or handed off)
 4. flakes stabilized (root cause + how) — if any

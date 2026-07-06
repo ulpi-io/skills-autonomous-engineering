@@ -39,7 +39,7 @@ for age, status, fp, d in runs[:3]:
     units = d.get("units", {})
     done = sum(1 for u in units.values() if u.get("status") == "done")
     cur = d.get("currentPhase", "")
-    stale = " [STALE — untouched >24h; guards no longer armed by it]" if status == "running" and age > DAY else ""
+    stale = " [STALE — untouched >4h; guards no longer armed by it]" if status == "running" and age > 4 * 3600 else ""
     extra = f", phase: {cur}" if cur else ""
     print(f"Resumable autonomous run: {d.get('id','?')} [{status}]{stale} — {done}/{len(units)} units done{extra} — "
           f"task: {str(d.get('task',''))[:80]} (checkpoint: {fp}; resume skips done units — do NOT re-init or overwrite)")

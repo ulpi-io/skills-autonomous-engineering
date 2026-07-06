@@ -3,7 +3,7 @@ name: auto-build
 version: 0.1.0
 description: |
   Implement a whole DAG plan autonomously — one approved pass, one clean rollback point per task, never
-  building on a broken base. It requires a spec + plan and a clean git baseline, takes a SINGLE human
+  building on a broken base. It requires an approved plan (specced upstream) and a clean git baseline, takes a SINGLE human
   approval of the plan, then walks the DAG layer by layer: for each task it implements on an isolated
   worktree branch test-first (RED → GREEN), integrates the slice onto the working branch, reviews the
   integrated change, runs a bounded fix loop until the task passes, and commits it individually — so any
@@ -82,7 +82,7 @@ way — test-first, integrated, reviewed, individually committed — while the D
 before its dependencies land and the checkpoint guarantees a stop is always resumable. It removes the human
 stepping *between* tasks, not the verification: every task still earns a passing test and its own commit.
 
-## Phase 0: Preflight — spec, plan, clean baseline, working branch
+## Phase 0: Preflight — plan, clean baseline, working branch
 
 - Resolve the plan (`$plan`, or newest `.ulpi/plans/*`); validate its shape (tasks with id / write scope /
   validate, acyclic `layers` that respect `dependsOn`). No plan → route to `auto-plan`. Malformed/cyclic

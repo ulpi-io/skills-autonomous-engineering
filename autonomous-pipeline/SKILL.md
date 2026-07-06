@@ -87,7 +87,7 @@ build's test safety net, test then hardens coverage.)
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
   phases to run (simplify, performance, go-live/ship-deploy), and any budget/scope steer. Keep it light.
 - Verify a git work tree + working branch; declare the pipeline `budget-guard` contract; create the
-  pipeline `checkpoint-resume` file (one unit per phase).
+  pipeline `checkpoint-resume` file (one unit per build task (phase statuses live in the same file)).
 
 **Success criteria:** run mode determined; phase config + budget set; git preflight passed; checkpoint
 open.
@@ -107,7 +107,7 @@ unattended stretch:
    fail-closed gates (a phase agent that died = a gate failure in the register; skipped ≠ clean), the
    DAG walk with worktree isolation and bounded fix loops, and per-task checkpoint writes. It
    hard-throws without `approved: true` — the human gate cannot be bypassed.
-4. Between phases, `watch-and-act` waits on external signals (CI on the pushed branch) when configured.
+4. AROUND the workflow (before launch / after it returns), use `watch-and-act` to gate on external signals — e.g. CI green on the pushed branch before offering a fix round. (A Workflow cannot invoke skills mid-run.)
 4b. **After EVERY run (even a bumpy one)**, close with `auto-learn` — harvest the checkpoint's
    register/blocked-units/degradations into verified, routed learnings so the next run doesn't repay
    this run's tuition. Machine defects it finds are surfaced in the final report, never self-patched.
@@ -197,6 +197,6 @@ Report:
 
 1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded
 2. per phase: outcome + gate status (met its bar / blocked / skipped)
-3. what shipped (PR / rollout) and the end-state validate result (honest)
+3. ship-prep artifacts produced (changelog + PR body draft — OPENING the PR / deploying is the user's explicitly-gated step) and the end-state validate result (honest)
 4. the verified open findings register + the next-move options (fix round / hand-fix / accept-with-risk)
 5. the pipeline checkpoint path (durable, resumable record)

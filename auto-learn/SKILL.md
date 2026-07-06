@@ -52,6 +52,10 @@ learning nothing. Non-negotiable:
 
 # Auto Learn
 
+## Inputs
+
+- `$run`: a checkpoint path or run id to harvest; defaults to the most recent `.ulpi/runs/*.json`.
+
 ## Overview
 
 The difference between an autonomous machine and a self-improving one is whether run N+1 knows what
