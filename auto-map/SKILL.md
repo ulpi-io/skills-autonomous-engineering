@@ -73,8 +73,9 @@ touches, and can trust what the map says.
 Inventory from the code, not from memory: build/test/lint commands (from package scripts, Makefile,
 CI); directory layout and module boundaries; public surfaces (routes, CLI entries, exported packages);
 data models and stores; integration points (queues, external APIs); repo-provided capabilities
-(`.claude/skills/`, `.mcp.json`); per-package equivalents in a monorepo. Use `fan-out-work` with one
-agent per package when the repo is large.
+(`.claude/skills/`, `.mcp.json`); and the SIGNIFICANT-directory list for Tier 2
+(module boundaries by structure, size, and git churn — the folders where work actually happens). Use
+`fan-out-work` with one agent per package/major directory when the repo is large.
 
 **Success criteria:** a verified inventory — every item carries the evidence path it was read from.
 
@@ -85,12 +86,19 @@ agent per package when the repo is large.
   load-bearing invariants, and POINTERS to the deeper tiers as literal backtick paths ("architecture
   detail: `docs/architecture.md` — read when needed"). HTML comments for maintainer notes (stripped
   from context). Generation-stamped sections.
-- **Tier 1 — `.claude/rules/<topic>.md` with `paths:` frontmatter:** per-area depth (api.md scoped to
-  `src/api/**`, frontend.md to `src/components/**`, db.md to migrations/models) that loads ONLY when
-  Claude touches matching files. This is where "how this area works" lives.
-- **Tier 2 — nested `<package>/CLAUDE.md` (monorepo):** per-package identity, commands, boundaries —
-  loaded on demand when Claude works in that package. This replaces a separate monorepo variant: the
-  tier is generated per workspace package automatically.
+- **Tier 1 — `.claude/rules/<topic>.md` with `paths:` frontmatter:** CROSS-CUTTING conventions scoped
+  by glob (testing.md, security.md, api-design.md) that load only when Claude touches matching files.
+  Rules carry the "how we do things" that spans folders; per-folder identity lives in Tier 2's nested
+  CLAUDE.md files, not here.
+- **Tier 2 — nested `CLAUDE.md` THROUGHOUT the tree (every repo, not just monorepos):** every
+  SIGNIFICANT directory gets its own small `CLAUDE.md` — what this folder is, its key files and their
+  roles, local invariants ("handlers here never touch the DB directly"), how to test this area, and
+  what it must not import. Claude Code loads these ON DEMAND the moment it reads a file in that
+  directory — so Claude always understands the folder it is working in, paying zero context until it
+  goes there. Significant = module boundaries: `src/api/`, `src/components/`, `src/db/`+migrations,
+  `services/*`, workers, infra — and in a monorepo, every workspace package (subsuming a separate
+  monorepo variant). Rule of thumb: if an engineer would pause to orient before editing there, it gets
+  a map; a folder of three leaf files does not.
 - **Tier 3 — deep references (`docs/*.md` or existing docs):** linked from higher tiers in backticks,
   never imported.
 
@@ -128,7 +136,7 @@ real (non-aborted) run — the map then describes the code that just shipped.
 - A root CLAUDE.md over ~150 lines, or `@`-imports pointing at generated reference docs.
 - Map claims with no evidence path; commands never executed during generation.
 - A regenerated file that lost human-written sections.
-- Monorepo packages all documented in the root file instead of nested tiers.
+- Major directories with no nested CLAUDE.md (Claude works there blind), or everything crammed into the root file instead of the on-demand tiers.
 - The map describing intended architecture rather than actual code.
 
 ## Guardrails
@@ -149,7 +157,7 @@ real (non-aborted) run — the map then describes the code that just shipped.
 
 Report:
 
-1. project shape (single/monorepo) + tiers written/updated with line counts vs budgets
+1. project shape + the significant-directory list, and every tier written/updated with line counts vs budgets (incl. each nested CLAUDE.md)
 2. commands verified by execution (and any marked unverified, with why)
 3. claims fixed/flagged in the verify gate; drift found (verify mode)
 4. human-written content preserved (confirmation), generation stamps updated
