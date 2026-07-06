@@ -105,7 +105,10 @@ unattended stretch:
 1. **spec → plan** run first, in-session (`auto-spec`, `auto-plan`) — they may ask questions, so they
    stay outside the Workflow. Then the SINGLE approval gate on the plan (unambiguous affirmative).
 2. **Create the checkpoint** (`checkpoint-resume`'s `scripts/checkpoint.mjs init`) — the Workflow
-   sandbox has no filesystem access, so the skill creates the status file before launch.
+   sandbox has no filesystem access, so the skill creates the status file before launch. Pass
+   `--launch '{"scriptPath":"<pipeline-workflow.js>","args":{…the full launch args…}}'` so the exact
+   relaunch recipe is persisted IN the status file — then `run-status.mjs --resume` can reconstruct the
+   resume with no session memory.
 3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args (root,
    workingBranch, validate, planPath, `approved: true`, statusFile, checkpointCli path, the optional-
    phase config, caps, and `availableAgents` — the installed specialist set from Phase 0, so each task's
@@ -123,6 +126,11 @@ unattended stretch:
    update rules the map refresh then verifies.)
 5. Any escalation (unfixable/ambiguous/irreversible) surfaces in the returned register and PAUSES the
    pipeline; on resolution, re-invoke — the checkpoint resumes at the exact phase/task.
+
+**Querying a run (any time, from any session):** `node <checkpoint-resume>/scripts/run-status.mjs`
+renders the newest run — phases, per-task progress, the open register, and the resume command — READ-
+ONLY, so it's safe to run while the pipeline is in flight. `--list` shows all runs; `--resume` emits the
+exact Workflow call to continue. This is how the user checks "where's my run at?" without touching it.
 
 **Native /goal framing (Claude Code):** for a fully unattended run, set the session goal to the
 pipeline's Output Contract before launching — `/goal` pins the done-condition ("workflow returned
@@ -208,4 +216,5 @@ Report:
    ran generic (`missingAgents` — surface it so the user can install the missing agent/skill)
 3. ship-prep artifacts produced (changelog + PR body draft — OPENING the PR / deploying is the user's explicitly-gated step) and the end-state validate result (honest)
 4. the verified open findings register + the next-move options (fix round / hand-fix / accept-with-risk)
-5. the pipeline checkpoint path (durable, resumable record)
+5. the pipeline checkpoint path (durable, resumable record) + the one-liner to query it any time
+   (`run-status.mjs` for a rendered view, `run-status.mjs --resume` for the relaunch call)

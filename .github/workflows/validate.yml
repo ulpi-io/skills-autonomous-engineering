@@ -17,8 +17,10 @@ jobs:
         run: node scripts/validate-skills.mjs
       - name: Guard scripts behave (block/allow/escape-hatch contract)
         run: bash scripts/test-guards.sh
-      - name: Checkpoint CLI contract (lifecycle + fail-closed refusals)
+      - name: Checkpoint CLI contract (lifecycle + fail-closed refusals + timestamps + launch)
         run: bash scripts/test-checkpoint.sh
+      - name: Run-status reader contract (read-only render/list/json/resume)
+        run: bash scripts/test-run-status.sh
       - name: Map verifier contract (anti-lie gate catches every class of lying map)
         run: bash scripts/test-map-verify.sh
       - name: Plan DAG gate contract (structural judge catches every class of unsafe plan)

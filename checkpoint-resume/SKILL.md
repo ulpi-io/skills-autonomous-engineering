@@ -66,7 +66,7 @@ atomic writes, refusal to clobber a live checkpoint, refusal to demote a `done` 
 finalize, and the resume-set computation — so USE IT instead of hand-rolling jq:
 
 ```bash
-node <skill-dir>/scripts/checkpoint.mjs init  <file> --task "<desc>" [--units "a,b,c"] [--id <id>]
+node <skill-dir>/scripts/checkpoint.mjs init  <file> --task "<desc>" [--units "a,b,c"] [--id <id>] [--launch '<json>']
 node <skill-dir>/scripts/checkpoint.mjs unit  <file> <unit> <pending|in_progress|done|blocked|dep_blocked> [--note "…"] [--deps "x,y"]
 node <skill-dir>/scripts/checkpoint.mjs phase <file> <phase> <pending|running|done|blocked|skipped>
 node <skill-dir>/scripts/checkpoint.mjs get   <file> --summary
@@ -79,6 +79,29 @@ node <skill-dir>/scripts/checkpoint.mjs gc    <runs-dir> [--keep-days 7]  # arch
 Append `|| true` at call sites — status writes are non-fatal. The CLI exits 2 (refuses) on the
 contract-violating operations: re-`init` over a live checkpoint, demoting a `done` unit, and
 `finalize done` while units are open. Those refusals are the guardrails, enforced in code.
+
+**Everything is timestamped** (ISO-8601 UTC): the doc (`createdAt`/`updatedAt`/`finishedAt`), each unit
+(`createdAt`/`updatedAt` + `startedAt`/`finishedAt`), each phase (`startedAt`/`updatedAt`/`finishedAt`),
+and each register item (`at`) — so a reader can show real durations and "updated 3m ago", not guesses.
+Pass `init --launch '{"scriptPath":"…","args":{…}}'` to persist the exact relaunch recipe in the file,
+so the run can be resumed from the status file alone (session-independent).
+
+## Step 0.6: Query a run the easy way — `run-status.mjs` (READ-ONLY)
+
+To SEE where a run is (yours or one a pipeline left behind), use the bundled legible reader — it never
+writes, so it can't disturb a run in flight:
+
+```bash
+node <skill-dir>/scripts/run-status.mjs                 # newest run for this project, rendered
+node <skill-dir>/scripts/run-status.mjs <id>            # a specific run (id prefix is enough)
+node <skill-dir>/scripts/run-status.mjs --list          # every run, one line each, newest first
+node <skill-dir>/scripts/run-status.mjs --json [id]     # the raw durable doc
+node <skill-dir>/scripts/run-status.mjs --resume [id]   # emit the exact Workflow({scriptPath,args}) to resume
+```
+
+It auto-discovers `.ulpi/runs/` by walking up from the cwd, renders phases + a per-task progress bar +
+the open findings register + a resume command, and `--resume` reconstructs the relaunch from the
+persisted `launch` recipe (falling back to the computed skip/eligible set when none was stored).
 
 ## Step 1: Initialize the status file (new run only)
 
@@ -95,12 +118,15 @@ Write `.ulpi/runs/<id>.json`:
   "createdAt": "<UTC now>",
   "updatedAt": "<UTC now>",
   "units": {
-    "<unit-id>": { "status": "pending", "dependsOn": [], "note": "" }
+    "<unit-id>": { "status": "pending", "dependsOn": [], "note": "", "createdAt": "<UTC now>", "updatedAt": "<UTC now>" }
   },
   "openItems": [],
   "result": null
 }
 ```
+
+(The CLI stamps `createdAt`/`updatedAt` on every unit and phase automatically — the fields above are
+what `init` writes; you never hand-maintain them.)
 
 Enumerate the units up front when they're known (DAG tasks, files to migrate); for a discovery-driven
 run, start with `units: {}` and add them as they're found. Each unit's `status` moves
@@ -173,8 +199,11 @@ units' own checks) rather than trusting a stale `running` — see `references/st
 ## When To Load References
 
 - `scripts/checkpoint.mjs`
-  The runnable implementation of this contract — init/unit/phase/get/resume/finalize with atomic writes
-  and code-enforced refusals. Prefer it over hand-rolled file operations, always.
+  The runnable implementation of this contract — init/unit/phase/get/resume/finalize with atomic writes,
+  timestamped mutations, and code-enforced refusals. Prefer it over hand-rolled file operations, always.
+- `scripts/run-status.mjs`
+  The READ-ONLY legible reader (Step 0.6): renders the newest run (or `<id>`/`--list`/`--json`), and
+  `--resume` emits the exact Workflow relaunch call. Never writes — safe to run against a live run.
 - `references/status-schema.md`
   The full status-file schema (per-unit states, `dependsOn`, `openItems`, phase blocks), the three verbs
   (status / stop / resume), atomic-write recipes, and how to rebuild the file from artifacts after a

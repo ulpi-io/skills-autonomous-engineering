@@ -5,8 +5,12 @@
 // All writes are ATOMIC (tmp + rename) and INCREMENTAL (read-modify-write), and every
 // command is NON-FATAL by design at the call site: `node checkpoint.mjs ... || true`.
 //
+// Every mutation is TIMESTAMPED (ISO-8601, UTC): the doc carries createdAt/updatedAt/finishedAt; each
+// unit carries createdAt/updatedAt + startedAt/finishedAt; each phase carries startedAt/updatedAt/
+// finishedAt; each register item carries `at`. A legible reader lives at ../scripts/run-status.mjs.
+//
 // Usage:
-//   node checkpoint.mjs init <file> --task "<desc>" [--units "a,b,c"] [--id <id>]
+//   node checkpoint.mjs init <file> --task "<desc>" [--units "a,b,c"] [--id <id>] [--launch '<json>']
 //   node checkpoint.mjs unit <file> <unit-id> <pending|in_progress|done|blocked|dep_blocked> [--note "<why>"] [--deps "x,y"]
 //   node checkpoint.mjs phase <file> <phase> <pending|running|done|blocked|skipped>
 //   node checkpoint.mjs get <file> [--summary]
@@ -87,14 +91,21 @@ switch (cmd) {
     }
     const task = opt(rest, '--task') ?? fail('init requires --task "<desc>"');
     const id = opt(rest, '--id', `run-${now().replace(/[:.]/g, '').replace('T', '-').replace('Z', 'Z')}`);
+    const stamp = now();
     const units = {};
     for (const u of (opt(rest, '--units', '') || '').split(',').map(s => s.trim()).filter(Boolean)) {
-      units[u] = { status: 'pending', dependsOn: [], note: '' };
+      units[u] = { status: 'pending', dependsOn: [], note: '', createdAt: stamp, updatedAt: stamp };
     }
+    // --launch '<json>' persists the exact resume recipe ({ scriptPath, args }) so the run can be
+    // relaunched from the status file alone, session-independent. Optional; back-compat if absent.
+    let launch;
+    const launchRaw = opt(rest, '--launch');
+    if (launchRaw !== undefined) { try { launch = JSON.parse(launchRaw); } catch (e) { fail(`--launch is not valid JSON: ${e.message}`); } }
     writeDoc(file, {
       schemaVersion: 1, id, task, status: 'running',
-      createdAt: now(), updatedAt: now(),
+      createdAt: stamp, updatedAt: stamp,
       phases: {}, units, openItems: [], result: null,
+      ...(launch !== undefined ? { launch } : {}),
     });
     console.log(id);
     });
@@ -108,7 +119,8 @@ switch (cmd) {
       if (/[,\s]/.test(unit)) fail(`unit id '${unit}' contains commas/whitespace — inexpressible in --units and unsafe in shell one-liners`);
       const doc = readDoc(file);
       doc.units ??= {};
-      const u = (doc.units[unit] ??= { status: 'pending', dependsOn: [], note: '' });
+      const stamp = now();
+      const u = (doc.units[unit] ??= { status: 'pending', dependsOn: [], note: '', createdAt: stamp });
       // Guard the load-bearing rule: done is terminal-forward; a done unit is never quietly demoted.
       if (u.status === 'done' && status !== 'done') {
         fail(`unit '${unit}' is already done — refusing to demote it (resume must skip done units)`, 2);
@@ -116,8 +128,9 @@ switch (cmd) {
       u.status = status;
       const note = opt(rest, '--note'); if (note !== undefined) u.note = note;
       const deps = opt(rest, '--deps'); if (deps !== undefined) u.dependsOn = deps.split(',').map(s => s.trim()).filter(Boolean);
-      if (status === 'in_progress' && !u.startedAt) u.startedAt = now();
-      if (['done', 'blocked', 'dep_blocked'].includes(status)) u.finishedAt = now();
+      if (status === 'in_progress' && !u.startedAt) u.startedAt = stamp;
+      if (['done', 'blocked', 'dep_blocked'].includes(status)) u.finishedAt = stamp;
+      u.updatedAt = stamp;   // every mutation is timestamped, not just start/finish
       writeDoc(file, doc);
     });
     break;
@@ -129,7 +142,11 @@ switch (cmd) {
       if (!phase || !PHASE_STATES.includes(status)) fail(`phase requires <phase> <${PHASE_STATES.join('|')}>`);
       const doc = readDoc(file);
       doc.phases ??= {};
-      doc.phases[phase] = { ...(doc.phases[phase] || {}), status };
+      const stamp = now();
+      const ph = { ...(doc.phases[phase] || {}), status, updatedAt: stamp };
+      if (status === 'running' && !ph.startedAt) ph.startedAt = stamp;
+      if (['done', 'blocked', 'skipped'].includes(status)) ph.finishedAt = stamp;
+      doc.phases[phase] = ph;
       if (status === 'running') doc.currentPhase = phase;
       writeDoc(file, doc);
     });
@@ -188,7 +205,10 @@ switch (cmd) {
       try { parsed = JSON.parse(raw); } catch (e) { fail(`item --json is not valid JSON: ${e.message}`); }
       const doc = readDoc(file);
       doc.openItems ??= [];
-      doc.openItems.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+      const stamp = now();
+      // Stamp each register item with when it was recorded (an item keeping its own `at` wins).
+      doc.openItems.push(...(Array.isArray(parsed) ? parsed : [parsed]).map(
+        it => (it && typeof it === 'object' && !Array.isArray(it)) ? { at: stamp, ...it } : it));
       writeDoc(file, doc);
     });
     break;
@@ -229,6 +249,7 @@ switch (cmd) {
         fail(`refusing finalize done — ${open.length} unit(s) not done: ${open.join(', ')} (use needs_attention)`, 2);
       }
       doc.status = status;
+      doc.finishedAt = now();   // when the run reached its terminal state
       const result = opt(rest, '--result'); if (result !== undefined) doc.result = result;
       writeDoc(file, doc);
     });

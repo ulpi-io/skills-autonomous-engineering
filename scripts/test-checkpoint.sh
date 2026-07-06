@@ -51,6 +51,30 @@ node "$CK" init .ulpi/runs/r2.json --task race --units "$(seq -s, 1 20)" --id ra
 for i in $(seq 1 20); do node "$CK" unit .ulpi/runs/r2.json "$i" done >/dev/null & done; wait
 node "$CK" get .ulpi/runs/r2.json --summary | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["done"]==20, f"lost writes: {d}"'; ok $? "concurrent patches lose ZERO writes (mkdir lock)"
 
+# timestamps EVERYWHERE — units (created/updated/started/finished), phases, items, doc.finishedAt
+TS=.ulpi/runs/ts.json
+node "$CK" init $TS --task "ts" --units "x" --id ts1 --launch '{"scriptPath":"/abs/wf.js","args":{"root":"/r","approved":true}}' >/dev/null
+node "$CK" unit $TS x in_progress >/dev/null
+node "$CK" unit $TS x done >/dev/null
+node "$CK" phase $TS build running >/dev/null && node "$CK" phase $TS build done >/dev/null
+node "$CK" item $TS --json '{"phase":"review","issue":"z"}' >/dev/null
+node "$CK" finalize $TS done --result ok >/dev/null
+node "$CK" get $TS | python3 -c '
+import sys,json
+d=json.load(sys.stdin)
+u=d["units"]["x"]
+for k in ("createdAt","updatedAt","startedAt","finishedAt"): assert u.get(k), f"unit missing {k}: {u}"
+p=d["phases"]["build"]
+for k in ("startedAt","updatedAt","finishedAt"): assert p.get(k), f"phase missing {k}: {p}"
+assert d["openItems"][0].get("at"), "item missing at"
+assert d.get("finishedAt"), "doc missing finishedAt"
+assert d["launch"]["scriptPath"]=="/abs/wf.js", d.get("launch")
+'; ok $? "timestamps present on units/phases/items/doc + launch persisted"
+
+# --launch with invalid JSON is rejected (usage error, not silent)
+node "$CK" init .ulpi/runs/bad.json --task bad --launch 'not json' >/dev/null 2>&1
+[ "$?" = "1" ] && echo "PASS (rejected) invalid --launch JSON" || { echo "FAIL invalid --launch JSON not rejected"; fails=$((fails+1)); }
+
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails checkpoint test(s) failed"; exit 1; fi
 echo "✓ all checkpoint contract tests pass"
