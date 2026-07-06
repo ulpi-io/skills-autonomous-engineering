@@ -71,8 +71,22 @@ Break the spec's acceptance criteria into tasks. Each task carries:
 - **write scope** — the files/dirs it may modify (disjoint from sibling tasks in the same layer);
 - **validate** — the slice-scoped command that proves it (greenable once this slice + deps integrate;
   never a whole-suite e2e that only passes at end-state);
-- **agent/stack hint** — the kind of work (so the build can route a specialist);
+- **specialist routing** — `agent` / `skill` / `reviewer` chosen for this task (see below; null when
+  nothing fits and the build should run generic);
 - notes / patterns to follow.
+
+### Assign a specialist per task (match the INSTALLED set by description, not by name)
+
+For each task, pick the best-fit specialist FROM WHAT IS ACTUALLY INSTALLED — the subagent types in
+your options and the domain skills in your available-skills list. **Match on the agent's/skill's own
+description of what it does and when to use it, never on its name**: a user's Next.js specialist might
+be called `frontend-wizard` and their Rust one `crab`, so read what each is FOR and route the task to
+the one whose description fits the work (a Next.js page task → the agent/skill for React/SSR; a
+migration → the DB/framework specialist; a UI/design task → the design skill; and so on). Record on the
+task: `agent` (the installed subagent to build it), `skill` (the installed domain/design skill the
+engineer should invoke for correct patterns), and `reviewer` (the installed specialist to review it) —
+each the real installed name, or **null** when nothing genuinely fits (the build then runs a general
+engineer). Never invent an agent/skill that isn't installed, and never route on a guessed name.
 
 Keep tasks thin: a task should be a single vertical slice touching **at most 3 files** — split anything
 bigger; MERGE two that can't validate independently. Four planning failure modes to design out per task:
@@ -196,3 +210,4 @@ Report:
 2. the DAG shape — dependency edges and the widest parallel layer
 3. spec-coverage confirmation (every criterion mapped to a task)
 4. self-review outcome (rounds to clean, or the remaining defects)
+5. specialist routing — which installed agents/skills tasks were matched to (and the tasks left generic)

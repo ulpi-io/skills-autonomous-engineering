@@ -47,18 +47,21 @@ async function mapCapped(items, cap, fn) {
   return out
 }
 
-// Retry transient agent deaths (rate-limit storms) with fixed backoff — a dead reviewer must be a
-// RETRIED reviewer before it becomes a reported coverage gap (fail-closed, but not trigger-happy).
+// Retry transient agent deaths (rate-limit storms AND network blips) with fixed backoff — a dead
+// reviewer must be a RETRIED reviewer before it becomes a reported coverage gap (fail-closed, but not
+// trigger-happy). A null return (died at the door / after the runtime's own retries) is always retried;
+// a THROWN error is retried only when isTransient matches (rate-limit OR a dropped connection), so a
+// genuine bug still surfaces. If retries exhaust, the dimension is reported as a gap, never faked clean.
 const RETRY_DELAYS = [3000, 10000, 30000]
-const isRateLimit = (e) => /rate.?limit|429|overloaded|529|too many requests|quota/i.test(String((e && (e.message || e)) || ''))
+const isTransient = (e) => /rate.?limit|429|overloaded|529|too many requests|quota|502|503|504|bad gateway|gateway time|service unavailable|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH|socket hang up|fetch failed|network error|network|connection (?:reset|closed|error|refused|aborted)|timed? ?out|premature close|terminated/i.test(String((e && (e.message || e)) || ''))
 const HAS_TIMER = typeof setTimeout === 'function'   // sandbox may lack timers: retries still happen, just without backoff
 const sleep = (ms) => (HAS_TIMER ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
 async function withRetry(fn, label) {
   for (let attempt = 0; ; attempt++) {
     try { const r = await fn(); if (r != null) return r }
-    catch (e) { if (!isRateLimit(e)) throw e }
+    catch (e) { if (!isTransient(e)) throw e }
     if (attempt >= RETRY_DELAYS.length) return null
-    log(`${label || 'agent'} died (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — ${HAS_TIMER ? `backing off ${RETRY_DELAYS[attempt] / 1000}s` : 'no timer: immediate retry'}`)
+    log(`${label || 'agent'} died (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — likely a rate-limit or network blip; ${HAS_TIMER ? `backing off ${RETRY_DELAYS[attempt] / 1000}s` : 'no timer: immediate retry'}`)
     await sleep(RETRY_DELAYS[attempt])
   }
 }

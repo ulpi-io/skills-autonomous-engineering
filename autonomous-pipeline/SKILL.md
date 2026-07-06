@@ -86,6 +86,11 @@ build's test safety net, test then hardens coverage.)
   intake, load the checkpoint, continue at the recorded phase).
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
   phases to run (simplify, performance, go-live/ship-deploy), and any budget/scope steer. Keep it light.
+- **Note which specialists are actually installed** — the subagent types available to you and the domain
+  skills in your available-skills list. `auto-plan` routes each task to the best fit BY DESCRIPTION (a
+  Next.js task → whatever React/SSR specialist exists, whatever it's named), and you pass that installed
+  set to the Workflow as `availableAgents` so a plan-assigned name that isn't present here degrades to a
+  general engineer (recorded in `missingAgents`) instead of hard-failing. Never route on a guessed name.
 - Verify a git work tree + working branch; declare the pipeline `budget-guard` contract; create the
   pipeline `checkpoint-resume` file (one unit per build task (phase statuses live in the same file)).
 
@@ -103,10 +108,12 @@ unattended stretch:
    sandbox has no filesystem access, so the skill creates the status file before launch.
 3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args (root,
    workingBranch, validate, planPath, `approved: true`, statusFile, checkpointCli path, the optional-
-   phase config, caps). It executes build → simplify → test → review → performance → ship-prep with
-   fail-closed gates (a phase agent that died = a gate failure in the register; skipped ≠ clean), the
-   DAG walk with worktree isolation and bounded fix loops, and per-task checkpoint writes. It
-   hard-throws without `approved: true` — the human gate cannot be bypassed.
+   phase config, caps, and `availableAgents` — the installed specialist set from Phase 0, so each task's
+   plan-assigned agent/reviewer is honored when present and degrades to general when not). It executes
+   build → simplify → test → review → performance → ship-prep with fail-closed gates (a phase agent that
+   died = a gate failure in the register; skipped ≠ clean), the DAG walk with worktree isolation and
+   bounded fix loops (each engineer/reviewer routed to its task's specialist), and per-task checkpoint
+   writes. It hard-throws without `approved: true` — the human gate cannot be bypassed.
 4. AROUND the workflow (before launch / after it returns), use `watch-and-act` to gate on external signals — e.g. CI green on the pushed branch before offering a fix round. (A Workflow cannot invoke skills mid-run.)
 4b. **After EVERY run (even a bumpy one)**, close with `auto-learn` — harvest the checkpoint's
    register/blocked-units/degradations into verified, routed learnings so the next run doesn't repay
@@ -196,7 +203,9 @@ a dead gate or a red end-state is not "done".
 Report:
 
 1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded
-2. per phase: outcome + gate status (met its bar / blocked / skipped)
+2. per phase: outcome + gate status (met its bar / blocked / skipped); which specialists the build
+   actually routed to (`specialistsUsed`) and any plan-assigned specialist that was absent here and so
+   ran generic (`missingAgents` — surface it so the user can install the missing agent/skill)
 3. ship-prep artifacts produced (changelog + PR body draft — OPENING the PR / deploying is the user's explicitly-gated step) and the end-state validate result (honest)
 4. the verified open findings register + the next-move options (fix round / hand-fix / accept-with-risk)
 5. the pipeline checkpoint path (durable, resumable record)

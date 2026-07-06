@@ -11,6 +11,20 @@ the outcome.
 - The task's write scope is known and disjoint from other tasks in the same layer.
 - The task's slice-scoped `validate` command is known (greenable once this slice + deps integrate).
 
+## Specialist routing (per task, when the plan assigned one)
+
+If the plan gave this task an `agent` / `skill` / `reviewer` (auto-plan matched the task to the best-fit
+INSTALLED specialist by its DESCRIPTION, not its name), honor it:
+
+- **`agent`** — spawn the engineer as that subagent type. If it isn't available in this environment, fall
+  back to a general engineer and RECORD the miss (so the user can install it) — never hard-fail on a name.
+- **`skill`** — the engineer invokes that domain skill FIRST for correct patterns/conventions, then
+  implements to its guidance (theme or extend what it prescribes; don't redesign it).
+- **`reviewer`** — run Step 3's slice review as that specialist reviewer (same fallback rule).
+
+A `null`/absent routing field just means "run generic" — there's no penalty, and a general engineer with
+the task's acceptance criteria is always a valid default.
+
 ## Step 1 — Implement on an isolated worktree branch (RED → GREEN → REFACTOR)
 
 ```

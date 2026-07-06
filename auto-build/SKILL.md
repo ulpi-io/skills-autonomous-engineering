@@ -112,7 +112,11 @@ If the plan was just generated, commit it as one preparatory commit so it doesn'
 ## Phase 2: Walk the DAG — layer by layer
 
 For each layer in topological order (barrier between layers), build its tasks — in parallel across
-worktrees, capped by `fan-out-work`. Per task, run the build contract (`references/build-contract.md`):
+worktrees, capped by `fan-out-work`. When the plan assigned a task a specialist (`agent`/`skill`/
+`reviewer` — auto-plan matched it to an INSTALLED agent/skill by description), spawn the engineer and
+reviewer as those specialists and have the engineer invoke the domain `skill` first; a missing name
+degrades to a general engineer and is recorded, never a hard failure. Per task, run the build contract
+(`references/build-contract.md`):
 
 1. **Gate on deps** — all `dependsOn` integrated? else `dep_blocked` (point at the root), skip.
 2. **Implement (isolated)** — a fresh worktree + task branch; RED (a failing test for the behavior) →

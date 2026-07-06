@@ -57,6 +57,38 @@ const DELEGATE = { build: 'native', review: 'native', verify: 'native', ...(CFG.
 const codexBrief = (role) => DELEGATE[role] === 'codex'
   ? `\nDELEGATION: the user chose to delegate this ${role} role to Codex. First verify a Codex integration is available (a codex subagent type, or \`command -v codex\`). If available, route the work through it and report its output as yours (you remain accountable for the schema). If NOT available, do the work natively yourself and include "delegationDegraded": true in your notes/summary.`
   : ''
+// D21: opportunistic specialist routing (mirrors ship-playbook's proven pattern). The PLAN (auto-plan,
+// an LLM) matched each task to the best-fit INSTALLED agent/skill by READING their descriptions (names
+// are arbitrary), assigning an `agent` + `reviewer` (a specialist, or 'general-purpose' when none fits)
+// and an optional domain `skill`. We do NOT hardcode a registry (it goes stale and wrongly downgrades
+// agents that exist elsewhere): honor availableAgents when the skill supplies it, else attempt the
+// assignment and let spawnSpecialist catch a runtime "not found", record it, and (when
+// allowGeneralFallback, the default) retry on general-purpose. missingAgents surfaces in the return.
+const AVAILABLE_AGENTS = Array.isArray(CFG.availableAgents) ? CFG.availableAgents : null
+const ALLOW_GENERAL_FALLBACK = CFG.allowGeneralFallback !== false
+const usedSpecialists = new Set(), missingAgents = new Set()
+function resolveAgent(type) {
+  if (typeof type !== 'string' || !type || type === 'general-purpose') return 'general-purpose'
+  if (AVAILABLE_AGENTS && !AVAILABLE_AGENTS.includes(type)) { missingAgents.add(type); return ALLOW_GENERAL_FALLBACK ? 'general-purpose' : type }
+  usedSpecialists.add(type); return type
+}
+async function spawnSpecialist(brief, opts) {
+  try { return await agent(brief, opts) }
+  catch (e) {
+    const notFound = opts.agentType && opts.agentType !== 'general-purpose' && /agent type .*not found|not a valid agent|unknown agent|no such agent|available agents:/i.test(String((e && e.message) || e))
+    if (notFound) {
+      missingAgents.add(opts.agentType); usedSpecialists.delete(opts.agentType)
+      if (ALLOW_GENERAL_FALLBACK) { log(`agentType "${opts.agentType}" not available here — using general-purpose`); return await agent(brief, { ...opts, agentType: 'general-purpose' }) }
+    }
+    throw e
+  }
+}
+const skillBrief = (t, engType) => {
+  const parts = []
+  if (t.skill) parts.push(`Invoke the /${t.skill} skill FIRST for domain-correct patterns and conventions, then implement to its guidance (theme or extend it; do not redesign what it prescribes).`)
+  if (engType === 'general-purpose' && t.agent && t.agent !== 'general-purpose') parts.push(`(The assigned specialist '${t.agent}' is not available here — you are general-purpose standing in; flag anything that needs domain expertise.)`)
+  return parts.length ? `\n       ${parts.join(' ')}` : ''
+}
 const MAX_FIX = CFG.maxFix ?? 3
 const MAX_BUILD_PARALLEL = CFG.maxBuildParallel ?? 4   // worktree engineers are heavy (full checkout)
 const MAX_PARALLEL = CFG.maxParallel ?? 6              // read-only reviewers/verifiers
@@ -65,12 +97,16 @@ const ck = (opArgs) => CK ? `node "${CK}" ${opArgs} || true` : `true`
 const register = []   // verified open findings — the return value
 const gateFail = (phase, why) => { register.push({ phase, kind: 'gate', why }); log(`GATE FAILED [${phase}]: ${why}`) }
 
-// ── transient-failure retry (chiefly API rate-limit storms) ─────────────────────
-// Under a rate-limit storm, whole waves of agents die at the door (agent() returns null) or mid-flight
-// (throws). Those are NOT real build failures — retrying with fixed backoff (no Date/Math.random: keeps
-// resume deterministic) stops a storm being mis-recorded as blocked tasks.
+// ── transient-failure retry (rate-limit storms AND network blips) ────────────────
+// Two failure shapes are NOT real build failures: (a) an agent dies at the door / after the runtime's
+// own retries (agent() returns null) — always retried here regardless of cause; (b) an agent THROWS a
+// transient infra error mid-flight — retried only when isTransient matches (a rate-limit storm OR a
+// dropped connection: ECONNRESET/ETIMEDOUT/"fetch failed"/"socket hang up"/5xx gateway). A genuine
+// programming error still throws through. Fixed backoff (no Date/Math.random: keeps resume deterministic)
+// stops a storm or a Wi-Fi blip being mis-recorded as blocked tasks; if retries exhaust, the unit is
+// recorded (not silently dropped) and the checkpoint makes the whole run resumable when the link returns.
 const RETRY_DELAYS = [3000, 10000, 30000]    // ms; 3 retries ⇒ up to 4 attempts
-const isRateLimit = (e) => /rate.?limit|429|overloaded|529|too many requests|quota/i.test(String((e && (e.message || e)) || ''))
+const isTransient = (e) => /rate.?limit|429|overloaded|529|too many requests|quota|502|503|504|bad gateway|gateway time|service unavailable|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH|socket hang up|fetch failed|network error|network|connection (?:reset|closed|error|refused|aborted)|timed? ?out|premature close|terminated/i.test(String((e && (e.message || e)) || ''))
 const HAS_TIMER = typeof setTimeout === 'function'   // sandbox may not expose timers: retries still happen, just without backoff
 const sleep = (ms) => (HAS_TIMER ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
 async function withRetry(fn, label) {
@@ -78,9 +114,9 @@ async function withRetry(fn, label) {
     try {
       const r = await fn()
       if (r != null) return r
-    } catch (e) { if (!isRateLimit(e)) throw e }
+    } catch (e) { if (!isTransient(e)) throw e }
     if (attempt >= RETRY_DELAYS.length) return null
-    log(`${label || 'agent'} came back empty (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — likely rate-limited; ${HAS_TIMER ? `backing off ${RETRY_DELAYS[attempt] / 1000}s` : 'no timer in sandbox: retrying immediately'}`)
+    log(`${label || 'agent'} came back empty (attempt ${attempt + 1}/${RETRY_DELAYS.length + 1}) — likely a rate-limit or network blip; ${HAS_TIMER ? `backing off ${RETRY_DELAYS[attempt] / 1000}s` : 'no timer in sandbox: retrying immediately'}`)
     await sleep(RETRY_DELAYS[attempt])
   }
 }
@@ -195,14 +231,15 @@ for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
       return { id, status: 'dep_blocked', why: `dependency not integrated` }
     // engineer (isolated worktree, test-first, write-scope-bound) — heavy: buildGate + retry.
     // The status write rides on the engineer itself (S1): no dedicated status agents per task.
-    const eng = await buildGate(() => agent(
+    const engType = resolveAgent(t.agent)
+    const eng = await buildGate(() => spawnSpecialist(
       `FIRST (non-fatal): run ${ck(`unit ${STATUS} ${id} in_progress`)}
        You are the engineer for ONE task of an approved plan. Repo: ${ROOT}, base branch: ${BRANCH}.
        TASK ${id}: ${t.title}. Acceptance: ${JSON.stringify(t.acceptance || t.acceptanceCriteria || [])}.
        WRITE SCOPE (only these paths): ${JSON.stringify(t.writeScope || [])}. Slice validate: ${t.validate}.
-       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.${codexBrief('build')}
+       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.${skillBrief(t, engType)}${codexBrief('build')}
        Return JSON: { built: bool, validatePassed: bool, files: [paths], notes: string, escalate?: string } (include escalate ONLY when a user decision is needed; set built=false then — omit it otherwise).`,
-      { label: `eng:${id}`, phase: 'Build', isolation: 'worktree',
+      { label: `eng:${id}`, phase: 'Build', isolation: 'worktree', agentType: engType,
         schema: { type: 'object', required: ['built', 'validatePassed'], properties: {
           built: { type: 'boolean' }, validatePassed: { type: 'boolean' },
           files: { type: 'array', items: { type: 'string' } }, notes: { type: 'string' },
@@ -225,17 +262,17 @@ for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
     // slice-scoped review + bounded fix loop (read-only reviewers go through agentGate)
     let verdict = { pass: true, findings: [] }
     for (let attempt = 0; attempt <= MAX_FIX; attempt++) {
-      verdict = await agentGate(() => agent(
+      verdict = await agentGate(() => spawnSpecialist(
         `Slice-scoped review of task ${id} on ${BRANCH} in ${ROOT}. Judge ONLY this task's own diff (write scope ${JSON.stringify(t.writeScope || [])}) against ITS acceptance criteria ${JSON.stringify(t.acceptance || [])}. A whole-codebase gap a LATER task owns is an OBSERVATION, never a block here. Run the slice validate: ${t.validate}.${codexBrief('review')} Return JSON { pass: bool, findings: [{file,line,issue,inScope:bool}] } — pass=false only for in-scope defects or a red slice validate.`,
-        { label: `review:${id}`, phase: 'Build',
+        { label: `review:${id}`, phase: 'Build', agentType: resolveAgent(t.reviewer),
           schema: { type: 'object', required: ['pass'], properties: { pass: { type: 'boolean' },
             findings: { type: 'array', items: { type: 'object' } } } } }), `review:${id}`)
       if (verdict?.pass || attempt === MAX_FIX) break
       const inScope = (verdict?.findings || []).filter(f => f.inScope !== false)
       if (!inScope.length) break
-      await buildGate(() => agent(
-        `Fix loop for task ${id} (attempt ${attempt + 1}/${MAX_FIX}): apply the MINIMAL fixes for these in-scope findings on ${BRANCH} in ${ROOT}, staying inside ${JSON.stringify(t.writeScope || [])}, then re-run ${t.validate}. Findings: ${JSON.stringify(inScope).slice(0, 2000)}. Commit only this task's files.`,
-        { label: `fix:${id}`, phase: 'Build' }), `fix:${id}`)
+      await buildGate(() => spawnSpecialist(
+        `Fix loop for task ${id} (attempt ${attempt + 1}/${MAX_FIX}): apply the MINIMAL fixes for these in-scope findings on ${BRANCH} in ${ROOT}, staying inside ${JSON.stringify(t.writeScope || [])}, then re-run ${t.validate}. Findings: ${JSON.stringify(inScope).slice(0, 2000)}. Commit only this task's files.${skillBrief(t, engType)}`,
+        { label: `fix:${id}`, phase: 'Build', agentType: engType }), `fix:${id}`)
     }
     const done = verdict?.pass === true
     if (CK) await agent(`Run: ${ck(`unit ${STATUS} ${id} ${done ? 'done' : 'blocked'}${done ? '' : ' --note "review blocked after fix loop"'}`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
@@ -335,12 +372,15 @@ if (!fin?.passed) gateFail('final-validate', `workspace validate is RED or did n
 const converged = register.length === 0
 if (CK) await agent(`Run: ${ck(`finalize ${STATUS} ${converged ? 'done' : 'needs_attention'} --result "${converged ? 'pipeline clean' : register.length + ' open item(s)'}"`)}`, { label: 'status:final', phase: 'Finalize' }).catch(() => null)
 
+if (missingAgents.size) log(`specialist routing: ${[...missingAgents].join(', ')} assigned by the plan but unavailable here — those tasks ran generic (report it so the user can install them)`)
 return {
   converged,                               // true ONLY if every gate ran clean and the register is empty
   build: buildOut, blockedTaskCount: blocked.length,
   reviewConfirmed: confirmed.length,
   phasesSkipped: Object.entries(OPT).filter(([, v]) => !v).map(([k]) => k),
   workspaceValidatePassed: fin?.passed === true,
+  specialistsUsed: [...usedSpecialists],   // installed agents the build actually routed to
+  missingAgents: [...missingAgents],       // plan-assigned specialists absent here → ran generic
   register,                                // the verified open findings — the USER decides the fix round
   statusFile: STATUS,
 }
