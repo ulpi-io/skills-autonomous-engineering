@@ -107,8 +107,10 @@ validate.
 Write ONE canonical artifact: `.ulpi/plans/<name>.json`. There is deliberately NO stored markdown
 twin — a second artifact is a drift class (the copies diverge and the validator only gates one). The
 human view is DERIVED on demand: `node <skill-dir>/scripts/validate-plan.mjs <plan.json> --render`
-prints the layered, checklisted markdown — use it for the approval presentation and any review; it can
-never disagree with what the build will execute.
+prints the layered, checklisted markdown — use its OUTPUT in-conversation when presenting the plan
+(e.g. the approval gate); it can never disagree with what the build will execute. NEVER write the
+rendering to a file unless the user explicitly asks for one — an unrequested .md on disk is exactly
+the drift-prone twin this design deletes.
 
 **Success criteria:** a complete `{tasks[], layers[][]}` graph — acyclic, topologically ordered,
 intra-layer independent.
