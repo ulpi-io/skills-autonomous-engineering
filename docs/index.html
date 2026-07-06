@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Autonomous Engineering Skills — run agents unattended without them cheating</title>
-<meta name="description" content="18 skills that turn the software lifecycle into bounded, self-correcting, checkpoint-resumable phases — with deterministic hooks that make gaming tests, bulk staging, and unauthorized force-pushes mechanically impossible. For Claude Code and Codex.">
+<title>Autonomous Engineering Skills: run agents unattended without them cheating</title>
+<meta name="description" content="18 skills that turn the software lifecycle into bounded, self-correcting, checkpoint-resumable phases, with deterministic hooks that make gaming tests, bulk staging, and unauthorized force-pushes mechanically impossible. For Claude Code and Codex.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Autonomous Engineering Skills">
-<meta property="og:description" content="Run engineering work unattended — without the agent cheating, spinning, or losing work. Bounded loops, fail-closed gates, deterministic enforcement.">
+<meta property="og:description" content="Run engineering work unattended, without the agent cheating, spinning, or losing work. Bounded loops, fail-closed gates, deterministic enforcement.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/">
 <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/">
-<!-- Google tag (gtag.js) — property shared across GitHub Pages sites, so track the FULL URL/path -->
+<!-- Google tag (gtag.js). Property shared across GitHub Pages sites, so track the FULL URL/path -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -22,7 +22,7 @@
     page_path: window.location.pathname + window.location.search
   });
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23111318'/%3E%3Cpath d='M6 22V10M6 10l5 6 5-9 5 12 5-7' fill='none' stroke='%23d8763f' stroke-width='2.2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="ulpi-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -70,7 +70,7 @@ body{
   background:var(--ground); color:var(--ink);
   font-family:var(--body); font-size:17px; line-height:1.55;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-  /* the measurement grid — the signature */
+  /* the measurement grid: the signature */
   background-image:
     linear-gradient(var(--rule-2) 1px, transparent 1px),
     linear-gradient(90deg, var(--rule-2) 1px, transparent 1px);
@@ -203,21 +203,30 @@ section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
 @media (max-width:760px){.matrix tr td:first-child{white-space:normal}.matrix th,.matrix td{padding:13px}}
 .scrollx{overflow-x:auto}
 
-/* contract — ruled list */
+/* contract: ruled list */
 .contract{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
 @media (max-width:760px){.contract{grid-template-columns:1fr}}
 .ct{padding:22px 24px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
 .ct h3{font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
 .ct p{color:var(--ink-2);font-size:15px}
 
-/* skills ledger */
-.layer{margin-bottom:30px}
-.layer .lh{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:14px}
-.layer .lh b{font-family:var(--serif);font-weight:700;font-size:19px}
-.layer .lh span{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);letter-spacing:.08em;text-transform:uppercase}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{font-family:var(--mono);font-size:13px;padding:6px 11px;border:1px solid var(--rule);border-radius:var(--r);color:var(--ink);background:var(--ground-2)}
-.chip .s{color:var(--ink-2)}
+/* skills catalog — ruled 2-col grid; the header spans full width (matches .fails / .contract) */
+.cat{display:grid; grid-template-columns:repeat(2,1fr); border:1px solid var(--rule); border-radius:var(--r); overflow:hidden; margin-bottom:22px}
+.cat:last-child{margin-bottom:0}
+@media (max-width:720px){.cat{grid-template-columns:1fr}}
+.cat-h{grid-column:1 / -1; display:flex; align-items:baseline; gap:13px; padding:15px 20px; border-bottom:1px solid var(--rule); background:var(--ground-2)}
+.cat-h b{font-family:var(--serif); font-weight:700; font-size:19px; letter-spacing:-.01em}
+.cat-h span{font-family:var(--mono); font-size:11px; color:var(--ink-2); letter-spacing:.09em; text-transform:uppercase}
+.row2{padding:18px 20px; border-right:1px solid var(--rule); border-bottom:1px solid var(--rule); position:relative; transition:background .16s var(--ease)}
+.cat > .row2:nth-child(odd){border-right:0}   /* right column (cat-h is child 1, so right cells are odd) */
+@media (max-width:720px){.row2{border-right:0}}
+.row2::before{content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--accent); transform:scaleY(0); transform-origin:top; transition:transform .18s var(--ease)}
+.row2:hover{background:color-mix(in oklab, var(--accent) 5%, transparent)}
+.row2:hover::before{transform:scaleY(1)}
+.row2 .nm{display:block; font-family:var(--mono); font-size:14.5px; font-weight:600; color:var(--accent); margin-bottom:8px; letter-spacing:.01em}
+.row2 p{color:var(--ink-2); font-size:14px; line-height:1.52}
+.row2.empty{background:repeating-linear-gradient(-45deg, transparent, transparent 9px, var(--rule-2) 9px, var(--rule-2) 10px)}
+.row2.empty::before{display:none}
 
 /* install */
 .cmdrow{display:flex;align-items:stretch;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--ground-2);margin-bottom:12px;max-width:760px}
@@ -237,8 +246,8 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
 
 <header class="bar">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="Autonomous Engineering Skills — home">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="2" fill="var(--ink)"/><path d="M6 22V10M6 10l5 6 5-9 5 12 5-7" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    <a class="brand" href="#top" aria-label="Autonomous Engineering Skills, home">
+      <img src="ulpi-icon.png" alt="ulpi" width="26" height="26" class="logo">
       autonomous-engineering
     </a>
     <nav aria-label="Primary">
@@ -260,7 +269,7 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     <div class="herohead">
       <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
       <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
-      <p class="sub reveal d2">Eight autonomous phases behind one approval — then the machine harvests what it learned and improves itself for the next run.</p>
+      <p class="sub reveal d2">Eight autonomous phases behind one approval. Then the machine harvests what it learned and improves itself for the next run.</p>
       <div class="cta reveal d3">
         <a class="btn" href="#install">Install &rarr;</a>
         <a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering">View source</a>
@@ -268,7 +277,7 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     </div>
     <div class="panel loopwrap reveal d3" id="pipeline">
       <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline</div>
-      <svg class="loopsvg" viewBox="0 0 330 512" role="img" aria-label="The eight phases run top to bottom — auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship — then auto-learn and auto-map, and a feedback loop returns to the top so the next run reads the learnings and refreshed map before it plans.">
+      <svg class="loopsvg" viewBox="0 0 330 512" role="img" aria-label="The eight phases run top to bottom: auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship, then auto-learn and auto-map, and a feedback loop returns to the top so the next run reads the learnings and refreshed map before it plans.">
         <defs>
           <marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
         </defs>
@@ -304,11 +313,11 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     <div class="shead">
       <p class="lab"><span class="mk">▸</span> the self-improving loop</p>
       <h2>It doesn't just run. It gets better.</h2>
-      <p>Most agents forget every run — they re-discover the same footguns forever. This one closes the loop: what one run pays to learn, the next run already knows.</p>
+      <p>Most agents forget every run. They re-discover the same footguns forever. This one closes the loop: what one run pays to learn, the next run already knows.</p>
     </div>
     <div class="contract" style="grid-template-columns:repeat(3,1fr)">
-      <div class="ct"><h3>Learn · /auto-learn</h3><p>Harvests the run's checkpoint — blocked tasks, gate failures, thrash — and verifies each candidate lesson against the evidence (one flake is not a law). Survivors route to the layer that changes behavior; machine defects surface to you, never self-patched.</p></div>
-      <div class="ct"><h3>Map · /auto-map</h3><p>Refreshes a disclosure-tiered context map — a lean root plus a per-folder <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code> that loads only when the agent works there. Every path, command, and claim is verified against the real repo before it ships.</p></div>
+      <div class="ct"><h3>Learn · /auto-learn</h3><p>Harvests the run's checkpoint (blocked tasks, gate failures, thrash) and verifies each candidate lesson against the evidence (one flake is not a law). Survivors route to the layer that changes behavior; machine defects surface to you, never self-patched.</p></div>
+      <div class="ct"><h3>Map · /auto-map</h3><p>Refreshes a disclosure-tiered context map: a lean root plus a per-folder <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code> that loads only when the agent works there. Every path, command, and claim is verified against the real repo before it ships.</p></div>
       <div class="ct" style="border-right:0"><h3>Feed forward</h3><p>The verified lessons land in <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">.ulpi/learnings.md</code>, which <code style="font-family:var(--mono);font-size:13px">auto-spec</code>, <code style="font-family:var(--mono);font-size:13px">auto-plan</code>, and <code style="font-family:var(--mono);font-size:13px">auto-build</code> read <strong>before</strong> the next run plans. Run N+1 starts with run N's tuition.</p></div>
     </div>
   </div>
@@ -320,11 +329,11 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     <div class="shead">
       <p class="lab"><span class="mk">▸</span> the problem</p>
       <h2>Every agent can loop. The failure modes are what kill you.</h2>
-      <p>Autonomy is easy. Autonomy you can leave running is not. These four are designed out — in code, not prose.</p>
+      <p>Autonomy is easy. Autonomy you can leave running is not. These four are designed out, in code, not prose.</p>
     </div>
     <div class="fails">
       <div class="fail"><span class="x">✗</span><div><b>Fakes the green.</b><p>"Fixes" the suite by skipping the red test. Every added test is mutation-checked; adding <code style="font-family:var(--mono);font-size:13px">.skip</code> to a test file is blocked at the tool layer.</p></div></div>
-      <div class="fail"><span class="x">✗</span><div><b>Grinds forever.</b><p>Runs three hours past the point of progress. Every loop declares a termination set — done-condition, cap, budget, no-progress stop — and stops the instant one fires.</p></div></div>
+      <div class="fail"><span class="x">✗</span><div><b>Grinds forever.</b><p>Runs three hours past the point of progress. Every loop declares a termination set (done-condition, cap, budget, no-progress stop) and stops the instant one fires.</p></div></div>
       <div class="fail"><span class="x">✗</span><div><b>Poisons the history.</b><p><code style="font-family:var(--mono);font-size:13px">git add -A</code>s unrelated work into a commit, then force-pushes it. Bulk staging and plain force-push are blocked during a run; every task is its own clean rollback point.</p></div></div>
       <div class="fail"><span class="x">✗</span><div><b>Lies about done.</b><p>Reports "done" for gates that never ran. Gates fail closed: a gate that did not execute is never reported clean, and a red validate is reported red.</p></div></div>
     </div>
@@ -337,41 +346,19 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     <div class="shead">
       <p class="lab"><span class="mk">▸</span> deterministic enforcement</p>
       <h2>Prompt contracts bend under pressure. These don't.</h2>
-      <p>While a skill is active, its PreToolUse hook — a tested shell script that travels with the skill — blocks the tool call and shows the model why. <span class="stamp">✗ blocked by guard</span></p>
+      <p>While a skill is active, its PreToolUse hook, a tested shell script that travels with the skill, blocks the tool call and shows the model why. <span class="stamp">✗ blocked by guard</span></p>
     </div>
     <div class="scrollx">
       <table class="matrix">
         <caption>guard → the cardinal sin it makes impossible</caption>
         <thead><tr><th scope="col">Guard</th><th scope="col">Makes mechanically impossible</th><th scope="col">Verified by</th></tr></thead>
         <tbody>
-          <tr><td><code>guard-test-integrity</code></td><td class="sin">Gaming the suite green — adding <code>.only</code> / <code>.skip</code> / <code>xit</code> / suppressions to test files.</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>guard-git-hygiene</code></td><td class="sin">Breaking per-task rollback — <code>git add -A</code>, <code>commit -a</code>, <code>reset --hard</code>, <code>clean -f</code> (quote- &amp; newline-aware).</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>guard-ship-irreversibles</code></td><td class="sin">Unilateral irreversibles — plain <code>push --force</code>, <code>push --delete</code> (lease is allowed).</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>checkpoint.mjs</code></td><td class="sin">Destroying run state — refuses re-init over a live run, demoting a <code>done</code> unit, a false <code>finalize done</code>.</td><td class="mono">contract suite</td></tr>
+          <tr><td><code>guard-test-integrity</code></td><td class="sin">Gaming the suite green: adding <code>.only</code> / <code>.skip</code> / <code>xit</code> / suppressions to test files.</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>guard-git-hygiene</code></td><td class="sin">Breaking per-task rollback: <code>git add -A</code>, <code>commit -a</code>, <code>reset --hard</code>, <code>clean -f</code> (quote- &amp; newline-aware).</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>guard-ship-irreversibles</code></td><td class="sin">Unilateral irreversibles: plain <code>push --force</code>, <code>push --delete</code> (lease is allowed).</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>checkpoint.mjs</code></td><td class="sin">Destroying run state: refuses re-init over a live run, demoting a <code>done</code> unit, a false <code>finalize done</code>.</td><td class="mono">contract suite</td></tr>
         </tbody>
       </table>
-    </div>
-    <p class="lab" style="margin:34px 0 14px"><span class="mk">▸</span> watch one fire — /auto-test won't let the agent skip a red test</p>
-    <div class="panel" style="max-width:760px">
-      <div class="term type" id="term">
-        <div class="top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:auto">auto-test · src/auth</span></div>
-        <div class="body" id="termbody"><span class="ln cmd"><span class="p">&gt;</span> /auto-test src/auth</span>
-<span class="ln mut">baseline: 47 tests, 2 failing · 7 untested behaviors</span>
-<span class="ln">writing test "rejects expired token" …</span>
-<span class="ln mut">  mutation check: broke verifyToken() → test <span class="bad">FAILED</span> (good)</span>
-<span class="ln mut">  restored → <span class="ok">green</span>. kept.</span>
-<span class="ln">writing test "refresh() is idempotent" …</span>
-<span class="ln mut">  mutation check: broke refresh() → test <span class="ok">PASSED</span></span>
-<span class="ln mut">  tautology <span class="bad">rejected</span>, rewriting with state assertions</span>
-<span class="ln">fixing failing test 1/2 …</span>
-<span class="ln mut">  root cause: real bug in session.ts:41 — surfacing it,</span>
-<span class="ln mut">  <span class="bad">not</span> rewriting the assertion to match wrong output</span>
-<span class="ln">edit: add <span class="tag">.skip</span> to auth.test.ts to move on …</span>
-<span class="ln bad">  ✗ blocked by guard-test-integrity: weakening the test</span>
-<span class="ln mut">    signal fakes the done-condition. <span class="tag">← the hook, not a promise</span></span>
-<span class="ln ok">converged: 54 green · all mutation-verified · 1 real bug</span>
-<span class="ln mut">surfaced · 0 tests skipped · iters 4/6 · 38k/150k tokens</span></div>
-      </div>
     </div>
   </div>
 </section>
@@ -385,10 +372,10 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
       <p>Every skill honors the same five rules. It is the whole point of the collection.</p>
     </div>
     <div class="contract">
-      <div class="ct"><h3>Bounded, never infinite</h3><p>Every loop declares a termination set and stops the instant one fires — and compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/loop</code>.</p></div>
+      <div class="ct"><h3>Bounded, never infinite</h3><p>Every loop declares a termination set and stops the instant one fires, and compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/loop</code>.</p></div>
       <div class="ct"><h3>Fails closed</h3><p>A gate that did not run is never reported clean. A loop out of budget returns the open items. No fabricated green verdicts.</p></div>
-      <div class="ct"><h3>Verifies before acting</h3><p>Findings that drive edits pass an adversarial panel — independent skeptics try to refute them. A dead panel fails closed, not open.</p></div>
-      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume — at any point, session-independent, not cache-dependent.</p></div>
+      <div class="ct"><h3>Verifies before acting</h3><p>Findings that drive edits pass an adversarial panel: independent skeptics try to refute them. A dead panel fails closed, not open.</p></div>
+      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume, at any point, session-independent, not cache-dependent.</p></div>
       <div class="ct"><h3>Escalates, never guesses</h3><p>Irreversible or ambiguous decisions stop and ask. Approval in one context does not extend to the next.</p></div>
       <div class="ct"><h3>Measures, never assumes</h3><p>An optimization is accepted only when a benchmark proves it faster with no correctness regression. Otherwise it is reverted.</p></div>
     </div>
@@ -400,26 +387,44 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
   <div class="wrap">
     <div class="shead">
       <p class="lab"><span class="mk">▸</span> the collection</p>
-      <h2>18 skills, four layers.</h2>
-      <p>Phases run the lifecycle; primitives are the machinery they compose; the autonomy layer chains and improves them. Each installs on its own.</p>
+      <h2>Eighteen skills. Four layers.</h2>
+      <p>Phases run the lifecycle. Primitives are the machinery they compose. The autonomy layer chains them and makes them self-improving. Every one installs and runs on its own.</p>
     </div>
-    <div class="layer">
-      <div class="lh"><b>Phases</b><span>the lifecycle, one skill per step</span></div>
-      <div class="chips">
-        <span class="chip">auto-spec</span><span class="chip">auto-plan</span><span class="chip">auto-build</span><span class="chip">auto-simplify</span><span class="chip">auto-test</span><span class="chip">auto-review</span><span class="chip">auto-performance</span><span class="chip">auto-ship</span>
-      </div>
+
+    <div class="cat">
+      <div class="cat-h"><b>Phases</b><span>· the lifecycle · one skill per step</span></div>
+      <div class="row2"><code class="nm">/auto-spec</code><p>Turns a request into a grounded, testable spec. Recons the real repo, drafts objectives and acceptance criteria, then runs a completeness-critic loop until no gap or untestable claim remains. No invented requirements.</p></div>
+      <div class="row2"><code class="nm">/auto-plan</code><p>Decomposes a spec into a DAG of atomic tasks, each with a disjoint write scope (≤3 files) and a slice-scoped validate. A deterministic validator proves the graph acyclic, topologically ordered, and race-free before any build.</p></div>
+      <div class="row2"><code class="nm">/auto-build</code><p>Walks the DAG behind one approval: each task built test-first in an isolated worktree, integrated, slice-reviewed, fixed in a bounded loop, and committed on its own. Never builds on an unintegrated dependency; resumes from its checkpoint.</p></div>
+      <div class="row2"><code class="nm">/auto-simplify</code><p>Loops until dry removing duplication, dead code, and over-abstraction, proving each edit behavior-preserving before keeping it. Respects Chesterton's Fence: never removes what it hasn't understood.</p></div>
+      <div class="row2"><code class="nm">/auto-test</code><p>Finds untested behaviors, writes real tests, and loops until green. Every test is mutation-checked (break the code, the test must fail), so tautologies are rejected. De-flakes, and never games the suite green.</p></div>
+      <div class="row2"><code class="nm">/auto-review</code><p>Reviews the diff across correctness, security, tests, and API dimensions at once, then keeps only findings that survive an adversarial skeptic panel. Dead panels fail closed. Optionally fixes the confirmed blockers.</p></div>
+      <div class="row2"><code class="nm">/auto-performance</code><p>Baselines a benchmark, profiles to the real hotspots, and accepts an optimization only when a re-benchmark proves it faster with no correctness regression. Unmeasured "wins" are reverted.</p></div>
+      <div class="row2"><code class="nm">/auto-ship</code><p>Runs fail-closed pre-launch gates (validate, review, security, rollback), assembles grounded release artifacts, and opens the PR or stages the rollout. The irreversible deploy stays human-gated.</p></div>
     </div>
-    <div class="layer">
-      <div class="lh"><b>Primitives</b><span>bounded loops, verification, durability</span></div>
-      <div class="chips">
-        <span class="chip">converge-loop</span><span class="chip">adversarial-verify</span><span class="chip">checkpoint-resume</span><span class="chip">fan-out-work</span><span class="chip">budget-guard</span>
-      </div>
+
+    <div class="cat">
+      <div class="cat-h"><b>Primitives</b><span>· the machinery every phase composes</span></div>
+      <div class="row2"><code class="nm">converge-loop</code><p>The bounded self-correcting loop behind every phase: act → measure → decide, in until-green or until-dry mode, with anti-thrash, no-progress, and budget stops. Compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/loop</code>.</p></div>
+      <div class="row2"><code class="nm">adversarial-verify</code><p>Proves a finding by trying to disprove it: N independent skeptics attack it through distinct lenses, and it survives only on a majority. Ties and dead panels fail closed: the gate that turns "plausible" into "verified".</p></div>
+      <div class="row2"><code class="nm">checkpoint-resume</code><p>A durable, lock-serialized status file recording every unit's state. Resume skips everything already done: session-independent, crash-safe, zero lost writes under concurrency. Refuses to clobber a live run.</p></div>
+      <div class="row2"><code class="nm">fan-out-work</code><p>Covers a large work-list in parallel with concurrency caps and worktree isolation, aggregating faithfully. Never silently truncates: items discovered = covered + failed + dropped.</p></div>
+      <div class="row2"><code class="nm">budget-guard</code><p>The five stop conditions every unattended run must declare (done-condition, hard cap, token/time budget, no-progress rule, escalation triggers), enforced so a run bounds itself or reports an honest partial.</p></div>
+      <div class="row2 empty" aria-hidden="true"></div>
     </div>
-    <div class="layer">
-      <div class="lh"><b>Autonomy &amp; learning</b><span>chain, watch, schedule, map, self-improve</span></div>
-      <div class="chips">
-        <span class="chip">autonomous-pipeline</span><span class="chip">watch-and-act</span><span class="chip">schedule-recurring-agent</span><span class="chip">auto-map</span><span class="chip">auto-learn</span>
-      </div>
+
+    <div class="cat">
+      <div class="cat-h"><b>Autonomy</b><span>· chain · watch · schedule</span></div>
+      <div class="row2"><code class="nm">autonomous-pipeline</code><p>Chains all eight phases end-to-end behind a single plan approval, with fail-closed gates between them, a durable checkpoint (resume at any phase or task), and a verified findings register at the end. One pass, never a runaway loop.</p></div>
+      <div class="row2"><code class="nm">watch-and-act</code><p>Waits on an external signal the harness can't notify you about (CI, a deploy, a queue) on a cache-aware cadence, bounded by a deadline, and acts on the transition. Never polls work the harness already tracks.</p></div>
+      <div class="row2"><code class="nm">schedule-recurring-agent</code><p>Stands up a recurring cron routine for standing work (triage, CVE watch, audits): a self-contained idempotent brief, a cadence matched to the work, a per-run budget, and a teardown condition.</p></div>
+      <div class="row2 empty" aria-hidden="true"></div>
+    </div>
+
+    <div class="cat" style="margin-bottom:0">
+      <div class="cat-h"><b>Context &amp; learning</b><span>· the self-improving loop</span></div>
+      <div class="row2"><code class="nm">auto-map</code><p>Builds a disclosure-tiered context map: a lean root <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code>, path-scoped rules, and a per-folder <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code> that loads only when the agent works there. A code gate verifies every path, command, and claim against the real repo.</p></div>
+      <div class="row2"><code class="nm">auto-learn</code><p>Harvests each run's checkpoint into verified lessons, routes them to the memory layer that changes behavior, and feeds <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">.ulpi/learnings.md</code> forward, so spec, plan, and build read them before the next run. Machine defects surface to you, never self-patched.</p></div>
     </div>
   </div>
 </section>
