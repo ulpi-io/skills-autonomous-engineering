@@ -60,6 +60,7 @@ after any interruption, and "done" fails closed (a red suite is reported red).
 | Make it faster, provably | `/auto-performance` | no benchmark delta + green tests → reverted |
 | Ship with honest gates | `/auto-ship` | unran gate = blocker; force-push **blocked by hook** |
 | Keep any loop from running away | `converge-loop` + `budget-guard` | declared termination set; compiles into native `/goal` |
+| Make every session start knowing the repo | `/auto-map` | disclosure-tiered context map (root ≤150 lines + path-scoped rules + nested package maps), every claim verified against the code |
 
 ## Install
 
