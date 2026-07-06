@@ -5,10 +5,11 @@ description: |
   Close every autonomous run with a learning pass so the machine never repeats a mistake it already
   paid for: harvest the run's STRUCTURED artifacts (checkpoint register, blocked-task reasons, guard
   blocks, fix-loop counts, degradations), verify each candidate lesson adversarially, dedupe against
-  what is already known, then route each learning to the memory layer that will actually change future
-  behavior — repo facts into the stamped context map, environment quirks into auto memory, plan-shape
-  lessons into .ulpi/learnings.md which auto-spec/auto-plan/auto-build READ BEFORE their next run.
-  Use as the closing phase of every pipeline/loop run, or standalone after any bumpy session.
+  what is already known, then WRITE each learning to the Claude Code memory that LOADS AUTOMATICALLY
+  next session — a convention or plan-shape rule into CLAUDE.md, an area-specific lesson into a
+  path-scoped .claude/rules file, an environment quirk into auto memory. Machine defects are surfaced to
+  the user, never self-patched. Because those are native context files Claude Code already loads, the
+  next run picks the lessons up with no extra step. Use as the closing phase of every run, or standalone.
 allowed-tools:
   - Bash
   - Read
@@ -39,13 +40,15 @@ learning nothing. Non-negotiable:
 2. VERIFY BEFORE WRITING. Every candidate passes `adversarial-verify`: is it TRUE (matches the
    evidence), GENERAL (a pattern, not a one-off flake), and ACTIONABLE (changes a future decision)?
    One flaky run does not make a law. Rejected candidates are dropped, not hoarded.
-3. ROUTE TO THE LAYER THAT CHANGES BEHAVIOR — never dump everything in one file:
-   repo facts → the stamped context map (via a scoped `auto-map` refresh); environment/process quirks
-   → auto memory; plan-shape and process lessons → `.ulpi/learnings.md` (the feed-forward file);
-   machine defects (a skill/guard/template gap) → surfaced to the user, never self-suppressed.
-4. DEDUPE AND CURATE — the learnings file is a ≤100-line working set, not an archive: merge with an
-   existing entry instead of appending a twin, prune entries a later run superseded or disproved,
-   convert relative dates to absolute. Cap: at most 5 new learnings per run — the highest-value ones.
+3. WRITE TO WHERE CLAUDE CODE ACTUALLY LOADS CONTEXT — never a bespoke file nothing reads. A learning
+   only changes behavior if it lands in native, auto-loaded memory: **CLAUDE.md** (loaded in full every
+   session), a path-scoped **`.claude/rules/<area>.md`** (loaded when the agent touches that area), or
+   **auto memory** (`~/.claude/projects/<project>/memory/`, loaded every session). Machine defects (a
+   skill/guard/template gap) → surfaced to the user, never self-suppressed. NEVER invent a `.ulpi/`
+   learnings file — nothing loads it, so it is a lesson written into the void.
+4. DEDUPE AND CURATE — memory is a working set, not an archive: merge with an existing entry instead of
+   appending a twin, prune entries a later run superseded or disproved, convert relative dates to
+   absolute, and keep CLAUDE.md within its line budget. Cap: at most 5 new learnings per run.
 5. NEVER learn secrets/tokens/URLs-with-credentials, and never rewrite human-written memory — the
    same stamps-and-preservation rules as auto-map.
 </EXTREMELY-IMPORTANT>
@@ -61,8 +64,9 @@ learning nothing. Non-negotiable:
 The difference between an autonomous machine and a self-improving one is whether run N+1 knows what
 run N paid to find out. Every blocked task, guard block, thrash loop, and rejected finding is evidence
 about how THIS repo and THIS process actually behave. This skill turns that evidence into verified,
-routed, deduplicated learnings — and the front of the pipeline (`auto-spec` recon, `auto-plan` Phase 0,
-`auto-build` preflight) reads them back, so the loop actually closes.
+deduplicated learnings and writes them into the memory Claude Code already loads every session —
+CLAUDE.md, `.claude/rules`, auto memory — so the next run starts with the lessons in context
+automatically, without any phase having to remember to read a file. That is what closes the loop.
 
 ## Phase 0: Harvest the run's evidence — it is CODE
 
@@ -91,38 +95,44 @@ canonical learning shape:
 
 **Success criteria:** ≤5 survivors, each true, general, actionable, and evidence-linked.
 
-## Phase 2: Route each learning to the layer that changes behavior
+## Phase 2: Route each learning to native, auto-loaded memory
 
-| Learning is about… | Route to | Mechanism |
+Claude Code loads these every session (or on matching-file access) with no prompting. Put each learning
+in the one that will actually reach the next run:
+
+| Learning is about… | Route to (Claude Code auto-loads it) | How |
 |---|---|---|
-| THIS repo's code reality (an invariant tasks kept violating, a module boundary that bit) | the context map | scoped `auto-map` refresh — stamped sections only |
-| Environment/process quirks (build flake, service dependency, slow suite, CI oddity) | auto memory | topic file + one MEMORY.md index line |
-| Plan shape & process (tasks too fat here, a dependency class that keeps getting missed, a validate form that lies) | `.ulpi/learnings.md` | the FEED-FORWARD file — read at the front of the next run |
-| The machine itself (a skill gap, a guard bypass, a template defect) | the user | reported in the Output Contract — never silently self-patched, never suppressed |
+| A project-wide convention, invariant, or plan-shape rule the run kept violating (tasks too fat here, a validate form that lies, a boundary that bit) | **CLAUDE.md** — loaded in full every session | append to a stamped `## Learnings` section, or hand it to `auto-map` (which owns CLAUDE.md) |
+| A lesson that only applies to one area (an API rule, a DB/migration gotcha, a test-suite quirk) | **`.claude/rules/<area>.md`** with `paths:` frontmatter — loads when the agent touches those files | create or append the rule; scope its `paths:` glob |
+| An environment or tooling quirk the run discovered (build flake, slow suite, a service dependency, a CI oddity) | **auto memory** (`~/.claude/projects/<project>/memory/`) — MEMORY.md loaded every session | a topic file plus one MEMORY.md index line |
+| A defect in the machine itself (a skill gap, a guard bypass, a template bug) | **the user** — reported, never self-patched | surface it in the Output Contract |
 
 Dedupe on write: if an existing entry covers it, strengthen that entry (add the new evidence ref)
-instead of appending a twin. Prune superseded/disproved entries while there. Keep `.ulpi/learnings.md`
-under 100 lines — it loads into planning context; bloat there taxes every future run.
+instead of appending a twin; prune superseded/disproved entries while you are there. Keep CLAUDE.md and
+each rules file within budget — they load into every session, so bloat taxes all future work.
 
-**Success criteria:** every survivor landed in exactly one layer; the learnings file is deduped,
-curated, and within budget.
+**Success criteria:** every survivor landed in exactly one native-loaded location; nothing written to a
+file Claude Code does not load; memory deduped and within budget.
 
-## Phase 3: Close the loop — confirm feed-forward wiring
+## Phase 3: Close the loop — the feed-forward is now AUTOMATIC
 
-The learnings only matter if the next run reads them. Confirm (and report) that the consumers exist:
-`auto-spec` reads `.ulpi/learnings.md` during recon; `auto-plan` reads it in Phase 0 and encodes
-plan-shape lessons into the DAG; `auto-build`'s preflight surfaces relevant entries into engineer
-briefs. In pipeline composition this skill runs BEFORE `auto-map` (learnings may update rules the map
-refresh then verifies).
+Because the learnings live in CLAUDE.md, `.claude/rules`, and auto memory, Claude Code loads them into
+the very next session with zero extra steps: the loop closes by construction, not by asking a phase to
+read a file. Confirm and report that each learning actually landed in a loaded location (`/memory` lists
+what is loaded; check the CLAUDE.md `## Learnings` section and any new `.claude/rules` file). In pipeline
+composition this skill runs BEFORE `auto-map`, which then verifies the CLAUDE.md/rules the learnings
+touched against the real repo.
 
-**Success criteria:** the run's lessons are on disk where the next run's front door reads them.
+**Success criteria:** every lesson is in a location Claude Code confirms it loads; none stranded in a
+file nothing reads.
 
 ## Common Rationalizations
 
 | Rationalization | Reality |
 |---|---|
 | "Obvious lesson, no need to verify." | Obvious-feeling lessons from one bad run are how false laws get written. Verify against the evidence or drop it. |
-| "Keep every learning — more is better." | The learnings file loads into planning context. Bloat taxes every run; 5 curated beats 50 hoarded. |
+| "Keep every learning — more is better." | CLAUDE.md loads into every session. Bloat taxes every run; 5 curated beats 50 hoarded. |
+| "Drop it in a `.ulpi/learnings.md` and have the skills read it." | Claude Code doesn't load that file. It's a lesson written into the void. Use CLAUDE.md, `.claude/rules`, or auto memory — what actually loads. |
 | "Just append; dedup later." | Later never comes. Twins drift apart and contradict; merge on write. |
 | "That failure was the skill's fault — tweak my own instructions quietly." | Machine defects go to the user. Self-patching hides systemic bugs from the person who owns the system. |
 | "Record it in the transcript summary." | Transcripts die with the session. Only routed, durable layers change the next run. |
@@ -131,15 +141,18 @@ refresh then verifies).
 ## Red Flags
 
 - A learning with no evidence pointer, or one contradicting the artifact it cites.
-- `.ulpi/learnings.md` growing past ~100 lines or accumulating near-duplicate entries.
-- Repo facts written to the learnings file instead of the context map (wrong layer = never seen again).
+- A learning written to any file Claude Code does not auto-load (a `.ulpi/` note, a random doc): it will
+  never reach the next run.
+- CLAUDE.md or a rules file growing past its budget or accumulating near-duplicate entries.
 - A machine defect recorded as a repo note instead of surfaced to the user.
 - The same mistake appearing in two consecutive runs' registers — the loop is NOT closing; escalate.
 
 ## Guardrails
 
 - Never write an unverified or evidence-free learning; never learn from memory alone.
-- Never exceed 5 new learnings per run or 100 lines in the feed-forward file.
+- Never write a learning to a file Claude Code does not load (CLAUDE.md / `.claude/rules` / auto memory
+  only); never invent a `.ulpi/learnings.md`.
+- Never exceed 5 new learnings per run; keep CLAUDE.md and rules files within budget.
 - Never duplicate — merge and strengthen; prune superseded entries on every pass.
 - Never store secrets; never touch human-written memory outside stamped sections.
 - Never self-patch machine defects silently — they belong to the user.
@@ -157,6 +170,6 @@ Report:
 
 1. run harvested (checkpoint path) + candidates found by the harvester vs. added manually
 2. verification: survivors vs. rejected (with the rejection reason)
-3. routing: which learning landed in which layer (map / memory / learnings.md / user-report)
+3. routing: which learning landed where (CLAUDE.md / `.claude/rules/<area>.md` / auto memory / user-report)
 4. machine defects surfaced to the user (never self-patched)
-5. feed-forward state: learnings-file line count, entries merged/pruned, consumers confirmed
+5. confirmation each lesson is in a location Claude Code auto-loads (entries merged/pruned, within budget)

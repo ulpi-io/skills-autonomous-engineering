@@ -205,6 +205,8 @@ section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
 
 /* contract: ruled list */
 .contract{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.contract3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:860px){.contract3{grid-template-columns:1fr}}
 @media (max-width:760px){.contract{grid-template-columns:1fr}}
 .ct{padding:22px 24px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
 .ct h3{font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
@@ -315,10 +317,10 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
       <h2>It doesn't just run. It gets better.</h2>
       <p>Most agents forget every run. They re-discover the same footguns forever. This one closes the loop: what one run pays to learn, the next run already knows.</p>
     </div>
-    <div class="contract" style="grid-template-columns:repeat(3,1fr)">
+    <div class="contract contract3">
       <div class="ct"><h3>Learn · /auto-learn</h3><p>Harvests the run's checkpoint (blocked tasks, gate failures, thrash) and verifies each candidate lesson against the evidence (one flake is not a law). Survivors route to the layer that changes behavior; machine defects surface to you, never self-patched.</p></div>
       <div class="ct"><h3>Map · /auto-map</h3><p>Refreshes a disclosure-tiered context map: a lean root plus a per-folder <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code> that loads only when the agent works there. Every path, command, and claim is verified against the real repo before it ships.</p></div>
-      <div class="ct" style="border-right:0"><h3>Feed forward</h3><p>The verified lessons land in <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">.ulpi/learnings.md</code>, which <code style="font-family:var(--mono);font-size:13px">auto-spec</code>, <code style="font-family:var(--mono);font-size:13px">auto-plan</code>, and <code style="font-family:var(--mono);font-size:13px">auto-build</code> read <strong>before</strong> the next run plans. Run N+1 starts with run N's tuition.</p></div>
+      <div class="ct" style="border-right:0"><h3>Feed forward</h3><p>Lessons land in the memory Claude Code loads automatically: <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code>, path-scoped <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">.claude/rules</code>, and auto memory. So the next run starts with them in context, no step required. Run N+1 starts with run N's tuition.</p></div>
     </div>
   </div>
 </section>
@@ -424,7 +426,7 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     <div class="cat" style="margin-bottom:0">
       <div class="cat-h"><b>Context &amp; learning</b><span>· the self-improving loop</span></div>
       <div class="row2"><code class="nm">auto-map</code><p>Builds a disclosure-tiered context map: a lean root <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code>, path-scoped rules, and a per-folder <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code> that loads only when the agent works there. A code gate verifies every path, command, and claim against the real repo.</p></div>
-      <div class="row2"><code class="nm">auto-learn</code><p>Harvests each run's checkpoint into verified lessons, routes them to the memory layer that changes behavior, and feeds <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">.ulpi/learnings.md</code> forward, so spec, plan, and build read them before the next run. Machine defects surface to you, never self-patched.</p></div>
+      <div class="row2"><code class="nm">auto-learn</code><p>Harvests each run's checkpoint into verified lessons and writes them where Claude Code auto-loads context: <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code>, path-scoped <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">.claude/rules</code>, or auto memory. The next run starts with them in context. Machine defects surface to you.</p></div>
     </div>
   </div>
 </section>

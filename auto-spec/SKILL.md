@@ -81,8 +81,10 @@ Before drafting, learn what exists (fan out with `fan-out-work` for a large repo
 - constraints that are real: the stack, existing contracts, invariants in `CLAUDE.md`/docs, data shapes,
   auth/security boundaries;
 - the domain facts the request assumes;
-- **`.ulpi/learnings.md` if present** — prior runs' verified lessons (`auto-learn`): constraints and
-  failure patterns already paid for belong in the spec's constraints/risks, not rediscovered.
+- **prior-run lessons already in your loaded context** — `auto-learn` routes them into CLAUDE.md,
+  `.claude/rules`, and auto memory (which Claude Code loads automatically), so constraints and failure
+  patterns already paid for are in front of you: fold them into the spec's constraints/risks, don't
+  rediscover them.
 
 Record what's grounded vs. what's an assumption — the draft will mark assumptions explicitly.
 
