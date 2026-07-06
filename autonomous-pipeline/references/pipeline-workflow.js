@@ -105,7 +105,7 @@ const gateFail = (phase, why) => { register.push({ phase, kind: 'gate', why }); 
 // programming error still throws through. Fixed backoff (no Date/Math.random: keeps resume deterministic)
 // stops a storm or a Wi-Fi blip being mis-recorded as blocked tasks; if retries exhaust, the unit is
 // recorded (not silently dropped) and the checkpoint makes the whole run resumable when the link returns.
-const RETRY_DELAYS = [3000, 10000, 30000]    // ms; 3 retries ⇒ up to 4 attempts
+const RETRY_DELAYS = [3000, 10000, 30000, 60000, 120000, 300000, 300000, 300000, 300000, 300000]  // ms; 10 retries ⇒ up to 11 attempts; escalates then caps at 5 min (~28 min total) to ride out a real outage
 const isTransient = (e) => /rate.?limit|429|overloaded|529|too many requests|quota|502|503|504|bad gateway|gateway time|service unavailable|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH|socket hang up|fetch failed|network error|network|connection (?:reset|closed|error|refused|aborted)|timed? ?out|premature close|terminated/i.test(String((e && (e.message || e)) || ''))
 const HAS_TIMER = typeof setTimeout === 'function'   // sandbox may not expose timers: retries still happen, just without backoff
 const sleep = (ms) => (HAS_TIMER ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())

@@ -52,7 +52,7 @@ async function mapCapped(items, cap, fn) {
 // trigger-happy). A null return (died at the door / after the runtime's own retries) is always retried;
 // a THROWN error is retried only when isTransient matches (rate-limit OR a dropped connection), so a
 // genuine bug still surfaces. If retries exhaust, the dimension is reported as a gap, never faked clean.
-const RETRY_DELAYS = [3000, 10000, 30000]
+const RETRY_DELAYS = [3000, 10000, 30000, 60000, 120000, 300000, 300000, 300000, 300000, 300000]  // ms; 10 retries ⇒ up to 11 attempts; escalates then caps at 5 min (~28 min total) to ride out a real outage
 const isTransient = (e) => /rate.?limit|429|overloaded|529|too many requests|quota|502|503|504|bad gateway|gateway time|service unavailable|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH|socket hang up|fetch failed|network error|network|connection (?:reset|closed|error|refused|aborted)|timed? ?out|premature close|terminated/i.test(String((e && (e.message || e)) || ''))
 const HAS_TIMER = typeof setTimeout === 'function'   // sandbox may lack timers: retries still happen, just without backoff
 const sleep = (ms) => (HAS_TIMER ? new Promise(r => setTimeout(r, ms)) : Promise.resolve())
