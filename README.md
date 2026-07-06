@@ -1,9 +1,65 @@
 # @ulpi/skills-autonomous-engineering
 
-**Autonomous software delivery for AI coding agents** — the lifecycle as bounded, self-correcting,
-checkpoint-resumable phases with **deterministic enforcement**: guard hooks that mechanically block
-the cardinal sins, runnable Workflow templates, a fail-closed state CLI, and native `/goal` + `/loop`
-integration. Claude-Code-first; Codex and 70+ other agents via [skills.sh](https://skills.sh).
+**Let your agent run engineering work unattended — without it cheating, spinning, or losing work.**
+
+Every AI agent can loop. The failure modes are what kill you: it "fixes" the suite by skipping the red
+test, grinds for three hours past the point of progress, `git add -A`s unrelated work into a commit it
+later force-pushes, and reports "done" for gates that never ran. This collection makes those failure
+modes **mechanically impossible**, not just discouraged.
+
+## 30 seconds of it
+
+```text
+> /auto-test src/auth
+
+⏺ Baseline: 47 tests, 2 failing · coverage gaps: 7 untested behaviors (token expiry,
+  refresh race, 5 error paths). Checkpoint: .ulpi/runs/auto-test-....json
+
+⏺ Writing test: "rejects expired token with 401"… mutation check: broke verifyToken()
+  → test FAILED (good — it actually tests something). Restored → green. Kept.
+
+⏺ Writing test: "refresh() is idempotent"… mutation check: broke refresh() → test still
+  PASSED. Tautology — rejected, rewriting with state assertions…
+
+⏺ Fixing failing test 1/2: root cause is a real bug in session.ts:41 (clock injected
+  nowhere) — surfacing it, NOT rewriting the assertion to match the wrong output.
+
+✗ Edit blocked by guard-test-integrity: this edit adds `.skip` to a test file — that
+  fakes the done-condition instead of fixing the failure.        ← the hook, not a promise
+
+⏺ Converged: 54 tests green, 7 behaviors covered (all mutation-verified), 1 real bug
+  surfaced, 0 tests skipped/weakened. Iterations 4/6, ~38k tokens of 150k budget.
+```
+
+That last part is the point: the agent **tried** to take the shortcut every agent takes, and the
+skill's own PreToolUse hook — a tested shell script that travels with it — blocked the tool call.
+The loop is bounded (iterations + budget + no-progress), the run is resumable from its checkpoint
+after any interruption, and "done" fails closed (a red suite is reported red).
+
+## The pipeline
+
+```
+ DEFINE        PLAN         BUILD          CLEAN         PROVE        GATE         MEASURE        SHIP
+┌────────┐  ┌────────┐  ┌───────────┐  ┌──────────┐  ┌─────────┐  ┌─────────┐  ┌───────────┐  ┌────────┐
+│ testable│→ │ DAG of │→ │ worktree  │→ │ simplify,│→ │ tests + │→ │ verified│→ │ benchmark-│→ │ fail-  │
+│ spec    │  │ atomic │  │ per task, │  │ behavior-│  │ mutation│  │ findings│  │ gated     │  │ closed │
+│         │  │ tasks  │  │ one commit│  │ preserved│  │ -checked│  │ only    │  │ accepts   │  │ gates  │
+└────────┘  └────────┘  └───────────┘  └──────────┘  └─────────┘  └─────────┘  └───────────┘  └────────┘
+ /auto-spec  /auto-plan   /auto-build   /auto-simplify  /auto-test   /auto-review  /auto-performance  /auto-ship
+
+              chain them all with ONE plan approval:  /autonomous-pipeline "<feature>"
+```
+
+| You want to… | Run | What actually makes it safe |
+|---|---|---|
+| Turn an idea into a testable spec | `/auto-spec` | completeness-critic loop; no invented requirements |
+| Break a spec into buildable tasks | `/auto-plan` | DAG self-review: acyclic, ordered, disjoint write scopes |
+| Build the whole plan unattended | `/auto-build` | one approval; per-task commit; bulk-staging **blocked by hook** |
+| Cover code with tests that mean something | `/auto-test` | mutation-checked tests; suite-gaming **blocked by hook** |
+| Review without false positives | `/auto-review` | every finding survives a 3-skeptic refutation panel |
+| Make it faster, provably | `/auto-performance` | no benchmark delta + green tests → reverted |
+| Ship with honest gates | `/auto-ship` | unran gate = blocker; force-push **blocked by hook** |
+| Keep any loop from running away | `converge-loop` + `budget-guard` | declared termination set; compiles into native `/goal` |
 
 ## Install
 
