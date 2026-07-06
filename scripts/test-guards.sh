@@ -34,6 +34,10 @@ t 2 "reset --hard blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 2 "clean -fd blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git clean -fd"}}' $G
 t 0 "non-git command allowed"      AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"npm test"}}' $G
 t 2 "env-prefixed git blocked"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"FOO=1 git add -A"}}' $G
+t 0 "MULTILINE: add path then ls ." AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add src/main.py\nls ."}}' $G
+t 2 "MULTILINE: echo then add -A"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"starting\"\ngit add -A"}}' $G
+t 2 "MULTILINE: ./run.sh then add -A" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"./run.sh\ngit add -A"}}' $G
+t 0 "QUOTED: separator+git in -m msg" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -m \"see; git add -A for details\""}}' $G
 echo "── guard-git-hygiene (plugin-scoped: live-run gating) ──"
 t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 mkdir -p .ulpi/runs && echo '{"status": "running"}' > .ulpi/runs/x.json
@@ -68,6 +72,8 @@ t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 2 "push --delete blocked"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin --delete old"}}' $G
 t 0 "normal push allowed"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -u origin feat"}}' $G
 t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"gh pr create --title x"}}' $G
+t 0 "MULTILINE: push then rm -f"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin main\nrm -f tmp.txt"}}' $G
+t 2 "MULTILINE: quoted line then force" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"done\"\ngit push --force"}}' $G
 
 echo "── frontmatter resolvers find + exec the scripts (installed-skill layout) ──"
 mkdir -p proj/.claude/skills

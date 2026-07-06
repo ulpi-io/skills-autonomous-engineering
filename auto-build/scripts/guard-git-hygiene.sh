@@ -1,69 +1,78 @@
 #!/bin/bash
-# guard-git-hygiene — PreToolUse[Bash] hook.
-# Blocks bulk staging and history-destroying git during an active autonomous build run,
-# enforcing auto-build's "stage only the task's files / clean rollback per task" contract
-# deterministically instead of by prompt exhortation.
-#
-# Input:  hook JSON on stdin ({ tool_name, tool_input: { command }, cwd, ... })
-# Output: exit 0 = allow; exit 2 = BLOCK (stderr is shown to Claude as the reason)
-# Scope:  enforced when AUTO_GUARD_ALWAYS=1 (skill-scoped use), or when a .ulpi/runs/*.json
-#         checkpoint with "status": "running" exists (plugin/global use — only guards live runs).
+# guard-git-hygiene - PreToolUse[Bash] hook. Blocks: bulk staging, commit -a, reset --hard, clean -f during autonomous runs
+# Quote-aware + newline-aware parsing (shlex): flags inside quoted strings never leak into
+# parsing; every line and ;|& segment is analyzed separately. Anchored to CLAUDE_PROJECT_DIR.
+# exit 0 = allow; exit 2 = BLOCK (stderr shown to Claude). Fail-open without python3.
 set -u
-
 raw=$(cat 2>/dev/null || true)
 [ -z "$raw" ] && exit 0
 
-# Scoping: skill-scoped installs export AUTO_GUARD_ALWAYS=1; otherwise only guard live runs.
 if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
-  # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
-  # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
+  # Live-run scoping, anchored to the PROJECT ROOT (hooks run in an arbitrary cwd - worktrees,
+  # monorepo subdirs; CLAUDE_PROJECT_DIR exists exactly for this) with a 4h staleness window.
   live=""
-  if [ -d .ulpi/runs ]; then
-    for f in $(find .ulpi/runs -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null); do
+  runs="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs"
+  if [ -d "$runs" ]; then
+    while IFS= read -r f; do
       grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
-    done
+    done < <(find "$runs" -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null)
   fi
   [ -z "$live" ] && exit 0
 fi
 
-# Preferred path: token-accurate parse via python3 (no regex-on-flags false positives:
-# --amend stays allowed, a commit message containing "-a" stays allowed).
-if command -v python3 >/dev/null 2>&1; then
-  RAW="$raw" python3 -c '
-import os, sys, json, re
+command -v python3 >/dev/null 2>&1 || { echo "guard-git-hygiene: python3 not found - guard skipped (fail-open)" >&2; exit 0; }
+RAW="$raw" python3 -c '
+import os, sys, json, re, shlex
 try:
     d = json.loads(os.environ.get("RAW", "{}"))
 except Exception:
     sys.exit(0)
 c = d.get("tool_input", {}).get("command", "")
-def toks(sub):  # flag/arg tokens of each "git <sub> ..." segment, up to a shell separator
-    out = []
-    for m in re.finditer(r"(?:^|[;&|])\s*(?:[A-Za-z0-9_=]+\s+)*git\s+" + sub + r"\b([^|;&]*)", c):
-        out.append(m.group(1).split())
-    return out
+def segments(cmd):
+    # newline is a command separator; quoting is respected (shlex posix), so a flag or
+    # separator INSIDE a quoted string (a commit message) can never leak into parsing.
+    for line in cmd.split("\n"):
+        lex = shlex.shlex(line, posix=True, punctuation_chars=";|&()")
+        lex.whitespace_split = True
+        try:
+            toks = list(lex)
+        except ValueError:
+            toks = line.split()   # unbalanced quotes: fall back to coarse split (still per-line)
+        seg = []
+        for t in toks:
+            if t and all(ch in ";|&()" for ch in t):
+                if seg: yield seg
+                seg = []
+            else:
+                seg.append(t)
+        if seg:
+            yield seg
+def git_args(seg, sub):
+    i = 0
+    while i < len(seg) and re.fullmatch(r"[A-Za-z0-9_]+=.*", seg[i]):
+        i += 1   # same-line env prefixes only
+    if i + 1 < len(seg) and seg[i] == "git" and seg[i + 1] == sub:
+        return seg[i + 2:]
+    return None
 def block(msg):
-    print("guard-git-hygiene: " + msg, file=sys.stderr); sys.exit(2)
-for t in toks("add"):
-    if any(x in ("-A", "--all", "-a", ".") for x in t):
-        block("bulk staging (git add -A/./--all) is banned during an autonomous run — stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
-for t in toks("commit"):
-    if any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
-        block("git commit -a/--all stages everything implicitly — add the task files explicitly, then commit.")
-for t in toks("push"):
-    if ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)) and "--force-with-lease" not in t:
-        block("plain git push --force is banned during an autonomous run — use --force-with-lease, or stop and ask the user (irreversible-step escalation).")
-for t in toks("reset"):
-    if "--hard" in t:
-        block("git reset --hard destroys in-flight task work — checkpoint or escalate instead.")
-for t in toks("clean"):
-    if any(x == "--force" or (re.fullmatch(r"-[a-zA-Z]+", x) and "f" in x[1:]) for x in t):
-        block("git clean -f destroys in-flight task work — checkpoint or escalate instead.")
-'
-  exit $?
-fi
+    print(PREFIX + msg, file=sys.stderr); sys.exit(2)
 
-# No python3 → honest fail-open (a half-strength lookalike guard is worse than a declared no-op;
-# the prompt-level contract still applies and the resolver already fails open when the script is absent).
-echo "guard-git-hygiene: python3 not found — guard skipped (fail-open)" >&2
-exit 0
+PREFIX = "guard-git-hygiene: "
+for seg in segments(c):
+    t = git_args(seg, "add")
+    if t is not None and any(x in ("-A", "--all", "-a", ".") for x in t):
+        block("bulk staging (git add -A/./--all) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
+    t = git_args(seg, "commit")
+    if t is not None and any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
+        block("git commit -a/--all stages everything implicitly - add the task files explicitly, then commit.")
+    t = git_args(seg, "push")
+    if t is not None and ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)) and "--force-with-lease" not in t:
+        block("plain git push --force is banned during an autonomous run - use --force-with-lease, or stop and ask the user (irreversible-step escalation).")
+    t = git_args(seg, "reset")
+    if t is not None and "--hard" in t:
+        block("git reset --hard destroys in-flight task work - checkpoint or escalate instead.")
+    t = git_args(seg, "clean")
+    if t is not None and any(x == "--force" or (re.fullmatch(r"-[a-zA-Z]+", x) and "f" in x[1:]) for x in t):
+        block("git clean -f destroys in-flight task work - checkpoint or escalate instead.")
+'
+exit $?

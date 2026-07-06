@@ -21,10 +21,11 @@ if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
   # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
   # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
   live=""
-  if [ -d .ulpi/runs ]; then
-    for f in $(find .ulpi/runs -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null); do
+  runs="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs"
+  if [ -d "$runs" ]; then
+    while IFS= read -r f; do
       grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
-    done
+    done < <(find "$runs" -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null)
   fi
   [ -z "$live" ] && exit 0
 fi
@@ -67,7 +68,7 @@ if printf '%s' "$added" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(x
   block "this edit adds a test skip/only/ignore marker to a test file — that silences the suite instead of fixing it (fail-closed contract)"
 fi
 # Type-error / assert silencing inside tests.
-if printf '%s' "$added" | grep -qE '@ts-ignore|@ts-expect-error|eslint-disable(-next-line)?[^\\]*\\n|# type: ignore'; then
+if printf '%s' "$added" | grep -qE '@ts-ignore|@ts-expect-error|eslint-disable(-next-line)?\b|# type: ignore'; then
   block "this edit adds a suppression directive to a test file — silencing the checker fakes the done-condition"
 fi
 

@@ -9,7 +9,7 @@
 # Read-only; never blocks; silent without python3.
 set -u
 
-dir=".ulpi/runs"
+dir="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs"
 [ -d "$dir" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
