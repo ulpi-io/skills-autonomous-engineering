@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomous Engineering Skills — run agents unattended without them cheating</title>
+<meta name="description" content="18 skills that turn the software lifecycle into bounded, self-correcting, checkpoint-resumable phases — with deterministic hooks that make gaming tests, bulk staging, and unauthorized force-pushes mechanically impossible. For Claude Code and Codex.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:title" content="Autonomous Engineering Skills">
+<meta property="og:description" content="Run engineering work unattended — without the agent cheating, spinning, or losing work. Bounded loops, fail-closed gates, deterministic enforcement.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23111318'/%3E%3Cpath d='M6 22V10M6 10l5 6 5-9 5 12 5-7' fill='none' stroke='%23d8763f' stroke-width='2.2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── locked tokens (DESIGN.md) ───────────────────────────────────────────── */
+:root{
+  --ground:#f6f3ee; --ground:oklch(0.975 0.006 75);
+  --ground-2:#eae6df; --ground-2:oklch(0.945 0.008 75);
+  --ink:#2b2d33; --ink:oklch(0.24 0.012 265);
+  --ink-2:#6c6f78; --ink-2:oklch(0.48 0.012 265);
+  --rule:rgba(43,45,51,.14); --rule:oklch(0.24 0.012 265 / .14);
+  --rule-2:rgba(43,45,51,.07); --rule-2:oklch(0.24 0.012 265 / .07);
+  --accent:#c26a34; --accent:oklch(0.56 0.17 42);
+  --verified:#3f8f5c; --verified:oklch(0.55 0.12 155);
+  --blocked:#c23b28; --blocked:oklch(0.53 0.20 27);
+  --sp:4px; --r:2px;
+  --serif: 'Archivo', 'Arial Narrow', system-ui, sans-serif;
+  --body: 'Hanken Grotesk', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --ease: cubic-bezier(.2,.6,.2,1);
+  --maxw: 1180px;
+}
+@media (prefers-color-scheme: dark){:root[data-theme="auto"]{
+  --ground:#15171d; --ground:oklch(0.19 0.012 260);
+  --ground-2:#1c1f27; --ground-2:oklch(0.23 0.014 260);
+  --ink:#e9e6df; --ink:oklch(0.93 0.006 75);
+  --ink-2:#a7a49c; --ink-2:oklch(0.70 0.008 75);
+  --rule:rgba(233,230,223,.16); --rule:oklch(0.93 0.01 75 / .16);
+  --rule-2:rgba(233,230,223,.08); --rule-2:oklch(0.93 0.01 75 / .08);
+  --accent:#e08a4f; --accent:oklch(0.68 0.16 45);
+  --verified:#63c088; --verified:oklch(0.72 0.14 158);
+  --blocked:#e26a55; --blocked:oklch(0.66 0.20 27);
+}}
+:root[data-theme="dark"]{
+  --ground:oklch(0.19 0.012 260); --ground-2:oklch(0.23 0.014 260);
+  --ink:oklch(0.93 0.006 75); --ink-2:oklch(0.70 0.008 75);
+  --rule:oklch(0.93 0.01 75 / .16); --rule-2:oklch(0.93 0.01 75 / .08);
+  --accent:oklch(0.68 0.16 45); --verified:oklch(0.72 0.14 158); --blocked:oklch(0.66 0.20 27);
+}
+
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:var(--body); font-size:17px; line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  /* the measurement grid — the signature */
+  background-image:
+    linear-gradient(var(--rule-2) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule-2) 1px, transparent 1px);
+  background-size: 32px 32px, 32px 32px;
+}
+a{color:inherit}
+::selection{background:var(--accent); color:var(--ground)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:1px}
+
+.wrap{max-width:var(--maxw); margin-inline:auto; padding-inline:clamp(20px,5vw,40px)}
+.rule-top{border-top:1px solid var(--rule)}
+
+/* mono labels */
+.lab{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.lab .mk{color:var(--accent)}
+
+/* buttons */
+.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:14px;
+  letter-spacing:.02em; padding:12px 18px; border:1px solid var(--ink); border-radius:var(--r);
+  background:var(--ink); color:var(--ground); text-decoration:none; transition:transform .15s var(--ease), background .15s}
+.btn:hover{transform:translateY(-2px)}
+.btn.ghost{background:transparent; color:var(--ink); border-color:var(--rule)}
+.btn.ghost:hover{border-color:var(--ink)}
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, var(--ground) 86%, transparent);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--rule)}
+.bar .wrap{display:flex; align-items:center; gap:20px; height:60px}
+.brand{display:flex; align-items:center; gap:11px; font-family:var(--mono); font-weight:600; letter-spacing:.02em; text-decoration:none; font-size:15px}
+.brand svg{width:26px; height:26px; flex:none}
+.bar nav{margin-left:auto; display:flex; gap:22px; align-items:center}
+.bar nav a{font-family:var(--mono); font-size:13px; color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
+.bar nav a:hover{color:var(--ink)}
+.themebtn{font-family:var(--mono); font-size:12px; background:none; border:1px solid var(--rule); color:var(--ink-2);
+  border-radius:var(--r); padding:6px 9px; cursor:pointer; letter-spacing:.08em}
+.themebtn:hover{color:var(--ink); border-color:var(--ink)}
+@media (max-width:720px){.bar nav a:not(.gh){display:none}}
+
+/* ── hero ────────────────────────────────────────────────────────────────── */
+.hero{position:relative; padding-block:clamp(48px,9vw,104px)}
+.hero .grid{display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(32px,5vw,64px); align-items:center}
+@media (max-width:900px){.hero .grid{grid-template-columns:1fr; gap:36px}}
+.hero h1{font-family:var(--serif); font-weight:800; letter-spacing:-.02em; line-height:1.02;
+  font-size:clamp(38px,6.4vw,74px); text-wrap:balance}
+.hero h1 .hl{color:var(--accent)}
+.hero .sub{margin-top:22px; max-width:34ch; font-size:clamp(17px,2vw,20px); color:var(--ink-2)}
+.hero .cta{margin-top:30px; display:flex; gap:14px; flex-wrap:wrap; align-items:center}
+.reveal{opacity:0; transform:translateY(14px)}
+.in .reveal, .reveal.shown{opacity:1; transform:none; transition:opacity .6s var(--ease), transform .6s var(--ease)}
+.in .reveal.d1{transition-delay:.06s}.in .reveal.d2{transition-delay:.12s}.in .reveal.d3{transition-delay:.2s}.in .reveal.d4{transition-delay:.28s}
+@media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none}}
+
+/* terminal panel */
+.panel{position:relative; background:var(--ground-2); border:1px solid var(--rule); border-radius:var(--r)}
+.panel::before,.panel::after{content:""; position:absolute; width:9px; height:9px; border:1.5px solid var(--accent)}
+.panel::before{top:-1px; left:-1px; border-right:0; border-bottom:0}
+.panel::after{bottom:-1px; right:-1px; border-left:0; border-top:0}
+.term{font-family:var(--mono); font-size:13.5px; line-height:1.75; overflow:hidden}
+.term .top{display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--rule); color:var(--ink-2); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase}
+.term .top .dot{width:8px;height:8px;border-radius:50%;border:1px solid var(--rule)}
+.term .body{padding:16px 16px 18px; white-space:pre-wrap; word-break:break-word; min-height:340px}
+.term .ln{display:block}
+.term .cmd{color:var(--ink)} .term .cmd .p{color:var(--accent)}
+.term .mut{color:var(--ink-2)}
+.term .ok{color:var(--verified)} .term .bad{color:var(--blocked)}
+.term .tag{color:var(--accent)}
+.term.type .ln{opacity:0}
+.term.type.run .ln{opacity:1; transition:opacity .28s}
+.caret{display:inline-block;width:8px;height:1.05em;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:bl 1s steps(1) infinite}
+@keyframes bl{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.caret{animation:none}}
+
+/* self-improving loop diagram */
+.loopwrap{padding:0}
+.looptop{padding:12px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center}
+.loopsvg{display:block;width:100%;height:auto;padding:14px 12px 8px}
+.loopsvg .box{fill:var(--ground);stroke:var(--rule);stroke-width:1.5}
+.loopsvg .t{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:17px;letter-spacing:.04em}
+.loopsvg .s{fill:var(--ink-2);font-family:var(--mono);font-size:11.5px}
+.loopsvg .flow{stroke:var(--ink-2);stroke-width:1.6;fill:none}
+.loopsvg .ahf{fill:var(--ink-2)}
+.loopsvg .fb{stroke:var(--accent);stroke-width:2;fill:none}
+.loopsvg .ahfb{fill:var(--accent)}
+.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.02em}
+
+/* blocked stamp */
+.stamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;
+  color:var(--blocked);border:1.5px solid var(--blocked);border-radius:var(--r);padding:3px 9px;transform:rotate(-1.5deg)}
+
+/* ── section frame ───────────────────────────────────────────────────────── */
+section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
+.shead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:38px}
+.shead h2{font-family:var(--serif);font-weight:700;letter-spacing:-.015em;font-size:clamp(26px,3.6vw,40px);line-height:1.06}
+.shead p{color:var(--ink-2);max-width:52ch;font-size:16px}
+
+/* failure strip */
+.fails{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+@media (max-width:720px){.fails{grid-template-columns:1fr}}
+.fail{padding:20px 22px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);display:flex;gap:14px;align-items:flex-start}
+.fail .x{font-family:var(--mono);color:var(--blocked);font-weight:600;flex:none;margin-top:2px}
+.fail b{font-weight:600}
+.fail p{color:var(--ink-2);font-size:14.5px;margin-top:3px}
+
+/* pipeline instrument strip */
+.strip-scroll{overflow-x:auto;padding-bottom:6px;margin-inline:calc(-1*clamp(20px,5vw,40px));padding-inline:clamp(20px,5vw,40px)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(120px,1fr);border:1px solid var(--rule);border-radius:var(--r);min-width:760px}
+.stage{padding:16px 14px 18px;border-right:1px solid var(--rule);position:relative}
+.stage:last-child{border-right:0}
+.stage .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
+.stage .cmd{font-family:var(--mono);font-size:13px;font-weight:600;margin-top:8px}
+.stage .d{font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.4}
+.loopnote{margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.loopnote b{color:var(--accent);font-weight:600}
+
+/* enforcement matrix */
+.matrix{width:100%;border-collapse:collapse;font-size:15px;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.matrix caption{text-align:left;font-family:var(--mono);font-size:12px;color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase;padding-bottom:12px}
+.matrix th,.matrix td{text-align:left;padding:16px 18px;border-bottom:1px solid var(--rule);vertical-align:top}
+.matrix thead th{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:500;background:var(--ground-2)}
+.matrix tbody tr:last-child td{border-bottom:0}
+.matrix code{font-family:var(--mono);font-size:13px;color:var(--accent);word-break:break-word}
+.matrix .sin{color:var(--ink)}
+.matrix .mono{font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+.matrix tr td:first-child{white-space:nowrap}
+@media (max-width:760px){.matrix tr td:first-child{white-space:normal}.matrix th,.matrix td{padding:13px}}
+.scrollx{overflow-x:auto}
+
+/* contract — ruled list */
+.contract{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+@media (max-width:760px){.contract{grid-template-columns:1fr}}
+.ct{padding:22px 24px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.ct h3{font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.ct p{color:var(--ink-2);font-size:15px}
+
+/* skills ledger */
+.layer{margin-bottom:30px}
+.layer .lh{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:14px}
+.layer .lh b{font-family:var(--serif);font-weight:700;font-size:19px}
+.layer .lh span{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);letter-spacing:.08em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--mono);font-size:13px;padding:6px 11px;border:1px solid var(--rule);border-radius:var(--r);color:var(--ink);background:var(--ground-2)}
+.chip .s{color:var(--ink-2)}
+
+/* install */
+.cmdrow{display:flex;align-items:stretch;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--ground-2);margin-bottom:12px;max-width:760px}
+.cmdrow code{font-family:var(--mono);font-size:14px;padding:14px 16px;overflow-x:auto;white-space:nowrap;flex:1;color:var(--ink)}
+.cmdrow .cp{font-family:var(--mono);font-size:12px;border:0;border-left:1px solid var(--rule);background:transparent;color:var(--ink-2);padding:0 16px;cursor:pointer;letter-spacing:.06em}
+.cmdrow .cp:hover{color:var(--accent)}
+
+footer{border-top:1px solid var(--rule);padding-block:40px;color:var(--ink-2);font-family:var(--mono);font-size:13px}
+footer .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--accent)}
+
+.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;position:fixed;z-index:50;background:var(--ink);color:var(--ground);padding:10px 14px;border-radius:var(--r);font-family:var(--mono);font-size:13px}
+</style>
+</head>
+<body>
+<a href="#main" class="skip">Skip to content</a>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Autonomous Engineering Skills — home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="2" fill="var(--ink)"/><path d="M6 22V10M6 10l5 6 5-9 5 12 5-7" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      autonomous-engineering
+    </a>
+    <nav aria-label="Primary">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#enforcement">Enforcement</a>
+      <a href="#skills">Skills</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+      <button class="themebtn" id="theme" aria-label="Toggle color theme">◐ theme</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<a id="top"></a>
+<!-- ── HERO ─────────────────────────────────────────────────────────────── -->
+<section class="hero" style="border-top:0">
+  <div class="wrap grid" id="herogrid">
+    <div>
+      <p class="lab reveal"><span class="mk">▸</span> 18 skills · autonomous &amp; self-improving · Claude Code + Codex</p>
+      <h1 class="reveal d1">Autonomous engineering that <span class="hl">learns from every run.</span></h1>
+      <p class="sub reveal d2">One approval sends eight phases unattended, spec to ship. Then the machine harvests what the run learned, refreshes its own map of your code, and the next run starts smarter. Deterministic hooks make cheating impossible along the way.</p>
+      <div class="cta reveal d3">
+        <a class="btn" href="#install">Install &rarr;</a>
+        <a class="btn ghost" href="#loop">See the loop</a>
+      </div>
+    </div>
+    <div class="panel loopwrap reveal d2">
+      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving loop</div>
+      <svg class="loopsvg" viewBox="0 0 560 300" role="img" aria-label="A closed feedback loop: RUN the eight phases, then LEARN harvests and verifies lessons, then MAP refreshes the context map, and the next run reads the learnings and map before it plans.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahf"/></marker>
+          <marker id="ahb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
+        </defs>
+        <!-- boxes -->
+        <g><rect class="box" x="10" y="24" width="150" height="90" rx="2"/><text class="t" x="85" y="60" text-anchor="middle">RUN</text><text class="s" x="85" y="82" text-anchor="middle">the 8 phases</text><text class="s" x="85" y="98" text-anchor="middle">spec → ship</text></g>
+        <g><rect class="box" x="205" y="24" width="150" height="90" rx="2"/><text class="t" x="280" y="56" text-anchor="middle">LEARN</text><text class="s" x="280" y="77" text-anchor="middle">harvest · verify</text><text class="s" x="280" y="93" text-anchor="middle">route lessons</text></g>
+        <g><rect class="box" x="400" y="24" width="150" height="90" rx="2"/><text class="t" x="475" y="56" text-anchor="middle">MAP</text><text class="s" x="475" y="77" text-anchor="middle">refresh the</text><text class="s" x="475" y="93" text-anchor="middle">context map</text></g>
+        <!-- forward flow -->
+        <path class="flow" d="M162,69 L201,69" marker-end="url(#ah)"/>
+        <path class="flow" d="M357,69 L396,69" marker-end="url(#ah)"/>
+        <!-- feedback return (the self-improvement — accented) -->
+        <path class="fb" d="M475,116 L475,232 L85,232 L85,118" marker-end="url(#ahb)"/>
+        <text class="fbt" x="280" y="256" text-anchor="middle">↻ the next run reads them BEFORE it plans</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ── SELF-IMPROVING LOOP ──────────────────────────────────────────────── -->
+<section id="loop">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> the self-improving loop</p>
+      <h2>It doesn't just run. It gets better.</h2>
+      <p>Most agents forget every run — they re-discover the same footguns forever. This one closes the loop: what one run pays to learn, the next run already knows.</p>
+    </div>
+    <div class="contract" style="grid-template-columns:repeat(3,1fr)">
+      <div class="ct"><h3>Learn · /auto-learn</h3><p>Harvests the run's checkpoint — blocked tasks, gate failures, thrash — and verifies each candidate lesson against the evidence (one flake is not a law). Survivors route to the layer that changes behavior; machine defects surface to you, never self-patched.</p></div>
+      <div class="ct"><h3>Map · /auto-map</h3><p>Refreshes a disclosure-tiered context map — a lean root plus a per-folder <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code> that loads only when the agent works there. Every path, command, and claim is verified against the real repo before it ships.</p></div>
+      <div class="ct" style="border-right:0"><h3>Feed forward</h3><p>The verified lessons land in <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">.ulpi/learnings.md</code>, which <code style="font-family:var(--mono);font-size:13px">auto-spec</code>, <code style="font-family:var(--mono);font-size:13px">auto-plan</code>, and <code style="font-family:var(--mono);font-size:13px">auto-build</code> read <strong>before</strong> the next run plans. Run N+1 starts with run N's tuition.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAILURE MODES ────────────────────────────────────────────────────── -->
+<section id="why">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> the problem</p>
+      <h2>Every agent can loop. The failure modes are what kill you.</h2>
+      <p>Autonomy is easy. Autonomy you can leave running is not. These four are designed out — in code, not prose.</p>
+    </div>
+    <div class="fails">
+      <div class="fail"><span class="x">✗</span><div><b>Fakes the green.</b><p>"Fixes" the suite by skipping the red test. Every added test is mutation-checked; adding <code style="font-family:var(--mono);font-size:13px">.skip</code> to a test file is blocked at the tool layer.</p></div></div>
+      <div class="fail"><span class="x">✗</span><div><b>Grinds forever.</b><p>Runs three hours past the point of progress. Every loop declares a termination set — done-condition, cap, budget, no-progress stop — and stops the instant one fires.</p></div></div>
+      <div class="fail"><span class="x">✗</span><div><b>Poisons the history.</b><p><code style="font-family:var(--mono);font-size:13px">git add -A</code>s unrelated work into a commit, then force-pushes it. Bulk staging and plain force-push are blocked during a run; every task is its own clean rollback point.</p></div></div>
+      <div class="fail"><span class="x">✗</span><div><b>Lies about done.</b><p>Reports "done" for gates that never ran. Gates fail closed: a gate that did not execute is never reported clean, and a red validate is reported red.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PIPELINE ─────────────────────────────────────────────────────────── -->
+<section id="pipeline">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> the pipeline</p>
+      <h2>Eight phases. One approval. It runs the rest.</h2>
+      <p>Each phase is a bounded, checkpoint-resumable loop that composes the same primitives. Chain them with <code style="font-family:var(--mono);font-size:14px;color:var(--accent)">/autonomous-pipeline "&lt;feature&gt;"</code> — a single human gate on the plan, then unattended.</p>
+    </div>
+    <div class="strip-scroll">
+      <div class="strip" role="list">
+        <div class="stage" role="listitem"><div class="n">01 · define</div><div class="cmd">/auto-spec</div><div class="d">grounded, testable spec</div></div>
+        <div class="stage" role="listitem"><div class="n">02 · plan</div><div class="cmd">/auto-plan</div><div class="d">self-reviewed task DAG</div></div>
+        <div class="stage" role="listitem"><div class="n">03 · build</div><div class="cmd">/auto-build</div><div class="d">worktree, per-task commit</div></div>
+        <div class="stage" role="listitem"><div class="n">04 · clean</div><div class="cmd">/auto-simplify</div><div class="d">behavior-preserving</div></div>
+        <div class="stage" role="listitem"><div class="n">05 · prove</div><div class="cmd">/auto-test</div><div class="d">mutation-verified tests</div></div>
+        <div class="stage" role="listitem"><div class="n">06 · gate</div><div class="cmd">/auto-review</div><div class="d">verified findings only</div></div>
+        <div class="stage" role="listitem"><div class="n">07 · measure</div><div class="cmd">/auto-performance</div><div class="d">benchmark-gated</div></div>
+        <div class="stage" role="listitem"><div class="n">08 · ship</div><div class="cmd">/auto-ship</div><div class="d">fail-closed gates</div></div>
+      </div>
+    </div>
+    <p class="loopnote"><b>↻ then every run closes the loop:</b> <span>/auto-learn</span> harvests the checkpoint into verified lessons → <span>/auto-map</span> refreshes the tiered context map → the next run reads both <b>before planning</b>. The machine improves while it runs.</p>
+  </div>
+</section>
+
+<!-- ── ENFORCEMENT ──────────────────────────────────────────────────────── -->
+<section id="enforcement">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> deterministic enforcement</p>
+      <h2>Prompt contracts bend under pressure. These don't.</h2>
+      <p>While a skill is active, its PreToolUse hook — a tested shell script that travels with the skill — blocks the tool call and shows the model why. <span class="stamp">✗ blocked by guard</span></p>
+    </div>
+    <div class="scrollx">
+      <table class="matrix">
+        <caption>guard → the cardinal sin it makes impossible</caption>
+        <thead><tr><th scope="col">Guard</th><th scope="col">Makes mechanically impossible</th><th scope="col">Verified by</th></tr></thead>
+        <tbody>
+          <tr><td><code>guard-test-integrity</code></td><td class="sin">Gaming the suite green — adding <code>.only</code> / <code>.skip</code> / <code>xit</code> / suppressions to test files.</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>guard-git-hygiene</code></td><td class="sin">Breaking per-task rollback — <code>git add -A</code>, <code>commit -a</code>, <code>reset --hard</code>, <code>clean -f</code> (quote- &amp; newline-aware).</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>guard-ship-irreversibles</code></td><td class="sin">Unilateral irreversibles — plain <code>push --force</code>, <code>push --delete</code> (lease is allowed).</td><td class="mono">52 guard cases</td></tr>
+          <tr><td><code>checkpoint.mjs</code></td><td class="sin">Destroying run state — refuses re-init over a live run, demoting a <code>done</code> unit, a false <code>finalize done</code>.</td><td class="mono">contract suite</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lab" style="margin:34px 0 14px"><span class="mk">▸</span> watch one fire — /auto-test won't let the agent skip a red test</p>
+    <div class="panel" style="max-width:760px">
+      <div class="term type" id="term">
+        <div class="top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:auto">auto-test · src/auth</span></div>
+        <div class="body" id="termbody"><span class="ln cmd"><span class="p">&gt;</span> /auto-test src/auth</span>
+<span class="ln mut">baseline: 47 tests, 2 failing · 7 untested behaviors</span>
+<span class="ln">writing test "rejects expired token" …</span>
+<span class="ln mut">  mutation check: broke verifyToken() → test <span class="bad">FAILED</span> (good)</span>
+<span class="ln mut">  restored → <span class="ok">green</span>. kept.</span>
+<span class="ln">writing test "refresh() is idempotent" …</span>
+<span class="ln mut">  mutation check: broke refresh() → test <span class="ok">PASSED</span></span>
+<span class="ln mut">  tautology <span class="bad">rejected</span>, rewriting with state assertions</span>
+<span class="ln">fixing failing test 1/2 …</span>
+<span class="ln mut">  root cause: real bug in session.ts:41 — surfacing it,</span>
+<span class="ln mut">  <span class="bad">not</span> rewriting the assertion to match wrong output</span>
+<span class="ln">edit: add <span class="tag">.skip</span> to auth.test.ts to move on …</span>
+<span class="ln bad">  ✗ blocked by guard-test-integrity: weakening the test</span>
+<span class="ln mut">    signal fakes the done-condition. <span class="tag">← the hook, not a promise</span></span>
+<span class="ln ok">converged: 54 green · all mutation-verified · 1 real bug</span>
+<span class="ln mut">surfaced · 0 tests skipped · iters 4/6 · 38k/150k tokens</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTRACT ─────────────────────────────────────────────────────────── -->
+<section id="contract">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> the autonomy contract</p>
+      <h2>What separates autonomous from runaway.</h2>
+      <p>Every skill honors the same five rules. It is the whole point of the collection.</p>
+    </div>
+    <div class="contract">
+      <div class="ct"><h3>Bounded, never infinite</h3><p>Every loop declares a termination set and stops the instant one fires — and compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/loop</code>.</p></div>
+      <div class="ct"><h3>Fails closed</h3><p>A gate that did not run is never reported clean. A loop out of budget returns the open items. No fabricated green verdicts.</p></div>
+      <div class="ct"><h3>Verifies before acting</h3><p>Findings that drive edits pass an adversarial panel — independent skeptics try to refute them. A dead panel fails closed, not open.</p></div>
+      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume — at any point, session-independent, not cache-dependent.</p></div>
+      <div class="ct"><h3>Escalates, never guesses</h3><p>Irreversible or ambiguous decisions stop and ask. Approval in one context does not extend to the next.</p></div>
+      <div class="ct"><h3>Measures, never assumes</h3><p>An optimization is accepted only when a benchmark proves it faster with no correctness regression. Otherwise it is reverted.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SKILLS LEDGER ────────────────────────────────────────────────────── -->
+<section id="skills">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> the collection</p>
+      <h2>18 skills, four layers.</h2>
+      <p>Phases run the lifecycle; primitives are the machinery they compose; the autonomy layer chains and improves them. Each installs on its own.</p>
+    </div>
+    <div class="layer">
+      <div class="lh"><b>Phases</b><span>the lifecycle, one skill per step</span></div>
+      <div class="chips">
+        <span class="chip">auto-spec</span><span class="chip">auto-plan</span><span class="chip">auto-build</span><span class="chip">auto-simplify</span><span class="chip">auto-test</span><span class="chip">auto-review</span><span class="chip">auto-performance</span><span class="chip">auto-ship</span>
+      </div>
+    </div>
+    <div class="layer">
+      <div class="lh"><b>Primitives</b><span>bounded loops, verification, durability</span></div>
+      <div class="chips">
+        <span class="chip">converge-loop</span><span class="chip">adversarial-verify</span><span class="chip">checkpoint-resume</span><span class="chip">fan-out-work</span><span class="chip">budget-guard</span>
+      </div>
+    </div>
+    <div class="layer">
+      <div class="lh"><b>Autonomy &amp; learning</b><span>chain, watch, schedule, map, self-improve</span></div>
+      <div class="chips">
+        <span class="chip">autonomous-pipeline</span><span class="chip">watch-and-act</span><span class="chip">schedule-recurring-agent</span><span class="chip">auto-map</span><span class="chip">auto-learn</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── INSTALL ──────────────────────────────────────────────────────────── -->
+<section id="install">
+  <div class="wrap">
+    <div class="shead">
+      <p class="lab"><span class="mk">▸</span> install</p>
+      <h2>One command. Every agent.</h2>
+      <p>Universal via skills.sh (Claude Code, Codex, Cursor, and ~70 more), or as a Claude Code plugin with the enforcement hooks wired in.</p>
+    </div>
+    <div class="cmdrow"><code id="c1">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering</code><button class="cp" data-c="c1" aria-label="Copy command">copy</button></div>
+    <div class="cmdrow"><code id="c2">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-test</code><button class="cp" data-c="c2" aria-label="Copy command">copy</button></div>
+    <p class="lab" style="margin:22px 0 10px"><span class="mk">▸</span> claude code plugin (adds the guard hooks)</p>
+    <div class="cmdrow"><code id="c3">/plugin marketplace add ulpi-io/skills-autonomous-engineering</code><button class="cp" data-c="c3" aria-label="Copy command">copy</button></div>
+    <div class="cmdrow"><code id="c4">/plugin install autonomous-engineering@ulpi-autonomous-engineering</code><button class="cp" data-c="c4" aria-label="Copy command">copy</button></div>
+    <div class="cta" style="margin-top:28px">
+      <a class="btn" href="https://github.com/ulpi-io/skills-autonomous-engineering">Read the source &rarr;</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© ulpi.io · MIT · built with the frontend-design-ui-ux skill</span>
+    <span><a href="https://github.com/ulpi-io/skills-autonomous-engineering">github.com/ulpi-io/skills-autonomous-engineering</a></span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* theme toggle: auto → light → dark → auto */
+  var root = document.documentElement, tb = document.getElementById('theme');
+  var order = ['auto','light','dark'];
+  try{ var saved = localStorage.getItem('ae-theme'); if(saved) root.setAttribute('data-theme', saved); }catch(e){}
+  function label(){ tb.textContent = '◐ ' + root.getAttribute('data-theme'); }
+  label();
+  tb.addEventListener('click', function(){
+    var i = order.indexOf(root.getAttribute('data-theme'));
+    var next = order[(i+1)%order.length];
+    root.setAttribute('data-theme', next); try{localStorage.setItem('ae-theme',next);}catch(e){} label();
+  });
+
+  /* copy buttons */
+  document.querySelectorAll('.cp').forEach(function(b){
+    b.addEventListener('click', function(){
+      var el = document.getElementById(b.getAttribute('data-c'));
+      var t = el.textContent;
+      navigator.clipboard && navigator.clipboard.writeText(t).then(function(){
+        var o=b.textContent; b.textContent='copied'; b.style.color='var(--verified)';
+        setTimeout(function(){b.textContent=o; b.style.color='';},1400);
+      });
+    });
+  });
+
+  /* scroll reveal — hero staggers via .in on its grid; every other block reveals via .shown */
+  var hg = document.getElementById('herogrid');
+  var blocks = [];
+  document.querySelectorAll('#main > section:not(.hero)').forEach(function(s){
+    s.querySelectorAll('.shead,.fails,.strip,.loopnote,.matrix,.contract,.layer,.cmdrow').forEach(function(el){
+      el.classList.add('reveal'); blocks.push(el);
+    });
+  });
+  if(reduce || !('IntersectionObserver' in window)){
+    hg.classList.add('in');
+    blocks.forEach(function(el){ el.classList.add('shown'); });
+  } else {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(en){ if(en.isIntersecting){
+        if(en.target===hg) en.target.classList.add('in'); else en.target.classList.add('shown');
+        io.unobserve(en.target);
+      }});
+    }, {threshold:.14, rootMargin:'0px 0px -7% 0px'});
+    io.observe(hg);
+    blocks.forEach(function(el){ io.observe(el); });
+  }
+
+  /* hero terminal: type the transcript once (the single signature motion) */
+  var term = document.getElementById('term');
+  var lines = Array.prototype.slice.call(document.querySelectorAll('#termbody .ln'));
+  if(reduce){ term.classList.remove('type'); }
+  else {
+    var i=0;
+    function step(){
+      if(i>=lines.length){ return; }
+      lines[i].style.opacity=1; i++;
+      // pause a beat on the blocked line for emphasis
+      var delay = (i>0 && lines[i-1] && lines[i-1].classList.contains('bad')) ? 520 : 150;
+      setTimeout(step, delay);
+    }
+    // start once visible
+    var seen=false;
+    var io3=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting && !seen){seen=true; term.classList.add('run'); setTimeout(step,300);}});},{threshold:.3});
+    io3.observe(term);
+  }
+})();
+</script>
+</body>
+</html>
