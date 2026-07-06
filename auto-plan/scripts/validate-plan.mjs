@@ -16,13 +16,13 @@
 //                    WHOLE package: the `--` makes vitest ignore the positional) and whole-suite
 //                    commands that can only pass at end-state.
 //
-// Usage:  node validate-plan.mjs <plan.json> [--json]
+// Usage:  node validate-plan.mjs <plan.json> [--json] [--render]   (--render prints the derived human view)
 // Exit:   0 = plan is structurally safe to build · 1 = violations (listed) · 2 = unreadable
 
 import { readFileSync } from 'node:fs';
 
 const [file, ...rest] = process.argv.slice(2);
-if (!file) { console.error('usage: validate-plan.mjs <plan.json> [--json]'); process.exit(2); }
+if (!file) { console.error('usage: validate-plan.mjs <plan.json> [--json] [--render]'); process.exit(2); }
 let plan;
 try { plan = JSON.parse(readFileSync(file, 'utf8')); }
 catch (e) { console.error(`cannot read/parse ${file}: ${e.message}`); process.exit(2); }
@@ -107,6 +107,23 @@ for (const t of tasks) {
   if (/\b(e2e|playwright test\s*$|cypress run\s*$)\b/.test(v)) {
     p(t.id, `validate '${v}' looks like a whole-suite/e2e gate that only passes at end-state — slice-scope it to this task's files`);
   }
+}
+
+if (rest.includes('--render')) {
+  // derived human view — rendered on demand from the single canonical JSON; never stored, so it can never drift
+  const lines = [`# Plan: ${plan.name || file} — ${tasks.length} tasks, ${layers.length} layers`, ''];
+  layers.forEach((layer, i) => {
+    lines.push(`## Layer ${i + 1}`);
+    for (const id of layer) {
+      const t = byId[id]; if (!t) continue;
+      lines.push(`- **${id}** — ${t.title}`);
+      lines.push(`  - files: ${(t.writeScope || []).join(', ')}${t.dependsOn?.length ? ` · needs: ${t.dependsOn.join(', ')}` : ''}`);
+      lines.push(`  - validate: \`${t.validate}\``);
+      for (const a of (t.acceptance ?? t.acceptanceCriteria ?? [])) lines.push(`  - [ ] ${a}`);
+    }
+    lines.push('');
+  });
+  console.log(lines.join('\n'));
 }
 
 const out = { file, tasks: tasks.length, layers: layers.length, violations: problems.length, problems };

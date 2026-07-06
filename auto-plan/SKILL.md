@@ -104,7 +104,11 @@ validate.
   within a layer must be independent (disjoint write scope) so the build can run them in parallel.
 - Verify the graph is acyclic.
 
-Write the plan as `.ulpi/plans/<name>.json` (the machine source) and render `.ulpi/plans/<name>.md`.
+Write ONE canonical artifact: `.ulpi/plans/<name>.json`. There is deliberately NO stored markdown
+twin — a second artifact is a drift class (the copies diverge and the validator only gates one). The
+human view is DERIVED on demand: `node <skill-dir>/scripts/validate-plan.mjs <plan.json> --render`
+prints the layered, checklisted markdown — use it for the approval presentation and any review; it can
+never disagree with what the build will execute.
 
 **Success criteria:** a complete `{tasks[], layers[][]}` graph — acyclic, topologically ordered,
 intra-layer independent.
@@ -133,7 +137,7 @@ Run `converge-loop` with `adversarial-verify` critics attacking the plan each ro
   If two can't validate independently, MERGE them.
 - **coverage** — does the union of task acceptance criteria cover the whole spec? Anything dropped?
 
-Fix findings (JSON-first, re-render MD); re-review; exit clean or report the remaining defects.
+Fix findings in the JSON (the only artifact); re-review; exit clean or report the remaining defects.
 
 **Success criteria:** the graph passes every check, or the loop reports the specific unresolved defects.
 
@@ -186,7 +190,7 @@ allows (widest layer). This plan is the input to `auto-build`.
 
 Report:
 
-1. plan path (`.ulpi/plans/<name>.json` + `.md`), task count, layer count
+1. plan path (`.ulpi/plans/<name>.json` — single canonical artifact), task count, layer count
 2. the DAG shape — dependency edges and the widest parallel layer
 3. spec-coverage confirmation (every criterion mapped to a task)
 4. self-review outcome (rounds to clean, or the remaining defects)
