@@ -1,0 +1,8 @@
+# Local example material — reference only, never published with the skills
+examples/
+
+# OS / editor cruft
+.DS_Store
+
+# Runtime state that autonomous skills produce in a *target* repo (never committed here)
+.ulpi/
