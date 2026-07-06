@@ -46,8 +46,16 @@ after any interruption, and "done" fails closed (a red suite is reported red).
 │         │  │ tasks  │  │ one commit│  │ preserved│  │ -checked│  │ only    │  │ accepts   │  │ gates  │
 └────────┘  └────────┘  └───────────┘  └──────────┘  └─────────┘  └─────────┘  └───────────┘  └────────┘
  /auto-spec  /auto-plan   /auto-build   /auto-simplify  /auto-test   /auto-review  /auto-performance  /auto-ship
+     ▲                                                                                             │
+     │                                 every run then closes with:                                 ▼
+     │        ┌───────────────────────────────────┐      ┌─────────────────────────────────────────┐
+     └────────│ LEARN /auto-learn                 │─────▶│ MAP /auto-map (real runs)               │
+  .ulpi/      │ harvest checkpoint → verify →     │      │ refresh the tiered context map so every │
+  learnings   │ route lessons; the next run reads │      │ future session knows the shipped code   │
+  feed the    │ them BEFORE planning              │      └─────────────────────────────────────────┘
+  next run    └───────────────────────────────────┘
 
-              chain them all with ONE plan approval:  /autonomous-pipeline "<feature>"
+              chain it all with ONE plan approval:  /autonomous-pipeline "<feature>"
 ```
 
 | You want to… | Run | What actually makes it safe |
