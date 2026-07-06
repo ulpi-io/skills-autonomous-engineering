@@ -110,8 +110,9 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
 @media (max-width:720px){.bar nav a:not(.gh){display:none}}
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-.hero{position:relative; padding-block:clamp(44px,7vw,84px)}
-.herohead{max-width:62ch; margin-bottom:clamp(32px,5vw,52px)}
+.hero{position:relative; padding-block:clamp(40px,6vw,76px)}
+.hgrid{display:grid; grid-template-columns:1fr minmax(300px,372px); gap:clamp(28px,5vw,60px); align-items:center}
+@media (max-width:880px){.hgrid{grid-template-columns:1fr; gap:36px} .herohead{max-width:60ch}}
 .hero h1{font-family:var(--serif); font-weight:800; letter-spacing:-.02em; line-height:1.02;
   font-size:clamp(38px,6.4vw,74px); text-wrap:balance}
 .hero h1 .hl{color:var(--accent)}
@@ -146,18 +147,19 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
 /* self-improving pipeline diagram (hero centerpiece) */
 .loopwrap{padding:0}
 .looptop{padding:12px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center;flex-wrap:wrap}
-.loopscroll{overflow-x:auto}
-.loopsvg{display:block;width:100%;height:auto;padding:16px 14px 10px;min-width:900px}
+.loopsvg{display:block;width:100%;height:auto;padding:14px 12px}
 .loopsvg .box{fill:var(--ground);stroke:var(--rule);stroke-width:1.4}
-.loopsvg .num{fill:var(--accent);font-family:var(--mono);font-size:10.5px;letter-spacing:.12em}
-.loopsvg .cmd{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:12px}
-.loopsvg .role{fill:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:.02em}
-.loopsvg .chev path{stroke:var(--ink-2);stroke-width:1.5;fill:none;stroke-linejoin:round;stroke-linecap:round}
+.loopsvg .loopcard{fill:color-mix(in oklab, var(--accent) 8%, var(--ground));stroke:var(--accent);stroke-width:1.4}
+.loopsvg .num{fill:var(--accent);font-family:var(--mono);font-size:9px;letter-spacing:.14em}
+.loopsvg .cmd{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:12.5px}
+.loopsvg .role{fill:var(--ink-2);font-family:var(--mono);font-size:9px;letter-spacing:.02em}
+.loopsvg .lc{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12px}
+.loopsvg .lr{fill:var(--ink-2);font-family:var(--mono);font-size:9px}
+.loopsvg .chev path{stroke:var(--ink-2);stroke-width:1.6;fill:none;stroke-linejoin:round;stroke-linecap:round}
+.loopsvg .chev.acc path{stroke:var(--accent)}
 .loopsvg .fb{stroke:var(--accent);stroke-width:2;fill:none}
 .loopsvg .ahfb{fill:var(--accent)}
-.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.01em}
-.loopsvg .pill{fill:var(--ground-2);stroke:var(--accent);stroke-width:1.4}
-.loopsvg .pillt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:11.5px}
+.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:10.5px;letter-spacing:.03em}
 
 /* blocked stamp */
 .stamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;
@@ -254,43 +256,44 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
 <a id="top"></a>
 <!-- ── HERO ─────────────────────────────────────────────────────────────── -->
 <section class="hero" style="border-top:0">
-  <div class="wrap" id="herogrid">
+  <div class="wrap hgrid" id="herogrid">
     <div class="herohead">
       <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
       <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
-      <p class="sub reveal d2">Eight autonomous phases behind one approval — then the machine improves itself for the next run.</p>
+      <p class="sub reveal d2">Eight autonomous phases behind one approval — then the machine harvests what it learned and improves itself for the next run.</p>
       <div class="cta reveal d3">
         <a class="btn" href="#install">Install &rarr;</a>
         <a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering">View source</a>
       </div>
     </div>
     <div class="panel loopwrap reveal d3" id="pipeline">
-      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline &nbsp;·&nbsp; <span style="color:var(--ink-2)">one approval, then unattended</span></div>
-      <div class="loopscroll">
-      <svg class="loopsvg" viewBox="0 0 1160 300" role="img" aria-label="The eight phases run in sequence — auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship — then a feedback loop passes through auto-learn and auto-map and returns to the start, so the next run reads the learnings and the refreshed map before it plans.">
+      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline</div>
+      <svg class="loopsvg" viewBox="0 0 330 512" role="img" aria-label="The eight phases run top to bottom — auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship — then auto-learn and auto-map, and a feedback loop returns to the top so the next run reads the learnings and refreshed map before it plans.">
         <defs>
           <marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
         </defs>
-        <!-- 8 phase cards -->
-        <g><rect class="box" x="6"    y="34" width="136" height="92" rx="2"/><text class="num" x="74"   y="56" text-anchor="middle">01 DEFINE</text><text class="cmd" x="74"   y="80" text-anchor="middle">/auto-spec</text><text class="role" x="74"   y="100" text-anchor="middle">testable spec</text></g>
-        <g><rect class="box" x="149"  y="34" width="136" height="92" rx="2"/><text class="num" x="217"  y="56" text-anchor="middle">02 PLAN</text><text class="cmd" x="217"  y="80" text-anchor="middle">/auto-plan</text><text class="role" x="217"  y="100" text-anchor="middle">task DAG</text></g>
-        <g><rect class="box" x="292"  y="34" width="136" height="92" rx="2"/><text class="num" x="360"  y="56" text-anchor="middle">03 BUILD</text><text class="cmd" x="360"  y="80" text-anchor="middle">/auto-build</text><text class="role" x="360"  y="100" text-anchor="middle">per-task commit</text></g>
-        <g><rect class="box" x="435"  y="34" width="136" height="92" rx="2"/><text class="num" x="503"  y="56" text-anchor="middle">04 CLEAN</text><text class="cmd" x="503"  y="80" text-anchor="middle">/auto-simplify</text><text class="role" x="503"  y="100" text-anchor="middle">behavior-safe</text></g>
-        <g><rect class="box" x="578"  y="34" width="136" height="92" rx="2"/><text class="num" x="646"  y="56" text-anchor="middle">05 PROVE</text><text class="cmd" x="646"  y="80" text-anchor="middle">/auto-test</text><text class="role" x="646"  y="100" text-anchor="middle">mutation-checked</text></g>
-        <g><rect class="box" x="721"  y="34" width="136" height="92" rx="2"/><text class="num" x="789"  y="56" text-anchor="middle">06 GATE</text><text class="cmd" x="789"  y="80" text-anchor="middle">/auto-review</text><text class="role" x="789"  y="100" text-anchor="middle">verified findings</text></g>
-        <g><rect class="box" x="864"  y="34" width="136" height="92" rx="2"/><text class="num" x="932"  y="56" text-anchor="middle">07 MEASURE</text><text class="cmd" x="932"  y="80" text-anchor="middle">/auto-performance</text><text class="role" x="932"  y="100" text-anchor="middle">benchmark-gated</text></g>
-        <g><rect class="box" x="1007" y="34" width="136" height="92" rx="2"/><text class="num" x="1075" y="56" text-anchor="middle">08 SHIP</text><text class="cmd" x="1075" y="80" text-anchor="middle">/auto-ship</text><text class="role" x="1075" y="100" text-anchor="middle">fail-closed</text></g>
-        <!-- forward chevrons in the gaps -->
+        <!-- 8 phase cards, stacked -->
+        <g><rect class="box" x="72" y="12"  width="246" height="42" rx="2"/><text class="num" x="86" y="30">01 DEFINE</text><text class="cmd" x="86" y="46">/auto-spec</text><text class="role" x="306" y="46" text-anchor="end">testable spec</text></g>
+        <g><rect class="box" x="72" y="60"  width="246" height="42" rx="2"/><text class="num" x="86" y="78">02 PLAN</text><text class="cmd" x="86" y="94">/auto-plan</text><text class="role" x="306" y="94" text-anchor="end">task DAG</text></g>
+        <g><rect class="box" x="72" y="108" width="246" height="42" rx="2"/><text class="num" x="86" y="126">03 BUILD</text><text class="cmd" x="86" y="142">/auto-build</text><text class="role" x="306" y="142" text-anchor="end">per-task commit</text></g>
+        <g><rect class="box" x="72" y="156" width="246" height="42" rx="2"/><text class="num" x="86" y="174">04 CLEAN</text><text class="cmd" x="86" y="190">/auto-simplify</text><text class="role" x="306" y="190" text-anchor="end">behavior-safe</text></g>
+        <g><rect class="box" x="72" y="204" width="246" height="42" rx="2"/><text class="num" x="86" y="222">05 PROVE</text><text class="cmd" x="86" y="238">/auto-test</text><text class="role" x="306" y="238" text-anchor="end">mutation-checked</text></g>
+        <g><rect class="box" x="72" y="252" width="246" height="42" rx="2"/><text class="num" x="86" y="270">06 GATE</text><text class="cmd" x="86" y="286">/auto-review</text><text class="role" x="306" y="286" text-anchor="end">verified findings</text></g>
+        <g><rect class="box" x="72" y="300" width="246" height="42" rx="2"/><text class="num" x="86" y="318">07 MEASURE</text><text class="cmd" x="86" y="334">/auto-performance</text><text class="role" x="306" y="334" text-anchor="end">benchmark-gated</text></g>
+        <g><rect class="box" x="72" y="348" width="246" height="42" rx="2"/><text class="num" x="86" y="366">08 SHIP</text><text class="cmd" x="86" y="382">/auto-ship</text><text class="role" x="306" y="382" text-anchor="end">fail-closed</text></g>
+        <!-- the two self-improving cards (accent) -->
+        <g><rect class="loopcard" x="72" y="404" width="246" height="42" rx="2"/><text class="lc" x="86" y="422">↻ /auto-learn</text><text class="lr" x="86" y="438">harvest · verify · route lessons</text></g>
+        <g><rect class="loopcard" x="72" y="452" width="246" height="42" rx="2"/><text class="lc" x="86" y="470">↻ /auto-map</text><text class="lr" x="86" y="486">refresh the verified context map</text></g>
+        <!-- forward chevrons between phases -->
         <g class="chev">
-          <path d="M143,75 l6,5 -6,5"/><path d="M286,75 l6,5 -6,5"/><path d="M429,75 l6,5 -6,5"/><path d="M572,75 l6,5 -6,5"/><path d="M715,75 l6,5 -6,5"/><path d="M858,75 l6,5 -6,5"/><path d="M1001,75 l6,5 -6,5"/>
+          <path d="M191,54 l4,4 4,-4"/><path d="M191,102 l4,4 4,-4"/><path d="M191,150 l4,4 4,-4"/><path d="M191,198 l4,4 4,-4"/><path d="M191,246 l4,4 4,-4"/><path d="M191,294 l4,4 4,-4"/><path d="M191,342 l4,4 4,-4"/>
         </g>
-        <!-- the self-improving feedback loop (accented) -->
-        <path class="fb" d="M1143,88 L1150,88 Q1156,88 1156,98 L1156,240 Q1156,250 1146,250 L80,250 Q70,250 70,240 L70,132" marker-end="url(#ahb)"/>
-        <text class="fbt" x="612" y="192" text-anchor="middle">↻ every run then feeds the next — it reads the learnings + map BEFORE it plans</text>
-        <rect class="pill" x="735" y="237" width="120" height="26" rx="2"/><text class="pillt" x="795" y="254" text-anchor="middle">▸ auto-learn</text>
-        <rect class="pill" x="405" y="237" width="112" height="26" rx="2"/><text class="pillt" x="461" y="254" text-anchor="middle">▸ auto-map</text>
+        <!-- accent chevrons into the loop cards -->
+        <g class="chev acc"><path d="M191,390 l4,4 4,-4"/><path d="M191,446 l4,4 4,-4"/></g>
+        <!-- feedback return arc up the left (accent) -->
+        <path class="fb" d="M72,473 L44,473 Q30,473 30,459 L30,40 Q30,26 44,26 L70,26" marker-end="url(#ahb)"/>
+        <text class="fbt" transform="rotate(-90 20 250)" x="20" y="250" text-anchor="middle">↻ the next run reads this first</text>
       </svg>
-      </div>
     </div>
   </div>
 </section>
@@ -476,45 +479,40 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
     });
   });
 
-  /* scroll reveal — hero staggers via .in on its grid; every other block reveals via .shown */
-  var hg = document.getElementById('herogrid');
-  var blocks = [];
-  document.querySelectorAll('#main > section:not(.hero)').forEach(function(s){
-    s.querySelectorAll('.shead,.fails,.strip,.loopnote,.matrix,.contract,.layer,.cmdrow').forEach(function(el){
-      el.classList.add('reveal'); blocks.push(el);
-    });
-  });
-  if(reduce || !('IntersectionObserver' in window)){
-    hg.classList.add('in');
-    blocks.forEach(function(el){ el.classList.add('shown'); });
-  } else {
+  /* reveal is pure ENHANCEMENT: content ships visible; JS adds .pre (hidden) then removes it on
+     scroll. A hard fail-safe timer removes .pre from everything so content can NEVER stay hidden
+     (full-page screenshots, no-scroll, slow devices, JS errors below this point). */
+  document.querySelectorAll('#main > section:not(.hero) .shead, #main > section:not(.hero) .fails, #main > section:not(.hero) .matrix, #main > section:not(.hero) .contract, #main > section:not(.hero) .layer, #main > section:not(.hero) .cmdrow').forEach(function(el){ el.classList.add('reveal'); });
+  var revEls = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+  function revealAll(){ revEls.forEach(function(e){ e.classList.remove('pre'); }); }
+  if(!reduce && ('IntersectionObserver' in window)){
+    revEls.forEach(function(e){ e.classList.add('pre'); });
     var io = new IntersectionObserver(function(es){
-      es.forEach(function(en){ if(en.isIntersecting){
-        if(en.target===hg) en.target.classList.add('in'); else en.target.classList.add('shown');
-        io.unobserve(en.target);
-      }});
-    }, {threshold:.14, rootMargin:'0px 0px -7% 0px'});
-    io.observe(hg);
-    blocks.forEach(function(el){ io.observe(el); });
+      es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.remove('pre'); io.unobserve(en.target); } });
+    }, {threshold:.1, rootMargin:'0px 0px -5% 0px'});
+    revEls.forEach(function(e){ io.observe(e); });
+    setTimeout(revealAll, 1500);
   }
 
   /* hero terminal: type the transcript once (the single signature motion) */
   var term = document.getElementById('term');
-  var lines = Array.prototype.slice.call(document.querySelectorAll('#termbody .ln'));
-  if(reduce){ term.classList.remove('type'); }
-  else {
+  var lines = term ? Array.prototype.slice.call(document.querySelectorAll('#termbody .ln')) : [];
+  function showAllLines(){ lines.forEach(function(l){ l.style.opacity=1; }); }
+  if(reduce || !('IntersectionObserver' in window)){
+    if(term) term.classList.remove('type');   // fully visible, no typing
+  } else if(term) {
     var i=0;
     function step(){
       if(i>=lines.length){ return; }
       lines[i].style.opacity=1; i++;
-      // pause a beat on the blocked line for emphasis
       var delay = (i>0 && lines[i-1] && lines[i-1].classList.contains('bad')) ? 520 : 150;
       setTimeout(step, delay);
     }
-    // start once visible
     var seen=false;
-    var io3=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting && !seen){seen=true; term.classList.add('run'); setTimeout(step,300);}});},{threshold:.3});
+    var io3=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting && !seen){seen=true; term.classList.add('run'); setTimeout(step,250);}});},{threshold:.25});
     io3.observe(term);
+    // fail-safe: if the panel was never scrolled into view (screenshot / no-scroll), show it all
+    setTimeout(function(){ if(!seen){ term.classList.add('run'); showAllLines(); } }, 2200);
   }
 })();
 </script>
