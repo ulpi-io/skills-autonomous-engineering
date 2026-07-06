@@ -167,6 +167,9 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
 
 /* ── section frame ───────────────────────────────────────────────────────── */
 section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
+/* alternating block tint: a faint wash on every other section so the blocks read as distinct bands,
+   while the body's measurement-grid squares still show through (translucent, never opaque). */
+#main > section:nth-of-type(even){background:color-mix(in oklab, var(--ink) 4%, transparent)}
 .shead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:38px}
 .shead h2{font-family:var(--serif);font-weight:700;letter-spacing:-.015em;font-size:clamp(26px,3.6vw,40px);line-height:1.06}
 .shead p{color:var(--ink-2);max-width:52ch;font-size:16px}
@@ -377,7 +380,7 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
       <div class="ct"><h3>Bounded, never infinite</h3><p>Every loop declares a termination set and stops the instant one fires, and compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/loop</code>.</p></div>
       <div class="ct"><h3>Fails closed</h3><p>A gate that did not run is never reported clean. A loop out of budget returns the open items. No fabricated green verdicts.</p></div>
       <div class="ct"><h3>Verifies before acting</h3><p>Findings that drive edits pass an adversarial panel: independent skeptics try to refute them. A dead panel fails closed, not open.</p></div>
-      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume, at any point, session-independent, not cache-dependent.</p></div>
+      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume, at any point, session-independent. Every call retries 10× through a rate-limit storm or a dropped connection; a longer outage just resumes from the checkpoint when the link returns.</p></div>
       <div class="ct"><h3>Escalates, never guesses</h3><p>Irreversible or ambiguous decisions stop and ask. Approval in one context does not extend to the next.</p></div>
       <div class="ct"><h3>Measures, never assumes</h3><p>An optimization is accepted only when a benchmark proves it faster with no correctness regression. Otherwise it is reverted.</p></div>
     </div>
@@ -409,7 +412,7 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
       <div class="cat-h"><b>Primitives</b><span>· the machinery every phase composes</span></div>
       <div class="row2"><code class="nm">converge-loop</code><p>The bounded self-correcting loop behind every phase: act → measure → decide, in until-green or until-dry mode, with anti-thrash, no-progress, and budget stops. Compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/loop</code>.</p></div>
       <div class="row2"><code class="nm">adversarial-verify</code><p>Proves a finding by trying to disprove it: N independent skeptics attack it through distinct lenses, and it survives only on a majority. Ties and dead panels fail closed: the gate that turns "plausible" into "verified".</p></div>
-      <div class="row2"><code class="nm">checkpoint-resume</code><p>A durable, lock-serialized status file recording every unit's state. Resume skips everything already done: session-independent, crash-safe, zero lost writes under concurrency. Refuses to clobber a live run.</p></div>
+      <div class="row2"><code class="nm">checkpoint-resume</code><p>A durable, lock-serialized status file recording every unit's state, fully timestamped. Resume skips everything already done: session-independent, crash-safe, zero lost writes under concurrency. A read-only status reader renders any run live; refuses to clobber one.</p></div>
       <div class="row2"><code class="nm">fan-out-work</code><p>Covers a large work-list in parallel with concurrency caps and worktree isolation, aggregating faithfully. Never silently truncates: items discovered = covered + failed + dropped.</p></div>
       <div class="row2"><code class="nm">budget-guard</code><p>The five stop conditions every unattended run must declare (done-condition, hard cap, token/time budget, no-progress rule, escalation triggers), enforced so a run bounds itself or reports an honest partial.</p></div>
       <div class="row2 empty" aria-hidden="true"></div>

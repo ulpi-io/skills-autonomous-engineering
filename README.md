@@ -134,6 +134,26 @@ zero lost writes under 20-way concurrency). Runs are resumable at ANY point (pha
 checkpoints), and when a Codex integration is installed you can delegate build/review/verify roles to it
 per run (never assumed; degrades to native with an honest register note).
 
+## When the network drops (or you just want to check in)
+
+Long unattended runs hit rate limits and Wi-Fi blips. Every agent call in the pipeline **retries 10
+times** on escalating backoff (3s → 10s → 30s → 60s → 120s → then 5-min caps, ~28 min total) — a
+rate-limit storm or a dropped connection (`ECONNRESET`, `ETIMEDOUT`, `fetch failed`, a 5xx gateway) is
+ridden out, not mis-recorded as a failure. If an outage outlasts the retries, the unit is recorded (never
+faked green) and the run resumes from its checkpoint when the link returns, skipping every done unit — so
+you never rebuild finished work.
+
+Check where a run is at any time, from any session, **without touching it**:
+
+```bash
+node checkpoint-resume/scripts/run-status.mjs            # newest run: phases, per-task progress, register
+node checkpoint-resume/scripts/run-status.mjs --list     # every run, one line each, newest first
+node checkpoint-resume/scripts/run-status.mjs --resume   # print the exact Workflow call to continue it
+```
+
+It's read-only, so it's safe to run against a pipeline in flight. Every unit, phase, and finding in the
+durable `.ulpi/runs/<id>.json` is timestamped, so the view shows real durations, not guesses.
+
 ## What makes these "autonomous" (and not "runaway")
 
 Every skill honors the same contract — it's the whole point of the collection:
