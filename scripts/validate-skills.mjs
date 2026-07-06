@@ -15,7 +15,8 @@ import { readdirSync, readFileSync, statSync, existsSync, accessSync, constants 
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+import { fileURLToPath } from 'node:url';
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const problems = [];
 const p = (msg) => problems.push(msg);
 
@@ -145,6 +146,15 @@ if (existsSync(hooksPath)) {
       if (mm && !existsSync(join(ROOT, mm[1]))) p(`hooks/hooks.json: script '${mm[1]}' does not exist in repo`);
     }
   } catch (e) { p(`hooks/hooks.json: invalid JSON (${e.message})`); }
+}
+
+// repo-level hook scripts must at least parse (they are invisible to the per-skill scan)
+for (const dir of ['hooks']) {
+  const hd = join(ROOT, dir);
+  if (existsSync(hd)) for (const f of readdirSync(hd).filter(f => f.endsWith('.sh'))) {
+    try { execFileSync('bash', ['-n', join(hd, f)], { stdio: 'pipe' }); }
+    catch (e) { p(`${dir}/${f}: fails bash -n: ${String(e.stderr || e.message).slice(0, 150)}`); }
+  }
 }
 
 // containment: the local-only material must stay ignored (plugin root-scan exposure, D11/U6)

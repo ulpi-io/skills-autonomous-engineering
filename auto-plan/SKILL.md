@@ -106,6 +106,18 @@ Write the plan as `.ulpi/plans/<name>.json` (the machine source) and render `.ul
 **Success criteria:** a complete `{tasks[], layers[][]}` graph — acyclic, topologically ordered,
 intra-layer independent.
 
+## Phase 2.5: Run the structural gate — it is CODE
+
+```bash
+node <skill-dir>/scripts/validate-plan.mjs .ulpi/plans/<name>.json
+```
+
+The DAG's safety properties are deterministic, so they are enforced by script, not prose: acyclicity,
+topological layer order (nothing builds on a missing base), intra-layer write-scope disjointness
+(prefix-aware), the ≤3-file atomicity cap, ≥2 acceptance criteria per task, and slice-validate command
+form (it catches the vitest `test -- <file>` footgun and whole-suite e2e validates). Exit 1 = fix the
+graph and re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
+
 ## Phase 3: Adversarial self-review (converge until clean)
 
 Run `converge-loop` with `adversarial-verify` critics attacking the plan each round:
@@ -161,6 +173,8 @@ allows (widest layer). This plan is the input to `auto-build`.
 
 ## When To Load References
 
+- `scripts/validate-plan.mjs` — the deterministic structural gate (Phase 2.5). CI-tested (13 contract
+  cases). auto-build's preflight runs it too — a plan that fails it never builds.
 - `adversarial-verify` (skill) — the plan critics in Phase 3.
 - `converge-loop` (skill) — the until-clean review loop.
 - `checkpoint-resume` (skill) — durable plan-run state.

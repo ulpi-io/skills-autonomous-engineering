@@ -44,9 +44,12 @@ let ownedLock = null;
 process.on('exit', () => { if (ownedLock) { try { rmdirSync(ownedLock); } catch {} } });  // a refusal (process.exit) inside the lock must still release it
 function withLock(file, fn) {
   const lock = `${file}.lock`;
-  for (let i = 0; i < 400; i++) {           // ~4s worst-case wait
+  for (let i = 0; i < 800; i++) {           // ~8s worst-case wait — MUST exceed the 5s stale threshold, or a fresh lock can starve a waiter into a spurious failure
     try { mkdirSync(lock); }
-    catch {
+    catch (e) {
+      if (e.code === 'ENOENT') fail(`parent directory of ${file} does not exist — init creates it; check the path`);
+      // stale steal: rmdir may race another stealer (ENOENT swallowed) — mkdir on the next loop
+      // iteration is the atomic arbiter, so exactly one contender wins the recreated lock.
       try { if (Date.now() - statSync(lock).mtimeMs > 5000) { rmdirSync(lock); continue; } } catch {}
       sleep(10); continue;
     }
@@ -59,17 +62,22 @@ function withLock(file, fn) {
 
 function opt(args, name, dflt = undefined) {
   const i = args.indexOf(name);
-  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : dflt;
+  if (i < 0) return dflt;
+  const v = args[i + 1];
+  if (v === undefined || v.startsWith('--')) fail(`option ${name} is missing its value`);
+  return v;
 }
 
 const [cmd, file, ...rest] = process.argv.slice(2);
-if (!cmd || !file) fail('usage: checkpoint.mjs <init|unit|phase|get|resume|finalize> <file> ...');
+if (!cmd || !file) fail('usage: checkpoint.mjs <init|unit|phase|get|resume|item|finalize|gc> <file|runs-dir> ...');
 
 const UNIT_STATES = ['pending', 'in_progress', 'done', 'blocked', 'dep_blocked'];
 const PHASE_STATES = ['pending', 'running', 'done', 'blocked', 'skipped'];
 
 switch (cmd) {
   case 'init': {
+    mkdirSync(dirname(file), { recursive: true });
+    withLock(file, () => {
     // REFUSE to clobber a live checkpoint — resume means skip-done, never re-init.
     if (existsSync(file)) {
       const cur = readDoc(file);
@@ -83,13 +91,13 @@ switch (cmd) {
     for (const u of (opt(rest, '--units', '') || '').split(',').map(s => s.trim()).filter(Boolean)) {
       units[u] = { status: 'pending', dependsOn: [], note: '' };
     }
-    mkdirSync(dirname(file), { recursive: true });
     writeDoc(file, {
       schemaVersion: 1, id, task, status: 'running',
       createdAt: now(), updatedAt: now(),
       phases: {}, units, openItems: [], result: null,
     });
     console.log(id);
+    });
     break;
   }
 
@@ -97,6 +105,7 @@ switch (cmd) {
     withLock(file, () => {
       const [unit, status] = rest;
       if (!unit || !UNIT_STATES.includes(status)) fail(`unit requires <unit-id> <${UNIT_STATES.join('|')}>`);
+      if (/[,\s]/.test(unit)) fail(`unit id '${unit}' contains commas/whitespace — inexpressible in --units and unsafe in shell one-liners`);
       const doc = readDoc(file);
       doc.units ??= {};
       const u = (doc.units[unit] ??= { status: 'pending', dependsOn: [], note: '' });
@@ -153,7 +162,17 @@ switch (cmd) {
     for (const [id, u] of Object.entries(units)) {
       if (u.status === 'done') { skip.push(id); continue; }
       const missing = (u.dependsOn || []).filter(d => units[d]?.status !== 'done');
-      if (missing.length) depBlocked[id] = missing[0];
+      if (missing.length) {
+        let root = missing[0];   // walk to the CHAIN ROOT — triage must point at the real cause
+        const seen = new Set();
+        while (!seen.has(root)) {
+          seen.add(root);
+          const next = (units[root]?.dependsOn || []).find(d => units[d]?.status !== 'done');
+          if (!next) break;
+          root = next;
+        }
+        depBlocked[id] = root;
+      }
       else eligible.push(id); // pending, in_progress (interrupted), and blocked are all re-eligible
     }
     console.log(JSON.stringify({ skip, eligible, dep_blocked: depBlocked }, null, 2));
@@ -180,6 +199,7 @@ switch (cmd) {
     // <dir>/archive/. NEVER touches running runs. Keeps session-start announcements and guard
     // scoping from being armed forever by long-dead checkpoints.
     const keepDays = Number(opt(rest, '--keep-days', '7'));
+    if (!Number.isFinite(keepDays) || keepDays < 0) fail(`--keep-days must be a non-negative number`);
     const dir = file; // second positional is the runs DIRECTORY for gc
     if (!existsSync(dir)) { console.log('0 archived (no runs dir)'); break; }
     const cutoff = Date.now() - keepDays * 86400_000;

@@ -13,8 +13,15 @@ set -u
 
 [ "${AUTO_TEST_ALLOW_WEAKEN:-0}" = "1" ] && exit 0
 # File-based escape hatch — actionable MID-SESSION (an env var is not: the hook env is fixed at launch).
-# `touch .ulpi/allow-test-weaken` approves exactly ONE weakening edit: the guard consumes the flag.
-if [ -f .ulpi/allow-test-weaken ]; then rm -f .ulpi/allow-test-weaken; exit 0; fi
+# `touch <project>/.ulpi/allow-test-weaken` approves weakening edits for a 2-MINUTE WINDOW, then expires.
+# Window (not one-shot-delete) because the same edit can hit MULTIPLE registered guard instances
+# (plugin hooks.json + skill frontmatter) — a consumed-on-first-sight flag would pass one and block the
+# other. Expired flags are lazily removed.
+FLAG="${CLAUDE_PROJECT_DIR:-.}/.ulpi/allow-test-weaken"
+if [ -f "$FLAG" ]; then
+  if [ -n "$(find "$FLAG" -mmin -2 2>/dev/null)" ]; then exit 0; fi
+  rm -f "$FLAG"
+fi
 
 if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
   # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
@@ -36,10 +43,10 @@ raw=$(cat 2>/dev/null || true)
 # Pull file_path and the added text (new_string for Edit, content for Write).
 # NB: the JSON travels via env, NOT via stdin — `python3 -` + heredoc would consume stdin for the script.
 if command -v python3 >/dev/null 2>&1; then
-  parsed=$(RAW="$raw" python3 -c '
-import os, json
+  parsed=$(printf '%s' "$raw" | python3 -c '
+import sys, json
 try:
-    d = json.loads(os.environ.get("RAW", "{}"))
+    d = json.load(sys.stdin)
 except Exception:
     d = {}
 ti = d.get("tool_input", {})
@@ -56,12 +63,17 @@ fi
 
 # Only guard test files.
 is_test=0
-case "$fp" in
-  *test*|*spec*|*__tests__*|*_test.*|*.test.*|*.spec.*) is_test=1 ;;
+base=$(basename "$fp" 2>/dev/null || echo "$fp")
+parent=$(basename "$(dirname "$fp")" 2>/dev/null || echo "")
+case "$base" in
+  *.test.*|*.spec.*|*_test.*|test_*|*Test.*|*Spec.*) is_test=1 ;;
+esac
+case "$parent" in
+  test|tests|__tests__|spec|specs|testing) is_test=1 ;;
 esac
 [ "$is_test" = "0" ] && [ -n "$fp" ] && exit 0
 
-block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intended and user-approved: run 'touch .ulpi/allow-test-weaken' then retry the edit — the flag approves ONE edit and is consumed — and state the reason in your reply)" >&2; exit 2; }
+block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intended and user-approved: run 'touch <project-root>/.ulpi/allow-test-weaken' then retry — the flag approves weakening edits for 2 minutes, then expires — and state the reason in your reply)" >&2; exit 2; }
 
 # Skip/only/todo — silences or narrows the suite.
 if printf '%s' "$added" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(xit|xdescribe|xtest)[[:space:]]*\(|\.(todo)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then

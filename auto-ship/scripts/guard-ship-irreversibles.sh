@@ -21,10 +21,10 @@ if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "guard-ship-irreversibles: python3 not found - guard skipped (fail-open)" >&2; exit 0; }
-RAW="$raw" python3 -c '
-import os, sys, json, re, shlex
+printf '%s' "$raw" | python3 -c '
+import sys, json, re, shlex
 try:
-    d = json.loads(os.environ.get("RAW", "{}"))
+    d = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
 c = d.get("tool_input", {}).get("command", "")
@@ -47,12 +47,18 @@ def segments(cmd):
                 seg.append(t)
         if seg:
             yield seg
+GIT_GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"}
 def git_args(seg, sub):
     i = 0
     while i < len(seg) and re.fullmatch(r"[A-Za-z0-9_]+=.*", seg[i]):
         i += 1   # same-line env prefixes only
-    if i + 1 < len(seg) and seg[i] == "git" and seg[i + 1] == sub:
-        return seg[i + 2:]
+    if i >= len(seg) or seg[i] != "git":
+        return None
+    i += 1
+    while i < len(seg) and seg[i].startswith("-"):   # global options before the subcommand
+        i += 2 if seg[i] in GIT_GLOBAL_WITH_VALUE else 1
+    if i < len(seg) and seg[i] == sub:
+        return seg[i + 1:]
     return None
 def block(msg):
     print(PREFIX + msg, file=sys.stderr); sys.exit(2)

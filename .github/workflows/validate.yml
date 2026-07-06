@@ -21,3 +21,5 @@ jobs:
         run: bash scripts/test-checkpoint.sh
       - name: Map verifier contract (anti-lie gate catches every class of lying map)
         run: bash scripts/test-map-verify.sh
+      - name: Plan DAG gate contract (structural judge catches every class of unsafe plan)
+        run: bash scripts/test-plan-validate.sh

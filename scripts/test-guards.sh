@@ -34,6 +34,9 @@ t 2 "reset --hard blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 2 "clean -fd blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git clean -fd"}}' $G
 t 0 "non-git command allowed"      AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"npm test"}}' $G
 t 2 "env-prefixed git blocked"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"FOO=1 git add -A"}}' $G
+t 2 "git -C dir add -A blocked (global opts)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -C /repo add -A"}}' $G
+t 2 "git -c k=v commit -am blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -c user.name=x commit -am wip"}}' $G
+t 0 "git -C dir add paths allowed"  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -C /repo add src/a.ts"}}' $G
 t 0 "MULTILINE: add path then ls ." AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add src/main.py\nls ."}}' $G
 t 2 "MULTILINE: echo then add -A"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"starting\"\ngit add -A"}}' $G
 t 2 "MULTILINE: ./run.sh then add -A" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"./run.sh\ngit add -A"}}' $G
@@ -58,9 +61,11 @@ t 0 "normal test edit allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_
 t 0 "non-test file allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/utils.ts","new_string":"steps.skip(2)"}}' $G
 t 0 "escape hatch honored"         AUTO_GUARD_ALWAYS=1 AUTO_TEST_ALLOW_WEAKEN=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
 mkdir -p .ulpi && touch .ulpi/allow-test-weaken
-t 0 "file escape hatch (one-shot)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
-[ ! -f .ulpi/allow-test-weaken ] && echo "PASS (consumed) file hatch removed after use" || { echo "FAIL file hatch not consumed"; fails=$((fails+1)); }
-t 2 "hatch consumed → blocks again" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+t 0 "file escape hatch (2-min window)" AUTO_GUARD_ALWAYS=1 CLAUDE_PROJECT_DIR=. -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+t 0 "window survives a second guard instance (dual registration)" AUTO_GUARD_ALWAYS=1 CLAUDE_PROJECT_DIR=. -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+touch -t 202601010000 .ulpi/allow-test-weaken
+t 2 "expired flag blocks again"     AUTO_GUARD_ALWAYS=1 CLAUDE_PROJECT_DIR=. -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+[ ! -f .ulpi/allow-test-weaken ] && echo "PASS (expired flag lazily removed)" || { echo "FAIL expired flag not removed"; fails=$((fails+1)); }
 rm -rf .ulpi
 t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
 
@@ -74,6 +79,13 @@ t 0 "normal push allowed"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"gh pr create --title x"}}' $G
 t 0 "MULTILINE: push then rm -f"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin main\nrm -f tmp.txt"}}' $G
 t 2 "MULTILINE: quoted line then force" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"done\"\ngit push --force"}}' $G
+t 2 "git -C dir push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -C /repo push --force"}}' $G
+
+echo "── large payloads (ARG_MAX regression: stdin piping, not env) ──"
+G=auto-test/scripts/guard-test-integrity.sh
+python3 -c "import json;print(json.dumps({'tool_input':{'file_path':'big.test.ts','content':'x'*2000000+'it.skip(\"a\")'}}))" > big.json
+if AUTO_GUARD_ALWAYS=1 bash "$ROOT/$G" < big.json >/dev/null 2>&1; then echo "FAIL (got 0 want 2) 2MB payload with it.skip"; fails=$((fails+1)); else echo "PASS (2) 2MB payload with it.skip blocked"; fi
+rm -f big.json
 
 echo "── frontmatter resolvers find + exec the scripts (installed-skill layout) ──"
 mkdir -p proj/.claude/skills

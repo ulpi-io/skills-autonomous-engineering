@@ -16,6 +16,7 @@
 //     approved: true,                       // REQUIRED — the skill recorded the human approval
 //     statusFile: ".ulpi/runs/<id>.json",   // REQUIRED — created by the skill before launch
 //     checkpointCli: "<abs path to checkpoint-resume/scripts/checkpoint.mjs>", // for status agents
+//     planValidator: "<abs path to auto-plan/scripts/validate-plan.mjs>",       // deterministic DAG gate in preflight
 //     config: { simplify: true, performance: false, shipPrep: true },  // optional-phase switches
 //     delegate: { build: 'native', review: 'native', verify: 'native' }, // D14: 'codex' per role, offered only if detected
 //     maxFix: 3, maxBuildParallel: 4, maxParallel: 6                   // caps (defaults shown)
@@ -124,7 +125,7 @@ async function mapAll(items, fn) {           // full-parallel map (per-item caps
 phase('Preflight')
 const pre = await rAgent(
   `Preflight for an autonomous build in ${ROOT} on branch ${BRANCH}.
-   1. Read ${PLAN_PATH} (JSON). Validate: tasks[] each with id, title, writeScope[], validate, acceptance; layers[][] is a topological order of task ids that respects each task's dependsOn (no cycle, nothing ordered before a dependency). Intra-layer tasks must have disjoint writeScope.
+   1. Structural gate: ${CFG.planValidator ? `run \`node "${CFG.planValidator}" ${PLAN_PATH} --json\` — its violations are disqualifying (deterministic DAG judge)` : `read ${PLAN_PATH} (JSON) and validate: tasks[] each with id, title, writeScope[], validate, acceptance; layers[][] is a topological order respecting dependsOn (no cycle, nothing before its dependency); intra-layer writeScope disjoint`}.
    2. Run: git -C ${ROOT} rev-parse --is-inside-work-tree ; git -C ${ROOT} status --porcelain
    3. Read the checkpoint ${STATUS}${CK ? ` via: node "${CK}" get ${STATUS} and node "${CK}" resume ${STATUS}` : ''} — collect: units already done (doneUnits), phases already done (donePhases: keys in the checkpoint's phases map whose status is "done"), and the persisted openItems array (register entries from completed phases).
    ${Object.values(DELEGATE).includes('codex') ? '4. The user delegated role(s) to Codex — probe availability: `command -v codex` (or a codex subagent type). Report codexAvailable: true/false.' : ''}

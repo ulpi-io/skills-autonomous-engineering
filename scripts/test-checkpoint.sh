@@ -18,8 +18,8 @@ node "$CK" unit $F b pending --deps a >/dev/null; ok $? "set deps b→a"
 node "$CK" unit $F c pending --deps b >/dev/null; ok $? "set deps c→b"
 
 R=$(node "$CK" resume $F)
-echo "$R" | grep -q '"eligible": \[\s*"a"' || { echo "$R" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["eligible"]==["a"], d; assert d["dep_blocked"]=={"b":"a","c":"b"}, d' ; }
-ok $? "resume computes eligible=[a], dep_blocked{b→a,c→b}"
+echo "$R" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["eligible"]==["a"], d; assert d["dep_blocked"]=={"b":"a","c":"a"}, d'
+ok $? "resume computes eligible=[a], dep_blocked points at CHAIN ROOT (b→a, c→a)"
 
 node "$CK" unit $F a in_progress >/dev/null && node "$CK" unit $F a done --note landed >/dev/null; ok $? "a → done"
 node "$CK" resume $F | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["skip"]==["a"] and d["eligible"]==["b"], d'; ok $? "resume skips done, unblocks b"
