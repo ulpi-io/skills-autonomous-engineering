@@ -1,20 +1,55 @@
 # @ulpi/skills-autonomous-engineering
 
-**Autonomous engineering skills for AI coding agents** — the software delivery lifecycle as a set of
-loop- and workflow-driven phases that run themselves: bounded, self-correcting, checkpoint-resumable, and
-honest about when they're done. Works with [skills.sh](https://skills.sh) across Claude Code, Cursor,
-Cline, Windsurf, and 15+ other agents (Claude-Code-first — it exploits the `Agent`, `Workflow`, `/loop`,
-and `/schedule` primitives).
+**Autonomous software delivery for AI coding agents** — the lifecycle as bounded, self-correcting,
+checkpoint-resumable phases with **deterministic enforcement**: guard hooks that mechanically block
+the cardinal sins, runnable Workflow templates, a fail-closed state CLI, and native `/goal` + `/loop`
+integration. Claude-Code-first; Codex and 70+ other agents via [skills.sh](https://skills.sh).
+
+## Install
+
+**skills.sh** (universal — Claude Code, Codex, Cursor, and ~70 more):
 
 ```bash
-npx skills add https://github.com/ulpi-io/skills-autonomous-engineering
+npx skills add https://github.com/ulpi-io/skills-autonomous-engineering            # everything
+npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-test   # one skill
 ```
 
-Or install individual skills:
+**Claude Code plugin** (adds the plugin-level hooks: session resume-announcer + live-run guards):
 
-```bash
-npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill converge-loop
 ```
+/plugin marketplace add ulpi-io/skills-autonomous-engineering
+/plugin install autonomous-engineering@ulpi-autonomous-engineering
+```
+
+## How routing actually works (verified, not assumed)
+
+- **Claude Code** reads each skill's `description` + `when_to_use` (≤1,536 chars combined — CI-enforced
+  here, because past that it silently truncates and routing degrades) for model-invocation, and every
+  skill is a `/skill-name` slash command. Skills must be *installed* (`.claude/skills/`,
+  `~/.claude/skills/`, `.agents/skills/`, or a plugin) — a raw clone is not discovered.
+- **Codex** supports the same SKILL.md anatomy natively (`name` + `description` are its entire routing
+  surface) and is in skills.sh's universal install group. Codex-tuned briefs are phase 2.
+- **Enforcement travels with the skill**: guard hooks are declared in skill frontmatter (skill-scoped —
+  they fire only while that skill is active) and resolve to real, tested scripts in the skill's
+  `scripts/` dir across all five install layouts, failing open if absent.
+- **Native goal/loop**: on Claude Code, each skill's termination set compiles into `/goal` (whose
+  independent verifier model checks the done-condition) and `/loop` — see
+  `converge-loop/references/native-goal-loop.md`.
+
+## Deterministic enforcement
+
+Prompt contracts bend under pressure; these don't. While the owning skill is active, its PreToolUse
+hook **blocks the tool call** (reason shown to the model):
+
+| Guard | Cardinal sin it makes impossible |
+|---|---|
+| `auto-test/scripts/guard-test-integrity.sh` | Gaming the suite green — adding `.only`/`.skip`/`xit`/suppressions to test files |
+| `auto-build/scripts/guard-git-hygiene.sh` | Breaking per-task rollback — `git add -A/.`, `commit -a`, `reset --hard`, `clean -f` |
+| `auto-ship/scripts/guard-ship-irreversibles.sh` | Unilateral irreversibles — plain `push --force`, `push --delete` |
+| `checkpoint-resume/scripts/checkpoint.mjs` | Destroying run state — refuses re-init over a live run, demoting `done` units, false `finalize done` |
+
+All behavior-tested in CI (`scripts/test-guards.sh` — 36 cases incl. resolver + fail-open + scoping —
+and `scripts/test-checkpoint.sh` — the full contract incl. zero lost writes under 20-way concurrency).
 
 ## The pipeline
 

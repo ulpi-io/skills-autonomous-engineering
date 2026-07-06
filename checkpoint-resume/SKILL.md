@@ -65,10 +65,30 @@ away the checkpoint. When in doubt, check for the file first.
 
 **Success criteria**: mode determined; on resume, the existing file is loaded, not clobbered.
 
+## Step 0.5: Use the bundled CLI — don't hand-roll the file operations
+
+This skill ships `scripts/checkpoint.mjs` (zero-dependency Node). It implements the whole contract —
+atomic writes, refusal to clobber a live checkpoint, refusal to demote a `done` unit, fail-closed
+finalize, and the resume-set computation — so USE IT instead of hand-rolling jq:
+
+```bash
+node <skill-dir>/scripts/checkpoint.mjs init  <file> --task "<desc>" [--units "a,b,c"] [--id <id>]
+node <skill-dir>/scripts/checkpoint.mjs unit  <file> <unit> <pending|in_progress|done|blocked|dep_blocked> [--note "…"] [--deps "x,y"]
+node <skill-dir>/scripts/checkpoint.mjs phase <file> <phase> <pending|running|done|blocked|skipped>
+node <skill-dir>/scripts/checkpoint.mjs get   <file> --summary
+node <skill-dir>/scripts/checkpoint.mjs resume <file>     # → { skip, eligible, dep_blocked }
+node <skill-dir>/scripts/checkpoint.mjs finalize <file> <done|needs_attention|aborted> [--result "…"]
+```
+
+Append `|| true` at call sites — status writes are non-fatal. The CLI exits 2 (refuses) on the
+contract-violating operations: re-`init` over a live checkpoint, demoting a `done` unit, and
+`finalize done` while units are open. Those refusals are the guardrails, enforced in code.
+
 ## Step 1: Initialize the status file (new run only)
 
-Pick a stable `id`: `<label>-<UTC-timestamp>` (get the timestamp from `date -u +%Y%m%dT%H%M%SZ` — never
-invent one). Write `.ulpi/runs/<id>.json`:
+Prefer `checkpoint.mjs init`. If you must write it by hand, pick a stable `id`:
+`<label>-<UTC-timestamp>` (get the timestamp from `date -u +%Y%m%dT%H%M%SZ` — never invent one).
+Write `.ulpi/runs/<id>.json`:
 
 ```json
 {
@@ -152,6 +172,9 @@ units' own checks) rather than trusting a stale `running` — see `references/st
 
 ## When To Load References
 
+- `scripts/checkpoint.mjs`
+  The runnable implementation of this contract — init/unit/phase/get/resume/finalize with atomic writes
+  and code-enforced refusals. Prefer it over hand-rolled file operations, always.
 - `references/status-schema.md`
   The full status-file schema (per-unit states, `dependsOn`, `openItems`, phase blocks), the three verbs
   (status / stop / resume), atomic-write recipes, and how to rebuild the file from artifacts after a

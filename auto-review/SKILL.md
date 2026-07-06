@@ -138,6 +138,10 @@ in place with no regressions); coverage and rejections are honest.
 
 ## When To Load References
 
+- `references/review-workflow.js` — the RUNNABLE Workflow for Phases 1–2: one reviewer per dimension →
+  dedup (a genuine barrier) → majority-refute skeptic panel per finding → returns `{ clean, confirmed,
+  rejected, coverage }`, fail-closed on any dimension that didn't run. Launch via the Workflow tool
+  with `{ root, diffCmd }`; prefer it over hand-orchestrating the fan-out.
 - `fan-out-work` (skill) — parallel per-dimension review over the diff.
 - `adversarial-verify` (skill) — the per-finding refutation gate (Phase 2) — the core signal mechanism.
 - `converge-loop` (skill) — the optional bounded fix loop for confirmed blockers.

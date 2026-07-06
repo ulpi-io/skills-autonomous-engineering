@@ -16,31 +16,42 @@ This collection is **Claude-Code-first**: it leans on Claude Code's real autonom
 JS orchestration), `ScheduleWakeup`/`/loop` (self-paced loops), and `CronCreate`/`/schedule` (recurring
 cloud agents). The skills degrade to descriptive guidance on other agents but are built to exploit these.
 
-## Architecture
+## Architecture — four layers
 
-A flat monorepo of independent skills — one self-contained directory per skill at the repo root. No
-shared build system, no package.json, no test framework. Skills are documentation + orchestration
-contracts, not executable libraries (a few carry small `helpers/` scripts).
+A flat monorepo of independent skills — one self-contained directory per skill at the repo root.
+Every artifact belongs to exactly one layer (a guardrail that is mechanically checkable must NOT ship
+as prose-only):
 
-The collection has three layers:
+1. **Knowledge** — the 16 `SKILL.md` contracts (termination sets, fail-closed gates, slice-scoped
+   builds, rationalization tables). Skill families:
+   - Phases: `auto-spec` → `auto-plan` → `auto-build` → `auto-simplify` → `auto-test` → `auto-review`
+     → `auto-performance` → `auto-ship`
+   - Primitives: `converge-loop`, `adversarial-verify`, `checkpoint-resume`, `fan-out-work`,
+     `budget-guard`
+   - Autonomy: `autonomous-pipeline`, `watch-and-act`, `schedule-recurring-agent`
+2. **Enforcement** — deterministic guards for rules a model can't self-police under pressure:
+   `<skill>/scripts/guard-*.sh` wired as SKILL-SCOPED frontmatter hooks (a thin resolver line finds the
+   script across all five install layouts and `exec`s it; fail-OPEN if absent — guards must never brick
+   a session) + the plugin's `hooks/hooks.json` (same scripts, self-scoped to live `.ulpi/runs/*` runs)
+   + `checkpoint.mjs`'s exit-2 refusals.
+3. **Execution** — runnable machinery: `checkpoint-resume/scripts/checkpoint.mjs` (locked, atomic state
+   CLI), `autonomous-pipeline/references/pipeline-workflow.js` and
+   `auto-review/references/review-workflow.js` (Workflow-tool templates), and the termination-set →
+   native `/goal`+`/loop` compilation (`converge-loop/references/native-goal-loop.md`).
+4. **Distribution** — skills.sh (universal, incl. Codex), the Claude Code plugin
+   (`.claude-plugin/plugin.json` + `marketplace.json`, `skills: "./"`), `AGENTS.md`, and CI
+   (`scripts/validate-skills.mjs` + `scripts/test-guards.sh` + `scripts/test-checkpoint.sh`).
 
-1. **Phase skills** (`auto-*`) — one per delivery step. Each is autonomous: self-correcting, budget-
-   guarded, checkpoint-resumable, and honest about termination. Each works standalone AND chains to the
-   next.
-   - `auto-spec` → `auto-plan` → `auto-build` → `auto-simplify` → `auto-test` → `auto-review` →
-     `auto-performance` → `auto-ship`
-2. **Primitives** — the shared machinery every phase composes: `converge-loop`, `adversarial-verify`,
-   `checkpoint-resume`, `fan-out-work`, `budget-guard`.
-3. **Autonomy layer** — `autonomous-pipeline` (chains all 8 phases unattended with checkpoints + CI
-   watching) and the scheduling/watching skills `watch-and-act`, `schedule-recurring-agent`.
+Platform priority: **Claude Code is the MUST; Codex is phase 2** (structural compatibility already in
+place). The local decision log lives at `docs/DECISIONS.md` (gitignored — working notes, not published).
 
 ### Skill Directory Structure
 
 ```
 <skill-name>/
-├── SKILL.md              # Frontmatter (name, version, description, allowed-tools, …) + phased guide
-├── references/           # Optional: patterns/contracts loaded on demand
-└── helpers/              # Optional: utility scripts (Node/Python)
+├── SKILL.md              # Frontmatter (name, version, description, allowed-tools, hooks?, …) + phased guide
+├── references/           # Optional: patterns/contracts/workflow templates loaded on demand
+└── scripts/              # Optional: EXECUTABLE helpers + guards (bash -n / node --check clean, chmod +x)
 ```
 
 ### SKILL.md Format

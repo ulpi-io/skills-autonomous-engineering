@@ -25,6 +25,19 @@ effort: high
 argument-hint: "[scope — path/module/diff, or 'flaky' to stabilize] (default: the current diff)"
 arguments:
   - scope
+hooks:
+  PreToolUse:
+    - matcher: "Edit|Write"
+      hooks:
+        - type: command
+          command: |
+            for p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/auto-test/scripts/guard-test-integrity.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/auto-test/scripts/guard-test-integrity.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.agents/skills/auto-test/scripts/guard-test-integrity.sh" \
+                     "$HOME/.claude/skills/auto-test/scripts/guard-test-integrity.sh" \
+                     "$HOME/.agents/skills/auto-test/scripts/guard-test-integrity.sh"; do
+              [ -f "$p" ] && AUTO_GUARD_ALWAYS=1 exec bash "$p"
+            done; exit 0
 when_to_use: |
   Use to prove code works and lock in behavior: after auto-build (or any implementation) to cover what
   was written, to raise coverage on a specific risky module, to add a regression test that reproduces a
@@ -189,6 +202,14 @@ Finalize the checkpoint and report honestly (see Output Contract). Include the b
 - Coverage % climbing while assertions are vacuous (`toBeDefined`, `not.toThrow` on everything).
 - "All tests pass" reported without a suite run in the transcript.
 - The loop is on its 6th iteration re-trying the same failing approach (thrash — stop and escalate).
+
+## Enforcement (deterministic, not prose)
+
+While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-test-integrity.sh` on
+every Edit/Write: adding `.only`/`.skip`/`xit`/`@pytest.mark.skip`/`#[ignore]`/`@ts-ignore`/
+`eslint-disable` to a test file is BLOCKED at the tool layer. The cardinal sin (gaming the suite
+green) is mechanically impossible, not merely discouraged. Genuine, user-approved weakening goes
+through the explicit `AUTO_TEST_ALLOW_WEAKEN=1` escape with a stated reason.
 
 ## Guardrails
 

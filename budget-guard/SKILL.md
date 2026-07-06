@@ -131,10 +131,22 @@ Classify and report the exit:
 - Never take an irreversible action or resolve a real ambiguity inside the run — escalate.
 - Never report a capped/escalated run as a clean success.
 
+## Native goal/loop routing
+
+On Claude Code, compile the five stop conditions into the native machinery instead of only tracking
+them by hand: the **done-condition** becomes the `/goal` objective (verified each turn by a separate
+model — the strongest form of "machine-checkable"); the **hard cap** becomes `/loop`'s count/time stop;
+the **budget** is the session/turn token target (in a Workflow, `budget.remaining()` — a HARD ceiling);
+**escalation triggers** stay in the run body plus the deterministic guard hooks. The **no-progress
+rule** has no native equivalent on Claude Code — keep it hand-tracked (Codex's `/goal` has it natively:
+`blocked` after 3 consecutive stuck turns). Full mapping: `converge-loop`'s
+`references/native-goal-loop.md`.
+
 ## When To Load References
 
 - `converge-loop` (skill) — the loop-level termination set and no-progress/anti-thrash detectors this
-  guard enforces at the iteration level.
+  guard enforces at the iteration level; its `references/native-goal-loop.md` holds the /goal + /loop
+  compilation table.
 - `checkpoint-resume` (skill) — so a run stopped at a budget/escalation boundary resumes without redoing
   finished work.
 

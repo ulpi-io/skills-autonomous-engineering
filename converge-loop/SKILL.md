@@ -170,8 +170,27 @@ claims success it didn't achieve.
   `@ts-ignore` to silence a real type error) — that is faking the done-condition, the cardinal sin here.
 - Escalate on user-owned decisions instead of guessing inside the loop.
 
+## Native goal/loop routing (prefer the platform's machinery)
+
+Claude Code ships the loop scaffolding natively — **compile the termination set into it** instead of
+hand-rolling scaffolding:
+
+- **`/goal`** = the done-condition, verified after each turn by a SEPARATE model (the actor never
+  grades its own work — stronger than any self-check this skill could prescribe). Formulate the goal
+  AS the measurable done-condition, with the fail-closed clause in the text.
+- **`/loop`** = the cycles, with time/count/event stops as the outer `maxIterations`.
+- **What stays hand-rolled:** the anti-thrash detectors (Step 3) and one-unit-per-iteration scoping —
+  native loops bound time and cost, not futility.
+
+Load `references/native-goal-loop.md` for the full field-by-field compilation (including the Codex
+/goal mapping: completion audit, blocked-after-3-stalls, budgeted goals).
+
 ## When To Load References
 
+- `references/native-goal-loop.md`
+  The termination-set → native `/goal` + `/loop` compilation for Claude Code (and the Codex mapping).
+  Load FIRST when the platform's native goal loop is available — it replaces the scaffolding, not the
+  discipline.
 - `references/termination-and-thrash.md`
   The full termination-set rationale, the no-progress/oscillation detectors (failure-set hashing), and
   the budget-accounting recipe. Load when wiring a new loop or debugging one that won't stop.

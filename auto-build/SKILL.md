@@ -28,6 +28,19 @@ effort: high
 argument-hint: "<plan path, or the feature to build (will look for .ulpi/plans/*); 'resume' to continue>"
 arguments:
   - plan
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: |
+            for p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/auto-build/scripts/guard-git-hygiene.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/auto-build/scripts/guard-git-hygiene.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.agents/skills/auto-build/scripts/guard-git-hygiene.sh" \
+                     "$HOME/.claude/skills/auto-build/scripts/guard-git-hygiene.sh" \
+                     "$HOME/.agents/skills/auto-build/scripts/guard-git-hygiene.sh"; do
+              [ -f "$p" ] && AUTO_GUARD_ALWAYS=1 exec bash "$p"
+            done; exit 0
 when_to_use: |
   Use once a spec + plan exist and you want plan+build collapsed into one approved, autonomous pass that
   implements every task test-driven and individually committed. Do NOT use without a plan (run auto-plan
@@ -156,6 +169,14 @@ reflects the final state.
 - Two agents writing the working tree without worktree isolation.
 - A resume that rebuilt already-integrated tasks (checkpoint ignored/overwritten).
 - A red final workspace validate reported as a clean build.
+
+## Enforcement (deterministic, not prose)
+
+While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-git-hygiene.sh` on
+every Bash call: `git add -A/./--all`, `commit -a/--all`, `reset --hard`, and `clean -f` are BLOCKED
+at the tool layer (token-parsed — `--amend` and commit-message contents never false-positive). The
+clean-rollback contract is enforced by machinery, not by asking nicely. Rules 2–3 above are therefore
+not aspirational.
 
 ## Guardrails
 

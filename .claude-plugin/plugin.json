@@ -1,0 +1,13 @@
+{
+  "name": "autonomous-engineering",
+  "description": "Autonomous software delivery for Claude Code — 8 lifecycle phase skills (auto-spec → auto-ship) plus the loop/verify/checkpoint/budget primitives, with deterministic enforcement hooks and runnable Workflow templates.",
+  "author": {
+    "name": "ulpi.io",
+    "url": "https://github.com/ulpi-io"
+  },
+  "homepage": "https://github.com/ulpi-io/skills-autonomous-engineering",
+  "repository": "https://github.com/ulpi-io/skills-autonomous-engineering",
+  "license": "MIT",
+  "skills": "./",
+  "hooks": "./hooks/hooks.json"
+}

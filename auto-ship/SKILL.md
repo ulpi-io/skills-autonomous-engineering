@@ -26,6 +26,19 @@ effort: high
 argument-hint: "[what to ship — a branch/feature] (default: the current branch)"
 arguments:
   - target
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: |
+            for p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/auto-ship/scripts/guard-ship-irreversibles.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/auto-ship/scripts/guard-ship-irreversibles.sh" \
+                     "${CLAUDE_PROJECT_DIR:-.}/.agents/skills/auto-ship/scripts/guard-ship-irreversibles.sh" \
+                     "$HOME/.claude/skills/auto-ship/scripts/guard-ship-irreversibles.sh" \
+                     "$HOME/.agents/skills/auto-ship/scripts/guard-ship-irreversibles.sh"; do
+              [ -f "$p" ] && AUTO_GUARD_ALWAYS=1 exec bash "$p"
+            done; exit 0
 when_to_use: |
   Use when a change is built, tested, and reviewed and you want it prepared for release — gates run,
   release artifacts written, PR opened / rollout staged. Do NOT use to build or fix (auto-build) or to
@@ -140,6 +153,13 @@ clearly listed.
 - Risky change shipped with no rollback path.
 - Release notes mentioning changes not in the diff (or omitting breaking changes).
 - A grab-bag commit (`git add -A`) in the release history.
+
+## Enforcement (deterministic, not prose)
+
+While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-ship-irreversibles.sh`
+on every Bash call: plain `git push --force` (without `--force-with-lease`) and `git push --delete`
+are BLOCKED at the tool layer — the "human sign-off on irreversible steps" contract is enforced by
+machinery. The deploy itself remains human-gated by process (Phase 3).
 
 ## Guardrails
 

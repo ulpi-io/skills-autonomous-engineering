@@ -1,6 +1,9 @@
 # Local example material — reference only, never published with the skills
 examples/
 
+# Local working notes (decision log stays between us, not published)
+docs/DECISIONS.md
+
 # OS / editor cruft
 .DS_Store
 

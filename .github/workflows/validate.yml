@@ -1,0 +1,21 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate skills (frontmatter, routing budget, refs, scripts, hooks, manifests, self-containment)
+        run: node scripts/validate-skills.mjs
+      - name: Guard scripts behave (block/allow/escape-hatch contract)
+        run: bash scripts/test-guards.sh
+      - name: Checkpoint CLI contract (lifecycle + fail-closed refusals)
+        run: bash scripts/test-checkpoint.sh

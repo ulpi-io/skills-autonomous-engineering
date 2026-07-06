@@ -94,18 +94,31 @@ open.
 
 ## Phase 1: Run the lifecycle (one approved pass)
 
-Drive the phases in order, each via its `auto-*` skill (or as Workflow phases), threading each phase's
-output to the next and updating the pipeline checkpoint at every phase boundary. See
-`references/pipeline-state.md` for the state machine, the per-phase gate conditions, and the handoff
-contract.
+The skill owns the human-facing front half; the bundled **runnable Workflow template** owns the
+unattended stretch:
 
-- **spec → plan** run first; then a SINGLE approval gate on the plan (unambiguous affirmative required).
-- After approval, **build → simplify → test → review → performance → ship** run autonomously, each gated
-  on the prior's success bar.
-- Between phases, optionally use `watch-and-act` to wait on an external signal (CI on the pushed branch,
-  a deploy check) before proceeding.
-- Any phase's escalation (unfixable/ambiguous/irreversible) PAUSES the pipeline and asks the user; on
-  resolution, re-invoke to resume from that phase.
+1. **spec → plan** run first, in-session (`auto-spec`, `auto-plan`) — they may ask questions, so they
+   stay outside the Workflow. Then the SINGLE approval gate on the plan (unambiguous affirmative).
+2. **Create the checkpoint** (`checkpoint-resume`'s `scripts/checkpoint.mjs init`) — the Workflow
+   sandbox has no filesystem access, so the skill creates the status file before launch.
+3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args (root,
+   workingBranch, validate, planPath, `approved: true`, statusFile, checkpointCli path, the optional-
+   phase config, caps). It executes build → simplify → test → review → performance → ship-prep with
+   fail-closed gates (a phase agent that died = a gate failure in the register; skipped ≠ clean), the
+   DAG walk with worktree isolation and bounded fix loops, and per-task checkpoint writes. It
+   hard-throws without `approved: true` — the human gate cannot be bypassed.
+4. Between phases, `watch-and-act` waits on external signals (CI on the pushed branch) when configured.
+5. Any escalation (unfixable/ambiguous/irreversible) surfaces in the returned register and PAUSES the
+   pipeline; on resolution, re-invoke — the checkpoint resumes at the exact phase/task.
+
+**Native /goal framing (Claude Code):** for a fully unattended run, set the session goal to the
+pipeline's Output Contract before launching — `/goal` pins the done-condition ("workflow returned
+converged:true with an empty register; every gate ran") and the platform's independent verifier model
+checks it, so the actor never grades itself. See `converge-loop`'s
+`references/native-goal-loop.md` for the full termination-set → /goal compilation.
+
+See `references/pipeline-state.md` for the state machine, per-phase gate conditions, and the handoff
+contract.
 
 **Success criteria:** each phase reached its success bar before the next began; the checkpoint reflects
 progress; escalations reached the user, not a guessed-through continuation.
@@ -160,6 +173,9 @@ a dead gate or a red end-state is not "done".
 
 ## When To Load References
 
+- `references/pipeline-workflow.js` — the RUNNABLE Workflow for the unattended stretch (build →
+  simplify → test → review → performance → ship-prep, fail-closed, checkpointed). Launch it via the
+  Workflow tool with full args after the plan approval; edit + relaunch (same scriptPath) to iterate.
 - `references/pipeline-state.md` — the phase state machine, per-phase gate conditions, the phase-to-phase
   handoff contract, and the pipeline checkpoint schema. Load when wiring or resuming a run.
 - The phase skills — `auto-spec`, `auto-plan`, `auto-build`, `auto-simplify`, `auto-test`, `auto-review`,

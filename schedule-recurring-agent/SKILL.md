@@ -130,6 +130,14 @@ duplicating work or exceeding its mandate.
 - Never create an unbounded per-run job; declare a per-run cap.
 - Never leave a completed/duplicate routine running; tear it down.
 
+## Native goal/loop routing
+
+On Claude Code, a routine's BRIEF should itself be goal-shaped: state the per-run done-condition the
+way `/goal` would ("triage every issue opened since the last run; done when each has a label and a
+priority"), so each scheduled invocation runs as a bounded goal loop rather than an open-ended prompt.
+Routines are the scheduled form; `/loop` is the in-session form; this skill is about choosing and
+briefing the former correctly.
+
 ## When To Load References
 
 - `budget-guard` (skill) — the per-run bound + escalation contract each invocation enforces.

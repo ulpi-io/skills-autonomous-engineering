@@ -128,6 +128,14 @@ Report the final observed state, how long/many polls it took, and the action tak
 - Never assume the signal; read the real state each cycle.
 - Escalate a terminal failure instead of re-polling it.
 
+## Native goal/loop routing
+
+On Claude Code, a watch IS a `/loop`: interval = the cadence table above, stop condition = the
+deadline/target ("stop when CI on branch X is green, or after 30 min"). For a watch that gates a
+larger objective, pair it with `/goal` so the independent verifier confirms the transition actually
+happened rather than trusting the actor's report. `ScheduleWakeup` is the dynamic-pacing form when
+you're self-pacing inside a session.
+
 ## When To Load References
 
 - `budget-guard` (skill) — the deadline / max-poll bound and the escalation contract.

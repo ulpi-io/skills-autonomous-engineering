@@ -1,0 +1,97 @@
+#!/bin/bash
+# test-guards.sh — behavior contract tests for the enforcement guards (CI-run).
+# Each guard must BLOCK its cardinal sin (exit 2), ALLOW normal work (exit 0), honor its
+# escape hatch, and honor its scoping (skill-scoped always-on vs plugin-scoped live-run-only).
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+cd "$TMP"
+
+fails=0
+t() { # t <want-rc> <desc> <env...> -- <json> <script>
+  local want=$1 desc=$2; shift 2
+  local envs=()
+  while [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
+  local json=$1 script=$2
+  printf '%s' "$json" | env "${envs[@]:-_=_}" bash "$ROOT/$script" >/dev/null 2>&1
+  local rc=$?
+  if [ "$rc" = "$want" ]; then echo "PASS ($rc) $desc"; else echo "FAIL (got $rc want $want) $desc"; fails=$((fails+1)); fi
+}
+
+G=auto-build/scripts/guard-git-hygiene.sh
+echo "── guard-git-hygiene (skill-scoped: AUTO_GUARD_ALWAYS=1) ──"
+t 2 "git add -A blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add -A"}}' $G
+t 2 "git add . blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add ."}}' $G
+t 0 "explicit paths allowed"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add src/a.ts src/b.ts"}}' $G
+t 0 "git add ./src allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add ./src"}}' $G
+t 2 "commit -am blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -am wip"}}' $G
+t 0 "commit --amend allowed"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit --amend --no-edit"}}' $G
+t 0 "commit -m with dash-a text"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -m \"x-a thing\""}}' $G
+t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force origin main"}}' $G
+t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease"}}' $G
+t 2 "reset --hard blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git reset --hard HEAD~1"}}' $G
+t 2 "clean -fd blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git clean -fd"}}' $G
+t 0 "non-git command allowed"      AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"npm test"}}' $G
+t 2 "env-prefixed git blocked"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"FOO=1 git add -A"}}' $G
+echo "── guard-git-hygiene (plugin-scoped: live-run gating) ──"
+t 0 "no live run → allow"          _=_ -- '{"tool_input":{"command":"git add -A"}}' $G
+mkdir -p .ulpi/runs && echo '{"status": "running"}' > .ulpi/runs/x.json
+t 2 "live run → block"             _=_ -- '{"tool_input":{"command":"git add -A"}}' $G
+rm -rf .ulpi
+
+G=auto-test/scripts/guard-test-integrity.sh
+echo "── guard-test-integrity ──"
+t 2 ".only blocked in test file"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/a.test.ts","new_string":"it.only(\"x\")"}}' $G
+t 2 ".skip blocked"                AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"tests/b.spec.js","new_string":"describe.skip(\"y\")"}}' $G
+t 2 "xit blocked"                  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"__tests__/c.js","content":"xit(\"z\")"}}' $G
+t 2 "@ts-ignore blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"// @ts-ignore"}}' $G
+t 2 "pytest skip blocked"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"test_x.py","new_string":"@pytest.mark.skip"}}' $G
+t 2 "rust #[ignore] blocked"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/lib_test.rs","new_string":"#[ignore]"}}' $G
+t 0 "normal test edit allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"expect(add(1,2)).toBe(3)"}}' $G
+t 0 "non-test file allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/utils.ts","new_string":"steps.skip(2)"}}' $G
+t 0 "escape hatch honored"         AUTO_GUARD_ALWAYS=1 AUTO_TEST_ALLOW_WEAKEN=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+t 0 "no live run → allow"          _=_ -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+
+G=auto-ship/scripts/guard-ship-irreversibles.sh
+echo "── guard-ship-irreversibles ──"
+t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force"}}' $G
+t 2 "push -f blocked"              AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -f origin main"}}' $G
+t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease"}}' $G
+t 2 "push --delete blocked"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin --delete old"}}' $G
+t 0 "normal push allowed"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -u origin feat"}}' $G
+t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"gh pr create --title x"}}' $G
+
+echo "── frontmatter resolvers find + exec the scripts (installed-skill layout) ──"
+mkdir -p proj/.claude/skills
+for s in auto-build auto-test auto-ship; do ln -sfn "$ROOT/$s" "proj/.claude/skills/$s"; done
+resolver() { # resolver <skill> — extract the frontmatter hook command
+  python3 - "$ROOT/$1/SKILL.md" <<'PY'
+import sys, re
+text = open(sys.argv[1]).read()
+fm = re.match(r'^---\n(.*?)\n---\n', text, re.S).group(1)
+m = re.search(r'command: \|\n((?:            .*\n?)+)', fm)
+print(re.sub(r'^            ', '', m.group(1), flags=re.M))
+PY
+}
+rt() { # rt <want> <desc> <skill> <json>
+  local want=$1 desc=$2 skill=$3 json=$4
+  local cmd; cmd=$(resolver "$skill")
+  printf '%s' "$json" | env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR="$TMP/proj" HOME=/nonexistent bash -c "$cmd" >/dev/null 2>&1
+  local rc=$?
+  if [ "$rc" = "$want" ]; then echo "PASS ($rc) $desc"; else echo "FAIL (got $rc want $want) $desc"; fails=$((fails+1)); fi
+}
+rt 2 "auto-build resolver blocks add -A"   auto-build '{"tool_input":{"command":"git add -A"}}'
+rt 0 "auto-build resolver allows paths"    auto-build '{"tool_input":{"command":"git add src/x.ts"}}'
+rt 2 "auto-test resolver blocks .only"     auto-test  '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(1)"}}'
+rt 2 "auto-ship resolver blocks force"     auto-ship  '{"tool_input":{"command":"git push --force"}}'
+rm -rf proj
+mkdir -p empty && cd empty
+cmd=$(resolver auto-build)
+printf '%s' '{"tool_input":{"command":"git add -A"}}' | env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR=/nonexistent HOME=/nonexistent bash -c "$cmd" >/dev/null 2>&1
+rc=$?
+if [ "$rc" = "0" ]; then echo "PASS (0) resolver fail-open when script absent"; else echo "FAIL (got $rc want 0) resolver fail-open"; fails=$((fails+1)); fi
+
+echo ""
+if [ "$fails" -gt 0 ]; then echo "✗ $fails guard test(s) failed"; exit 1; fi
+echo "✓ all guard behavior tests pass"
