@@ -60,7 +60,8 @@ after any interruption, and "done" fails closed (a red suite is reported red).
 | Make it faster, provably | `/auto-performance` | no benchmark delta + green tests → reverted |
 | Ship with honest gates | `/auto-ship` | unran gate = blocker; force-push **blocked by hook** |
 | Keep any loop from running away | `converge-loop` + `budget-guard` | declared termination set; compiles into native `/goal` |
-| Make every session start knowing the repo | `/auto-map` | disclosure-tiered context map (root ≤150 lines + path-scoped rules + nested package maps), every claim verified against the code |
+| Make every session start knowing the repo | `/auto-map` | disclosure-tiered context map (root ≤150 lines + path-scoped rules + nested folder maps), every claim verified against the code |
+| Stop repeating last run's mistakes | `/auto-learn` | harvests the run's checkpoint into verified learnings; the next plan reads them before deciding |
 
 ## Install
 
@@ -145,6 +146,8 @@ Every skill honors the same contract — it's the whole point of the collection:
 | Skill | What it does |
 |-------|-------------|
 | [autonomous-pipeline](#autonomous-pipeline) | Chains all 8 phases end-to-end — one approval, checkpointed, CI-watching, returns a findings register |
+| [auto-map](#auto-map) | Verified, disclosure-tiered context architecture: lean root + path-scoped rules + nested folder maps, anti-lie gate as code |
+| [auto-learn](#auto-learn) | The self-improvement loop: harvest run artifacts → verify → route to the right memory layer → feed the next run |
 | [watch-and-act](#watch-and-act) | Wait on an external signal (CI/deploy/queue) on a cache-aware cadence and act on change |
 | [schedule-recurring-agent](#schedule-recurring-agent) | Stand up a recurring cron routine — idempotent brief, bounded per run, with a teardown condition |
 

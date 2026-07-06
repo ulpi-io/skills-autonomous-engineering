@@ -22,13 +22,15 @@ A flat monorepo of independent skills — one self-contained directory per skill
 Every artifact belongs to exactly one layer (a guardrail that is mechanically checkable must NOT ship
 as prose-only):
 
-1. **Knowledge** — the 16 `SKILL.md` contracts (termination sets, fail-closed gates, slice-scoped
+1. **Knowledge** — the 18 `SKILL.md` contracts (termination sets, fail-closed gates, slice-scoped
    builds, rationalization tables). Skill families:
    - Phases: `auto-spec` → `auto-plan` → `auto-build` → `auto-simplify` → `auto-test` → `auto-review`
      → `auto-performance` → `auto-ship`
    - Primitives: `converge-loop`, `adversarial-verify`, `checkpoint-resume`, `fan-out-work`,
      `budget-guard`
    - Autonomy: `autonomous-pipeline`, `watch-and-act`, `schedule-recurring-agent`
+   - Context & learning: `auto-map` (disclosure-tiered, verified context architecture), `auto-learn`
+     (verified, routed learnings harvested from every run — the self-improvement loop)
 2. **Enforcement** — deterministic guards for rules a model can't self-police under pressure:
    `<skill>/scripts/guard-*.sh` wired as SKILL-SCOPED frontmatter hooks (a thin resolver line finds the
    script across all five install layouts and `exec`s it; fail-OPEN if absent — guards must never brick

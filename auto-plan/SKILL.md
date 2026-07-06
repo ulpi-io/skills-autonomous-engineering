@@ -55,6 +55,9 @@ phantom paths) that would otherwise surface as build failures.
   STOP and route back to `auto-spec` — a plan inherits the spec's groundedness.
 - Read the repo to ground the plan: existing structure, modules, build/test commands, the workspace
   validate, and the load-bearing invariants.
+- **Read `.ulpi/learnings.md` if present** — the feed-forward file from prior runs (`auto-learn`).
+  Plan-shape lessons there are BINDING inputs: a task pattern that blocked last run gets decomposed
+  differently this run, not re-attempted verbatim.
 - Open a `checkpoint-resume` run.
 
 **Success criteria:** a testable spec is loaded; the repo's structure + validate commands are known.

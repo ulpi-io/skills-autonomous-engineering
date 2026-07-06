@@ -80,7 +80,9 @@ Before drafting, learn what exists (fan out with `fan-out-work` for a large repo
 - prior art / patterns in the repo to stay consistent with;
 - constraints that are real: the stack, existing contracts, invariants in `CLAUDE.md`/docs, data shapes,
   auth/security boundaries;
-- the domain facts the request assumes.
+- the domain facts the request assumes;
+- **`.ulpi/learnings.md` if present** — prior runs' verified lessons (`auto-learn`): constraints and
+  failure patterns already paid for belong in the spec's constraints/risks, not rediscovered.
 
 Record what's grounded vs. what's an assumption — the draft will mark assumptions explicitly.
 

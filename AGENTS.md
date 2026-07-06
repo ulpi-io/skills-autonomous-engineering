@@ -13,7 +13,8 @@ agent working in or with this repo, this file orients you.
   (capped parallel map), `budget-guard` (the five stop conditions every unattended run declares).
 - **Autonomy layer** — `autonomous-pipeline` (chains the phases; single human approval; runnable
   Workflow template), `watch-and-act` (bounded external polling), `schedule-recurring-agent`
-  (idempotent cron routines).
+  (idempotent cron routines), `auto-map` (verified disclosure-tiered context maps), `auto-learn`
+  (harvests every run's artifacts into verified, routed learnings — the self-improvement loop).
 - **Enforcement** — `<skill>/scripts/guard-*.sh` hooks that mechanically block the cardinal sins
   (gaming tests green, bulk git staging, unauthorized force-push) while a skill is active.
 - **Runnable machinery** — `checkpoint-resume/scripts/checkpoint.mjs` (state CLI with fail-closed
@@ -47,6 +48,6 @@ routing is phase 2 of this collection; the structural compatibility (name+descri
 
 - Read `CLAUDE.md` for conventions and the architecture rationale.
 - Every change must pass `node scripts/validate-skills.mjs` (frontmatter shape, 1536-char routing
-  budget, reference/script integrity, self-containment). CI runs it on every push.
+  budget, reference/script integrity, self-containment). CI runs it on pushes to main and on every pull request.
 - Skills are self-contained: never reference other skill packs or the local `examples/` folder.
 - Guards are real scripts owned by their skill; hook frontmatter carries only the resolver line.

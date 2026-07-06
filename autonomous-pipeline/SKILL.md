@@ -108,9 +108,12 @@ unattended stretch:
    DAG walk with worktree isolation and bounded fix loops, and per-task checkpoint writes. It
    hard-throws without `approved: true` — the human gate cannot be bypassed.
 4. Between phases, `watch-and-act` waits on external signals (CI on the pushed branch) when configured.
-4b. **After a real (non-aborted) run**, close with `auto-map` — refresh the disclosure-tiered context
-   map (root CLAUDE.md, path-scoped rules, nested package maps) so every future session starts knowing
-   the code that just shipped. Skipped on aborted runs (nothing new to map).
+4b. **After EVERY run (even a bumpy one)**, close with `auto-learn` — harvest the checkpoint's
+   register/blocked-units/degradations into verified, routed learnings so the next run doesn't repay
+   this run's tuition. Machine defects it finds are surfaced in the final report, never self-patched.
+4c. **After a real (non-aborted) run**, then run `auto-map` — refresh the disclosure-tiered context
+   map so every future session starts knowing the code that just shipped. (Learn first: learnings may
+   update rules the map refresh then verifies.)
 5. Any escalation (unfixable/ambiguous/irreversible) surfaces in the returned register and PAUSES the
    pipeline; on resolution, re-invoke — the checkpoint resumes at the exact phase/task.
 

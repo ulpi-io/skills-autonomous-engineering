@@ -91,6 +91,9 @@ stepping *between* tasks, not the verification: every task still earns a passing
   without explicit confirmation.
 - Require a CLEAN baseline: `git status --porcelain` shows only expected planning artifacts
   (`.ulpi/spec/*`, `.ulpi/plans/*`). Anything else → stop and ask the user to commit/stash.
+- **Read `.ulpi/learnings.md` if present** and fold relevant entries into the engineer briefs — a
+  lesson the machine already paid for (a flaky service, a validate footgun, a boundary that bites)
+  must reach the agent actually doing the work.
 - Declare the run's budget/caps with `budget-guard` (max fix iterations per task, concurrency cap,
   token/wall-clock ceiling). Create the `checkpoint-resume` file with one unit per task. On **resume**,
   load the existing checkpoint and skip `done` tasks.
