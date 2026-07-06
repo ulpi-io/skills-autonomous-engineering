@@ -2,14 +2,7 @@
 name: budget-guard
 version: 0.1.0
 description: |
-  The discipline that keeps an autonomous run from becoming a runaway: before any unattended loop or
-  multi-agent workflow starts, DECLARE its stop conditions — a machine-checkable done-condition, a
-  max-iteration/max-agent cap, a token/tool/wall-clock budget, a no-progress rule, and the explicit points
-  where it must escalate to a human instead of deciding for itself — then hold the run to them and stop
-  the instant any fires. Use it to wrap every autonomous phase and the whole pipeline so cost is bounded,
-  termination is guaranteed, and a run that can't finish reports honestly instead of grinding for hours.
-  This is the cross-cutting contract the loop/phase skills load; it is the difference between "autonomous"
-  and "unbounded".
+  The discipline that keeps an autonomous run from becoming a runaway: before any unattended loop or workflow, declare the five stop conditions — done-condition, hard cap, token/time budget, no-progress rule, escalation triggers — then hold the run to them and stop the instant one fires. Fails closed: a capped run reports an honest partial, never fabricated success. Load at the start of ANY unattended run.
 allowed-tools:
   - Bash
   - Read

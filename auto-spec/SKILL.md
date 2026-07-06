@@ -21,6 +21,8 @@ allowed-tools:
   - Agent
   - AskUserQuestion
   - Workflow
+disable-model-invocation: true
+user-invocable: true
 effort: high
 argument-hint: "<what to build — the feature/product/change request>"
 arguments:

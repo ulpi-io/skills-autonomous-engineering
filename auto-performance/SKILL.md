@@ -2,14 +2,7 @@
 name: auto-performance
 version: 0.1.0
 description: |
-  Make code measurably faster without breaking it — autonomously and measurement-gated. It establishes a
-  metric and a baseline benchmark FIRST, profiles to find the REAL hotspots (not guesses), then per
-  hotspot hypothesizes a fix, applies it, and re-benchmarks — accepting the change ONLY if it is a
-  statistically real improvement AND passes a correctness-regression check; otherwise it reverts. It loops
-  until the target is met or the remaining wins aren't worth the complexity, and it fails closed: nothing
-  is accepted on the strength of "should be faster" — every kept optimization is backed by a before/after
-  number. This is the PERFORMANCE phase. Composes converge-loop (optimize loop), adversarial-verify
-  (measurement + regression lenses), and checkpoint-resume.
+  Make code measurably faster without breaking it: metric + reproducible baseline FIRST, profile to the real hotspots, then per hotspot apply a change and re-benchmark — kept ONLY if the win is real beyond variance AND correctness holds; otherwise reverted. Stops at the target or diminishing returns. Never accepts an unmeasured "should be faster".
 allowed-tools:
   - Bash
   - Read

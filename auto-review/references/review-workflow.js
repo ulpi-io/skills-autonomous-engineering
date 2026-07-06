@@ -86,17 +86,22 @@ const coverage = DIMENSIONS.map((dim, i) => ({ dimension: dim.split(' ')[0], ran
 const gaps = coverage.filter(c => !c.ran)
 if (gaps.length) log(`COVERAGE GAP: ${gaps.map(g => g.dimension).join(', ')} did not run — fail closed, these are NOT clean`)
 
-// barrier is genuine here: dedup needs every dimension's findings at once
-const dedup = Object.values(Object.fromEntries(
-  results.filter(Boolean).flatMap(r => r.findings || [])
-    .map(f => [`${f.file}:${f.line ?? 0}:${(f.issue || '').toLowerCase().slice(0, 48)}`, f])))
+// barrier is genuine here: dedup needs every dimension's findings at once.
+// Keep the HIGHEST severity per key — last-write-wins would let a nit clobber a blocker.
+const rank = { blocker: 0, concern: 1, nit: 2, fyi: 3 }
+const byKey = {}
+for (const f of results.filter(Boolean).flatMap(r => r.findings || [])) {
+  const k = `${f.file}:${f.line ?? 0}:${(f.issue || '').toLowerCase().slice(0, 48)}`
+  if (!byKey[k] || (rank[f.severity] ?? 9) < (rank[byKey[k].severity] ?? 9)) byKey[k] = f
+}
+const dedup = Object.values(byKey)
 log(`review: ${results.filter(Boolean).flatMap(r => r.findings || []).length} raw → ${dedup.length} deduped`)
 
 // ── Verify: majority-refute skeptic panel per finding ─────────────────────────────
 phase('Verify')
 const LENSES = ['correctness — trace the logic on a concrete input', 'reproduction — actually construct the failing input/state', 'regression — does the claimed defect really change observable behavior']
 const verified = await mapCapped(dedup, MAX_PARALLEL, async (f) => {
-  const n = f.severity === 'blocker' ? Math.max(N_SKEPTICS, 3) : N_SKEPTICS
+  const n = f.severity === 'blocker' ? N_SKEPTICS + 2 : N_SKEPTICS   // blockers genuinely get a stronger panel
   const votes = (await parallel(Array.from({ length: n }, (_, i) => () => withRetry(() => agent(
     `Adversarial skeptic ${i + 1}/${n}, lens: ${LENSES[i % LENSES.length]}.
      Try to REFUTE this finding against the ACTUAL code in ${ROOT} (read the file, build the input):
@@ -111,7 +116,6 @@ const verified = await mapCapped(dedup, MAX_PARALLEL, async (f) => {
   return { f, survives, votes: { confirms, refutes, of: votes.length } }
 })
 
-const rank = { blocker: 0, concern: 1, nit: 2, fyi: 3 }
 const confirmed = verified.filter(v => v.survives).map(v => ({ ...v.f, votes: v.votes }))
   .sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9))
 const rejected = verified.filter(v => !v.survives).map(v => ({ ...v.f, votes: v.votes }))

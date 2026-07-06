@@ -2,15 +2,7 @@
 name: auto-test
 version: 0.1.0
 description: |
-  Autonomously raise a codebase's test health to a green, MEANINGFUL suite — find the untested behaviors
-  and missing regression tests, write real tests for them, and run a bounded loop-until-green until the
-  suite passes, de-flaking along the way. Every added test is proven to actually exercise its target (a
-  mutation check — break the code, the test must fail — not a tautology that passes no matter what). The
-  run is checkpointed so it resumes cleanly, and it fails closed: it never makes the suite "green" by
-  skipping, deleting, or weakening tests. Use as the VERIFY phase after a build, to add coverage to a
-  risky area, or to stabilize a flaky suite. Self-contained — it carries its own test-quality bar (test
-  pyramid, DAMP, state-not-interaction, mutation-verified) — and composes converge-loop,
-  adversarial-verify, and checkpoint-resume.
+  Raise test health to a green, MEANINGFUL suite: find untested behaviors, write real tests, loop-until-green — with every added test MUTATION-CHECKED (break the code, the test must fail; tautologies rejected). Fails closed: never games the suite green (a skill-scoped hook mechanically blocks .skip/.only/suppressions in test files). Checkpointed and resumable. Use after a build, on a risky module, for a bug repro, or to de-flake (auto-test flaky).
 allowed-tools:
   - Bash
   - Read

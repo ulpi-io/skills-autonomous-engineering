@@ -34,6 +34,18 @@ node "$CK" get $F --summary | python3 -c 'import sys,json; d=json.load(sys.stdin
 node "$CK" unit $F b done >/dev/null && node "$CK" unit $F c done >/dev/null
 node "$CK" finalize $F done --result "all landed" >/dev/null; ok $? "finalize done when all units done"
 
+# item: durable openItems appends (object and array forms)
+node "$CK" item $F --json '{"phase":"test","issue":"gap"}' >/dev/null; ok $? "item appends object"
+node "$CK" item $F --json '[{"phase":"review","issue":"a"},{"phase":"review","issue":"b"}]' >/dev/null; ok $? "item appends array"
+node "$CK" get $F | python3 -c 'import sys,json; d=json.load(sys.stdin); assert len(d["openItems"])==3, d'; ok $? "openItems has 3"
+
+# gc: archives old TERMINAL runs, never running ones
+node "$CK" init .ulpi/runs/old.json --task old --id old1 >/dev/null && node "$CK" finalize .ulpi/runs/old.json aborted >/dev/null
+python3 -c 'import json; p=".ulpi/runs/old.json"; d=json.load(open(p)); d["updatedAt"]="2026-01-01T00:00:00Z"; json.dump(d,open(p,"w"))'
+node "$CK" init .ulpi/runs/live.json --task live --id live1 >/dev/null
+node "$CK" gc .ulpi/runs --keep-days 7 >/dev/null; ok $? "gc runs"
+[ -f .ulpi/runs/archive/old.json ] && [ -f .ulpi/runs/live.json ] && echo "PASS gc archived old terminal, kept running" || { echo "FAIL gc selection"; fails=$((fails+1)); }
+
 # atomicity: concurrent unit patches must not lose writes
 node "$CK" init .ulpi/runs/r2.json --task race --units "$(seq -s, 1 20)" --id race >/dev/null
 for i in $(seq 1 20); do node "$CK" unit .ulpi/runs/r2.json "$i" done >/dev/null & done; wait

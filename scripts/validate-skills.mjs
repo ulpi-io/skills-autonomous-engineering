@@ -37,7 +37,7 @@ function fmScalar(fm, key) {
   for (let i = 0; i < lines.length; i++) {
     const mm = lines[i].match(new RegExp(`^${key}:\\s*(.*)$`));
     if (!mm) continue;
-    if (mm[1] && mm[1] !== '|' && mm[1] !== '>') return mm[1].trim();
+    if (mm[1] && !/^[|>][+-]?\d*$/.test(mm[1].trim())) return mm[1].trim();
     // block scalar: collect indented lines
     const out = [];
     for (let j = i + 1; j < lines.length && (lines[j].startsWith('  ') || lines[j] === ''); j++) out.push(lines[j].replace(/^  /, ''));
@@ -146,6 +146,14 @@ if (existsSync(hooksPath)) {
     }
   } catch (e) { p(`hooks/hooks.json: invalid JSON (${e.message})`); }
 }
+
+// containment: the local-only material must stay ignored (plugin root-scan exposure, D11/U6)
+try {
+  const gi = readFileSync(join(ROOT, '.gitignore'), 'utf8');
+  for (const must of ['examples/', 'docs/DECISIONS.md']) {
+    if (!gi.includes(must)) p(`.gitignore: missing '${must}' — local-only material would ship/scan`);
+  }
+} catch { p('.gitignore missing'); }
 
 if (problems.length) {
   console.error(`✗ ${problems.length} violation(s):\n` + problems.map(x => `  - ${x}`).join('\n'));

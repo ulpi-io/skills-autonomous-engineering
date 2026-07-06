@@ -2,14 +2,7 @@
 name: schedule-recurring-agent
 version: 0.1.0
 description: |
-  Set up a recurring autonomous agent that runs on a cron schedule (a "routine") to do a standing job on
-  its own timeline — triage new issues each morning, watch dependency CVEs weekly, babysit the PR queue,
-  run a nightly audit. It writes a self-contained, IDEMPOTENT task brief (the routine wakes with no memory
-  of prior runs, so the brief must carry all its context and be safe to run repeatedly), picks a cron
-  cadence matched to how often the work actually arrives, bounds each run (so one invocation can't grind or
-  spam), and defines how the routine reports and when it should escalate to a human or tear itself down.
-  This is the RECURRING-autonomy primitive. Use for standing, scheduled work — not a one-off in-session
-  wait (that's watch-and-act). Composes budget-guard (per-run bound) and the phase/loop skills as the work.
+  Stand up a recurring cron routine for standing work (triage, monitoring, audits, digests): a self-contained IDEMPOTENT brief (each run wakes memory-less and must dedup prior work), a cadence matched to how often work actually arrives, a per-run budget, escalation rules, and a teardown condition. Use for scheduled repeat work — not one-off waits (watch-and-act).
 allowed-tools:
   - Bash
   - Read

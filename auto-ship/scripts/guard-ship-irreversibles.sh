@@ -15,7 +15,15 @@ raw=$(cat 2>/dev/null || true)
 [ -z "$raw" ] && exit 0
 
 if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  live=$(grep -l '"status"[[:space:]]*:[[:space:]]*"running"' .ulpi/runs/*.json 2>/dev/null | head -1)
+  # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
+  # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
+  # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
+  live=""
+  if [ -d .ulpi/runs ]; then
+    for f in $(find .ulpi/runs -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null); do
+      grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
+    done
+  fi
   [ -z "$live" ] && exit 0
 fi
 
@@ -43,10 +51,5 @@ for t in toks("push"):
   exit $?
 fi
 
-# Fallback (no python3): conservative grep.
-if printf '%s' "$raw" | grep -qE 'git[[:space:]]+push[^|;&]*--force([[:space:]]|\\|")' \
-   && ! printf '%s' "$raw" | grep -q -- '--force-with-lease'; then
-  echo "guard-ship-irreversibles: plain git push --force is irreversible — use --force-with-lease or get user sign-off." >&2
-  exit 2
-fi
+echo "guard-ship-irreversibles: python3 not found — guard skipped (fail-open)" >&2
 exit 0

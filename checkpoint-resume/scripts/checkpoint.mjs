@@ -11,12 +11,14 @@
 //   node checkpoint.mjs phase <file> <phase> <pending|running|done|blocked|skipped>
 //   node checkpoint.mjs get <file> [--summary]
 //   node checkpoint.mjs resume <file>          # prints JSON { skip: [...], eligible: [...], dep_blocked: {unit: rootDep} }
+//   node checkpoint.mjs item <file> --json '<object-or-array>'   # append durable openItems (register persistence)
 //   node checkpoint.mjs finalize <file> <done|needs_attention|aborted> [--result "<summary>"]
+//   node checkpoint.mjs gc <dir> [--keep-days 7]   # archive TERMINAL runs older than N days (never touches running)
 //
 // Exit codes: 0 ok · 1 usage/parse error · 2 refused (e.g. init would clobber a live checkpoint)
 
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmdirSync, statSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmdirSync, statSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -155,6 +157,44 @@ switch (cmd) {
       else eligible.push(id); // pending, in_progress (interrupted), and blocked are all re-eligible
     }
     console.log(JSON.stringify({ skip, eligible, dep_blocked: depBlocked }, null, 2));
+    break;
+  }
+
+  case 'item': {
+    // Append durable openItems — how a workflow persists register entries the moment a phase ends,
+    // so a resume rebuilds the register instead of re-running completed phases (any-point resume).
+    withLock(file, () => {
+      const raw = opt(rest, '--json') ?? fail('item requires --json \'<object-or-array>\'');
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch (e) { fail(`item --json is not valid JSON: ${e.message}`); }
+      const doc = readDoc(file);
+      doc.openItems ??= [];
+      doc.openItems.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+      writeDoc(file, doc);
+    });
+    break;
+  }
+
+  case 'gc': {
+    // Retention: archive TERMINAL (done/needs_attention/aborted) runs older than --keep-days into
+    // <dir>/archive/. NEVER touches running runs. Keeps session-start announcements and guard
+    // scoping from being armed forever by long-dead checkpoints.
+    const keepDays = Number(opt(rest, '--keep-days', '7'));
+    const dir = file; // second positional is the runs DIRECTORY for gc
+    if (!existsSync(dir)) { console.log('0 archived (no runs dir)'); break; }
+    const cutoff = Date.now() - keepDays * 86400_000;
+    let archived = 0;
+    for (const f of readdirSync(dir).filter(f => f.endsWith('.json'))) {
+      const fp = join(dir, f);
+      let doc; try { doc = JSON.parse(readFileSync(fp, 'utf8')); } catch { continue; }
+      if (doc.status === 'running' || doc.status === 'initializing') continue;
+      const ts = Date.parse(doc.updatedAt || 0);
+      if (Number.isFinite(ts) && ts > cutoff) continue;
+      mkdirSync(join(dir, 'archive'), { recursive: true });
+      renameSync(fp, join(dir, 'archive', f));
+      archived++;
+    }
+    console.log(`${archived} archived to ${dir}/archive (terminal runs older than ${keepDays}d)`);
     break;
   }
 

@@ -2,15 +2,7 @@
 name: watch-and-act
 version: 0.1.0
 description: |
-  Wait on an external signal the harness can't notify you about — a CI run, a deploy, a PR queue, a remote
-  job, an endpoint's health — and act the moment it changes, on a cache-aware polling cadence, bounded by
-  a deadline so it never polls forever. It picks the RIGHT delay (short enough to stay in the prompt cache
-  when actively watching, long enough not to burn cache/tokens when idle), checks the signal, acts on the
-  transition (green → continue, red → diagnose, ready → proceed), and stops on success, on a terminal
-  failure, or at the deadline. Crucially, it does NOT poll for work the harness already tracks (background
-  agents/tasks re-invoke you on completion) — only for genuinely external state. This is the WATCH
-  primitive the pipeline uses between phases. Composes budget-guard (the poll cap/deadline) and
-  converge-loop (the act-on-red loop).
+  Wait on an EXTERNAL signal the harness can't notify you about — CI, a deploy, a queue, an endpoint — polling on a cache-aware cadence (≤270s active, ≥1200s idle, never ~300s), bounded by a deadline, acting on the transition. Never polls harness-tracked background work (that re-invokes you automatically). Use to bridge a run to something happening elsewhere.
 allowed-tools:
   - Bash
   - Read

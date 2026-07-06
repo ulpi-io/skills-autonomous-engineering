@@ -1,35 +1,51 @@
 #!/bin/bash
 # session-start-announce — SessionStart hook.
-# If the project has a resumable autonomous run (a .ulpi/runs/*.json checkpoint whose status is
-# running or needs_attention), announce it so the session starts with the durable state in
-# context instead of rediscovering (or worse, redoing) the work. Read-only; never blocks.
+# Announce RESUMABLE autonomous runs so a session starts with the durable state in context —
+# bounded, recency-aware, and silence-able:
+#   · running runs are announced while fresh (touched <24h ago); older ones are noted as stale
+#   · needs_attention runs are announced only if updated in the last 7 days
+#   · at most the 3 most recent runs are announced; the rest collapse into one summary line
+#   · `node <checkpoint-resume>/scripts/checkpoint.mjs gc .ulpi/runs` archives old terminal runs
+# Read-only; never blocks; silent without python3.
 set -u
 
 dir=".ulpi/runs"
 [ -d "$dir" ] || exit 0
+command -v python3 >/dev/null 2>&1 || exit 0
 
-found=0
-for f in "$dir"/*.json; do
-  [ -f "$f" ] || continue
-  if grep -qE '"status"[[:space:]]*:[[:space:]]*"(running|needs_attention)"' "$f" 2>/dev/null; then
-    if command -v python3 >/dev/null 2>&1; then
-      python3 - "$f" <<'PY' 2>/dev/null
-import sys, json
-try:
-    d = json.load(open(sys.argv[1]))
+python3 - "$dir"/*.json <<'PY' 2>/dev/null
+import sys, json, os, time
+
+now = time.time()
+DAY = 86400
+runs = []
+for fp in sys.argv[1:]:
+    if not os.path.isfile(fp):
+        continue
+    try:
+        d = json.load(open(fp))
+    except Exception:
+        continue
+    status = d.get("status")
+    if status not in ("running", "needs_attention"):
+        continue
+    age = now - os.path.getmtime(fp)
+    if status == "needs_attention" and age > 7 * DAY:
+        continue                     # old open-items runs stop nagging after a week (gc archives them)
+    runs.append((age, status, fp, d))
+
+runs.sort()                          # freshest first
+for age, status, fp, d in runs[:3]:
     units = d.get("units", {})
     done = sum(1 for u in units.values() if u.get("status") == "done")
     cur = d.get("currentPhase", "")
+    stale = " [STALE — untouched >24h; guards no longer armed by it]" if status == "running" and age > DAY else ""
     extra = f", phase: {cur}" if cur else ""
-    print(f"Resumable autonomous run: {d.get('id','?')} [{d.get('status','?')}] — {done}/{len(units)} units done{extra} — task: {d.get('task','')[:100]} (checkpoint: {sys.argv[1]}; resume skips done units — do NOT restart from scratch or overwrite this file)")
-except Exception:
-    pass
+    print(f"Resumable autonomous run: {d.get('id','?')} [{status}]{stale} — {done}/{len(units)} units done{extra} — "
+          f"task: {str(d.get('task',''))[:80]} (checkpoint: {fp}; resume skips done units — do NOT re-init or overwrite)")
+if len(runs) > 3:
+    print(f"...and {len(runs) - 3} older resumable run(s) in .ulpi/runs — archive finished ones with: "
+          f"node <checkpoint-resume skill>/scripts/checkpoint.mjs gc .ulpi/runs")
 PY
-    else
-      echo "Resumable autonomous run checkpoint: $f (status running/needs_attention — resume skips done units; do NOT overwrite it)"
-    fi
-    found=1
-  fi
-done
 
 exit 0

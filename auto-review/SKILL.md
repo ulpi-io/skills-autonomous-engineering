@@ -19,6 +19,8 @@ allowed-tools:
   - Glob
   - Agent
   - Workflow
+disable-model-invocation: true
+user-invocable: true
 effort: high
 argument-hint: "[scope — a diff/branch/PR, or path] (default: the current branch diff)"
 arguments:

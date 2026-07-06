@@ -17,6 +17,7 @@
 //     statusFile: ".ulpi/runs/<id>.json",   // REQUIRED — created by the skill before launch
 //     checkpointCli: "<abs path to checkpoint-resume/scripts/checkpoint.mjs>", // for status agents
 //     config: { simplify: true, performance: false, shipPrep: true },  // optional-phase switches
+//     delegate: { build: 'native', review: 'native', verify: 'native' }, // D14: 'codex' per role, offered only if detected
 //     maxFix: 3, maxBuildParallel: 4, maxParallel: 6                   // caps (defaults shown)
 //   }})
 //
@@ -48,6 +49,13 @@ const PLAN_PATH = need('planPath'), STATUS = need('statusFile')
 if (CFG.approved !== true) throw new Error('autonomous-pipeline: plan not approved — the single human gate is mandatory')
 const CK = CFG.checkpointCli || ''
 const OPT = { simplify: true, performance: false, shipPrep: true, ...(CFG.config || {}) }
+// D14: optional per-role Codex delegation — 'native' (default) | 'codex'. OFFERED by the skill only
+// when a Codex integration was detected at intake; if a codex role is requested but the integration
+// is absent at run time, the role DEGRADES to native and the degradation lands in the register.
+const DELEGATE = { build: 'native', review: 'native', verify: 'native', ...(CFG.delegate || {}) }
+const codexBrief = (role) => DELEGATE[role] === 'codex'
+  ? `\nDELEGATION: the user chose to delegate this ${role} role to Codex. First verify a Codex integration is available (a codex subagent type, or \`command -v codex\`). If available, route the work through it and report its output as yours (you remain accountable for the schema). If NOT available, do the work natively yourself and include "delegationDegraded": true in your notes/summary.`
+  : ''
 const MAX_FIX = CFG.maxFix ?? 3
 const MAX_BUILD_PARALLEL = CFG.maxBuildParallel ?? 4   // worktree engineers are heavy (full checkout)
 const MAX_PARALLEL = CFG.maxParallel ?? 6              // read-only reviewers/verifiers
@@ -118,22 +126,49 @@ const pre = await rAgent(
   `Preflight for an autonomous build in ${ROOT} on branch ${BRANCH}.
    1. Read ${PLAN_PATH} (JSON). Validate: tasks[] each with id, title, writeScope[], validate, acceptance; layers[][] is a topological order of task ids that respects each task's dependsOn (no cycle, nothing ordered before a dependency). Intra-layer tasks must have disjoint writeScope.
    2. Run: git -C ${ROOT} rev-parse --is-inside-work-tree ; git -C ${ROOT} status --porcelain
-   3. Read the checkpoint ${STATUS}${CK ? ` via: node "${CK}" resume ${STATUS}` : ''} — collect units already done (checkpoint resume: done tasks are SKIPPED, never rebuilt).
-   Return JSON: { ok, plan: {tasks, layers}, doneUnits: [ids], problems: [strings] }. ok=false if the plan is malformed/cyclic/mis-ordered, the tree is not git, or the baseline has unexpected uncommitted changes (anything beyond .ulpi/**).`,
+   3. Read the checkpoint ${STATUS}${CK ? ` via: node "${CK}" get ${STATUS} and node "${CK}" resume ${STATUS}` : ''} — collect: units already done (doneUnits), phases already done (donePhases: keys in the checkpoint's phases map whose status is "done"), and the persisted openItems array (register entries from completed phases).
+   ${Object.values(DELEGATE).includes('codex') ? '4. The user delegated role(s) to Codex — probe availability: `command -v codex` (or a codex subagent type). Report codexAvailable: true/false.' : ''}
+   Return JSON: { ok, plan: {tasks, layers}, doneUnits: [ids], donePhases: [keys], openItems: [objects], codexAvailable: bool, problems: [strings] }. ok=false if the plan is malformed/cyclic/mis-ordered, the tree is not git, or the baseline has unexpected uncommitted changes (anything beyond .ulpi/**).`,
   { label: 'preflight', schema: { type: 'object', required: ['ok'], properties: {
       ok: { type: 'boolean' }, plan: { type: 'object' }, doneUnits: { type: 'array', items: { type: 'string' } },
+      donePhases: { type: 'array', items: { type: 'string' } }, openItems: { type: 'array', items: { type: 'object' } },
+      codexAvailable: { type: 'boolean' },
       problems: { type: 'array', items: { type: 'string' } } } } })
 if (!pre?.ok) {
   gateFail('preflight', (pre?.problems || ['preflight agent died']).join('; '))
-  await agentGate(() => agent(`Run: ${ck(`finalize ${STATUS} aborted --result "preflight failed"`)}`, { label: 'status:abort' }))
+  await agent(`Run: ${ck(`finalize ${STATUS} aborted --result "preflight failed"`)}`, { label: 'status:abort' }).catch(() => null)
   return { converged: false, aborted: true, register }
 }
 const PLAN = pre.plan, DONE = new Set(pre.doneUnits || [])
 const taskById = Object.fromEntries((PLAN.tasks || []).map(t => [t.id, t]))
 
+// ── ANY-POINT RESUME (D15): phases recorded done are SKIPPED; their register entries are
+//    rebuilt from the durably-persisted openItems, so the returned register is identical
+//    whether the run was interrupted or not. ──
+const DONE_PHASES = new Set(pre.donePhases || [])
+register.push(...(pre.openItems || []).filter(it => it && DONE_PHASES.has(it.phase)))
+if (DONE_PHASES.size) log(`resume: skipping done phase(s) [${[...DONE_PHASES].join(', ')}], ${register.length} register item(s) rebuilt from checkpoint`)
+
+// D14: degrade codex roles to native when the integration is absent — recorded, never silent.
+if (Object.values(DELEGATE).includes('codex') && pre.codexAvailable === false) {
+  for (const role of Object.keys(DELEGATE)) if (DELEGATE[role] === 'codex') {
+    DELEGATE[role] = 'native'
+    register.push({ phase: 'preflight', kind: 'delegation_degraded', why: `role '${role}' was delegated to codex but no Codex integration is available — ran natively` })
+  }
+}
+
+// persist a phase's completion + its register contributions the moment it ends (crash-safe resume).
+// The status agent composes the shell quoting itself — non-fatal, no gate, no retry.
+async function persistPhase(key, items, phaseTitle) {
+  const cmds = `node "${CK}" phase ${STATUS} ${key} done || true` + (items.length ? ` ; then persist these register items with: node "${CK}" item ${STATUS} --json '<compose the JSON array from the ITEMS below, single-quoted safely>' || true` : '')
+  if (!CK) return
+  await agent(`Run (non-fatal status writes): ${cmds}${items.length ? `\nITEMS: ${JSON.stringify(items).slice(0, 3000)}` : ''}`,
+    { label: `status:${key}:done`, phase: phaseTitle }).catch(() => null)
+}
+
 // ── Build: walk the DAG, barrier between layers ──────────────────────────────────
 phase('Build')
-await agentGate(() => agent(`Run: ${ck(`phase ${STATUS} build running`)}`, { label: 'status:build', phase: 'Build' }))
+await agent(`Run: ${ck(`phase ${STATUS} build running`)}`, { label: 'status:build', phase: 'Build' }).catch(() => null)
 const buildOut = []
 for (const [li, layer] of (PLAN.layers || []).entries()) {
   const todo = layer.filter(id => !DONE.has(id))
@@ -143,13 +178,14 @@ for (const [li, layer] of (PLAN.layers || []).entries()) {
     if (!t) return { id, status: 'blocked', why: 'task missing from plan' }
     if ((t.dependsOn || []).some(d => !DONE.has(d)))
       return { id, status: 'dep_blocked', why: `dependency not integrated` }
-    await agentGate(() => agent(`Run: ${ck(`unit ${STATUS} ${id} in_progress`)}`, { label: `status:${id}`, phase: 'Build' }))
-    // engineer (isolated worktree, test-first, write-scope-bound) — heavy: buildGate + retry
+    // engineer (isolated worktree, test-first, write-scope-bound) — heavy: buildGate + retry.
+    // The status write rides on the engineer itself (S1): no dedicated status agents per task.
     const eng = await buildGate(() => agent(
-      `You are the engineer for ONE task of an approved plan. Repo: ${ROOT}, base branch: ${BRANCH}.
+      `FIRST (non-fatal): run ${ck(`unit ${STATUS} ${id} in_progress`)}
+       You are the engineer for ONE task of an approved plan. Repo: ${ROOT}, base branch: ${BRANCH}.
        TASK ${id}: ${t.title}. Acceptance: ${JSON.stringify(t.acceptance || t.acceptanceCriteria || [])}.
        WRITE SCOPE (only these paths): ${JSON.stringify(t.writeScope || [])}. Slice validate: ${t.validate}.
-       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.
+       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.${codexBrief('build')}
        Return JSON: { built: bool, validatePassed: bool, files: [paths], notes: string, escalate: string|null } (escalate = a decision a user must make; set built=false then).`,
       { label: `eng:${id}`, phase: 'Build', isolation: 'worktree',
         schema: { type: 'object', required: ['built', 'validatePassed'], properties: {
@@ -158,7 +194,7 @@ for (const [li, layer] of (PLAN.layers || []).entries()) {
           escalate: { type: ['string', 'null'] } } } }), `eng:${id}`)
     if (!eng?.built || eng?.escalate) {
       const why = eng?.escalate || eng?.notes || 'engineer failed (or died after retries)'
-      await agentGate(() => agent(`Run: ${ck(`unit ${STATUS} ${id} blocked --note "${why.slice(0, 120).replace(/"/g, '')}"`)}`, { label: `status:${id}`, phase: 'Build' }))
+      await agent(`Run: ${ck(`unit ${STATUS} ${id} blocked --note "${why.slice(0, 120).replace(/"/g, '')}"`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
       return { id, status: 'blocked', why }
     }
     // integrate — SERIALIZED by the merge lock: many tasks build in parallel but all merge the same
@@ -168,14 +204,14 @@ for (const [li, layer] of (PLAN.layers || []).entries()) {
       { label: `integrate:${id}`, phase: 'Build',
         schema: { type: 'object', required: ['merged'], properties: { merged: { type: 'boolean' }, conflict: { type: ['string', 'null'] } } } }))
     if (!integ?.merged) {
-      await agentGate(() => agent(`Run: ${ck(`unit ${STATUS} ${id} blocked --note "merge conflict"`)}`, { label: `status:${id}`, phase: 'Build' }))
+      await agent(`Run: ${ck(`unit ${STATUS} ${id} blocked --note "merge conflict"`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
       return { id, status: 'blocked', why: `integration failed: ${integ?.conflict || 'unknown'}` }
     }
     // slice-scoped review + bounded fix loop (read-only reviewers go through agentGate)
     let verdict = { pass: true, findings: [] }
     for (let attempt = 0; attempt <= MAX_FIX; attempt++) {
       verdict = await agentGate(() => agent(
-        `Slice-scoped review of task ${id} on ${BRANCH} in ${ROOT}. Judge ONLY this task's own diff (write scope ${JSON.stringify(t.writeScope || [])}) against ITS acceptance criteria ${JSON.stringify(t.acceptance || [])}. A whole-codebase gap a LATER task owns is an OBSERVATION, never a block here. Run the slice validate: ${t.validate}. Return JSON { pass: bool, findings: [{file,line,issue,inScope:bool}] } — pass=false only for in-scope defects or a red slice validate.`,
+        `Slice-scoped review of task ${id} on ${BRANCH} in ${ROOT}. Judge ONLY this task's own diff (write scope ${JSON.stringify(t.writeScope || [])}) against ITS acceptance criteria ${JSON.stringify(t.acceptance || [])}. A whole-codebase gap a LATER task owns is an OBSERVATION, never a block here. Run the slice validate: ${t.validate}.${codexBrief('review')} Return JSON { pass: bool, findings: [{file,line,issue,inScope:bool}] } — pass=false only for in-scope defects or a red slice validate.`,
         { label: `review:${id}`, phase: 'Build',
           schema: { type: 'object', required: ['pass'], properties: { pass: { type: 'boolean' },
             findings: { type: 'array', items: { type: 'object' } } } } }), `review:${id}`)
@@ -187,22 +223,25 @@ for (const [li, layer] of (PLAN.layers || []).entries()) {
         { label: `fix:${id}`, phase: 'Build' }), `fix:${id}`)
     }
     const done = verdict?.pass === true
-    await agentGate(() => agent(`Run: ${ck(`unit ${STATUS} ${id} ${done ? 'done' : 'blocked'}${done ? '' : ' --note "review blocked after fix loop"'}`)}`, { label: `status:${id}`, phase: 'Build' }))
+    await agent(`Run: ${ck(`unit ${STATUS} ${id} ${done ? 'done' : 'blocked'}${done ? '' : ' --note "review blocked after fix loop"'}`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
     if (done) DONE.add(id)
     return { id, status: done ? 'done' : 'blocked', why: done ? '' : 'review blocked after bounded fix loop' }
   })
   buildOut.push(...results.filter(Boolean))
 }
 const blocked = buildOut.filter(b => b.status !== 'done')
-blocked.forEach(b => register.push({ phase: 'build', kind: b.status, task: b.id, why: b.why }))
+const blockedItems = blocked.map(b => ({ phase: 'build', kind: b.status, task: b.id, why: b.why }))
+register.push(...blockedItems)
 if (blocked.length) log(`build: ${blocked.length} task(s) not done — continuing to gates, register carries them (fail closed)`)
+await persistPhase('build', blockedItems, 'Build')
 
 // ── Optional + verify phases (each fail-closed: a phase that died is a gate failure) ──
 async function phaseAgent(title, enabled, prompt, schema) {
   phase(title)
+  const key = title.toLowerCase().replace(/\s+/g, '_')
+  if (DONE_PHASES.has(key)) { log(`${title}: already done (checkpoint) — skipped, register rebuilt from openItems`); return { skippedDone: true, ok: true } }
   if (!enabled) { log(`${title}: skipped by config (recorded, not counted clean)`); return { skipped: true } }
-  await agentGate(() => agent(`Run: ${ck(`phase ${STATUS} ${title.toLowerCase().replace(/\s+/g, '_')} running`)}`, { label: `status:${title}`, phase: title }))
-  const out = await rAgent(prompt, { label: title.toLowerCase(), phase: title, schema })
+  const out = await rAgent(`FIRST (non-fatal): run ${ck(`phase ${STATUS} ${key} running`)}\n` + prompt, { label: title.toLowerCase(), phase: title, schema })
   if (!out) gateFail(title.toLowerCase(), `${title} agent died — a gate that did not run is NOT clean`)
   return out || { died: true }
 }
@@ -212,41 +251,58 @@ const RES_SCHEMA = { type: 'object', required: ['ok'], properties: { ok: { type:
 
 const simp = await phaseAgent('Simplify', OPT.simplify && !blocked.length,
   `Run the auto-simplify contract over the diff of ${BRANCH} vs its base in ${ROOT}: find duplication/dead code/over-abstraction in the CHANGED code only; apply the smallest clarifying edits ONE at a time; after each, prove behavior preserved (relevant tests green + no observable semantic change) or REVERT it. Never remove code whose purpose you haven't established. Return { ok, summary, findings: [reverted-or-flagged items] }.`, RES_SCHEMA)
-if (simp?.findings?.length) simp.findings.forEach(f => register.push({ phase: 'simplify', ...f }))
+const simpItems = (simp?.findings || []).map(f => ({ phase: 'simplify', ...f }))
+register.push(...simpItems)
+if (!simp?.skippedDone) await persistPhase('simplify', simpItems, 'Simplify')
 
 const test = await phaseAgent('Test', true,
   `Run the auto-test contract over the diff of ${BRANCH} in ${ROOT}: find untested behaviors in the changed code; write ONE meaningful test per behavior (state-based, spec-named); MUTATION-CHECK each (break the target — the test must fail; restore — must pass; reject tautologies); loop until the scoped suite is green, max 6 iterations, never skipping/weakening a test. Return { ok: suiteGreen && allMutationChecked, summary, findings: [gaps left, blocked units] }.`, RES_SCHEMA)
-if (test && !test.skipped && !test.ok) gateFail('test', test?.summary || 'suite not green / tests not mutation-verified')
-if (test?.findings?.length) test.findings.forEach(f => register.push({ phase: 'test', ...f }))
+if (test && !test.skipped && !test.skippedDone && !test.ok) gateFail('test', test?.summary || 'suite not green / tests not mutation-verified')
+const testItems = (test?.findings || []).map(f => ({ phase: 'test', ...f }))
+register.push(...testItems)
+if (!test?.skippedDone) await persistPhase('test', testItems, 'Test')
 
 phase('Review')
 const DIMENSIONS = ['correctness', 'security', 'test adequacy', 'API/contract compatibility']
-const raw = (await mapAll(DIMENSIONS, (dim) => agentGate(() => agent(
+const reviewDone = DONE_PHASES.has('review')
+if (reviewDone) log('Review: already done (checkpoint) — skipped, confirmed findings rebuilt from openItems')
+const raw = reviewDone ? [] : (await mapAll(DIMENSIONS, (dim) => agentGate(() => agent(
   `Review the diff of ${BRANCH} vs its base in ${ROOT} through the ${dim.toUpperCase()} lens only. Return JSON { findings: [{file, line, issue, severity: "blocker"|"concern"|"nit", scenario}] } — concrete failure scenarios only, no style opinions.`,
   { label: `review:${dim}`, phase: 'Review', schema: { type: 'object', required: ['findings'],
     properties: { findings: { type: 'array', items: { type: 'object' } } } } }), `review:${dim}`))).filter(Boolean)
-if (raw.length < DIMENSIONS.length) gateFail('review', `${DIMENSIONS.length - raw.length} review dimension(s) did not run`)
-const dedup = Object.values(Object.fromEntries(raw.flatMap(r => r.findings || [])
-  .map(f => [`${f.file}:${f.line}:${(f.issue || '').slice(0, 40)}`, f])))
+if (!reviewDone && raw.length < DIMENSIONS.length) gateFail('review', `${DIMENSIONS.length - raw.length} review dimension(s) did not run`)
+const sevRank = { blocker: 0, concern: 1, nit: 2 }
+const byKey = {}
+for (const f of raw.flatMap(r => r.findings || [])) {
+  const k = `${f.file}:${f.line}:${(f.issue || '').slice(0, 40)}`
+  if (!byKey[k] || (sevRank[f.severity] ?? 9) < (sevRank[byKey[k].severity] ?? 9)) byKey[k] = f   // highest severity wins
+}
+const dedup = Object.values(byKey)
 const confirmed = (await mapAll(dedup, async (f) => {
   const votes = (await parallel([0, 1, 2].map(i => () => agentGate(() => agent(
-    `Adversarially verify (skeptic #${i + 1}): try to REFUTE this finding against the ACTUAL code in ${ROOT}: ${JSON.stringify(f).slice(0, 800)}. Build the concrete input/path. Default refuted=true if you cannot positively confirm it. Return { refuted: bool, evidence: string }.`,
+    `Adversarially verify (skeptic #${i + 1}): try to REFUTE this finding against the ACTUAL code in ${ROOT}: ${JSON.stringify(f).slice(0, 800)}. Build the concrete input/path. Default refuted=true if you cannot positively confirm it.${codexBrief('verify')} Return { refuted: bool, evidence: string }.`,
     { label: `verify:${(f.file || '?').split('/').pop()}`, phase: 'Review',
       schema: { type: 'object', required: ['refuted'], properties: { refuted: { type: 'boolean' }, evidence: { type: 'string' } } } }))))).filter(Boolean)
   const survives = votes.length >= 2 && votes.filter(v => !v.refuted).length > votes.filter(v => v.refuted).length
   return survives ? f : null
 })).filter(Boolean)
-confirmed.forEach(f => register.push({ phase: 'review', kind: 'finding', ...f }))
-log(`review: ${dedup.length} raw → ${confirmed.length} confirmed (rejections filtered by adversarial panel)`)
+const reviewItems = confirmed.map(f => ({ phase: 'review', kind: 'finding', ...f }))
+register.push(...reviewItems)
+if (!reviewDone) { log(`review: ${dedup.length} raw → ${confirmed.length} confirmed (rejections filtered by adversarial panel)`); await persistPhase('review', reviewItems, 'Review') }
 
 const perf = await phaseAgent('Performance', OPT.performance,
   `Run the auto-performance contract on the changed hot paths of ${BRANCH} in ${ROOT}: establish a reproducible baseline benchmark FIRST, profile to real hotspots, optimize one at a time, keep a change ONLY if re-benchmark shows a real (beyond-variance) win AND the tests stay green — otherwise revert. Return { ok, summary, findings: [unproven/reverted claims] }.`, RES_SCHEMA)
-if (perf?.findings?.length) perf.findings.forEach(f => register.push({ phase: 'performance', ...f }))
+const perfItems = (perf?.findings || []).map(f => ({ phase: 'performance', ...f }))
+register.push(...perfItems)
+if (!perf?.skippedDone) await persistPhase('performance', perfItems, 'Performance')
 
-const ship = await phaseAgent('Ship prep', OPT.shipPrep && confirmed.filter(f => f.severity === 'blocker').length === 0,
+const reviewBlockers = register.filter(r => r.phase === 'review' && r.severity === 'blocker').length
+const ship = await phaseAgent('Ship prep', OPT.shipPrep && reviewBlockers === 0,
   `Run the auto-ship PREP contract (NO irreversible step — no push --force, no deploy, no publish) for ${BRANCH} in ${ROOT}: audit the pre-launch gates (final validate readiness, docs for public changes, rollback path), draft the changelog FROM the actual commits, and prepare (do not open) the PR body with gate results. Return { ok, summary, findings: [gate blockers] }.`, RES_SCHEMA)
-if (ship && !ship.skipped && !ship.ok) gateFail('ship-prep', ship?.summary || 'pre-launch gates not clean')
-if (ship?.findings?.length) ship.findings.forEach(f => register.push({ phase: 'ship', ...f }))
+if (ship && !ship.skipped && !ship.skippedDone && !ship.ok) gateFail('ship_prep', ship?.summary || 'pre-launch gates not clean')
+const shipItems = (ship?.findings || []).map(f => ({ phase: 'ship_prep', ...f }))
+register.push(...shipItems)
+if (!ship?.skippedDone) await persistPhase('ship_prep', shipItems, 'Ship prep')
 
 // ── Finalize: the load-bearing end-state gate ─────────────────────────────────────
 phase('Finalize')
@@ -257,7 +313,7 @@ const fin = await rAgent(
     schema: { type: 'object', required: ['passed'], properties: { passed: { type: 'boolean' }, output: { type: 'string' } } } })
 if (!fin?.passed) gateFail('final-validate', `workspace validate is RED or did not run — the end-state truth gate blocks (${(fin?.output || '').slice(0, 300)})`)
 const converged = register.length === 0
-await agentGate(() => agent(`Run: ${ck(`finalize ${STATUS} ${converged ? 'done' : 'needs_attention'} --result "${converged ? 'pipeline clean' : register.length + ' open item(s)'}"`)}`, { label: 'status:final', phase: 'Finalize' }))
+await agent(`Run: ${ck(`finalize ${STATUS} ${converged ? 'done' : 'needs_attention'} --result "${converged ? 'pipeline clean' : register.length + ' open item(s)'}"`)}`, { label: 'status:final', phase: 'Finalize' }).catch(() => null)
 
 return {
   converged,                               // true ONLY if every gate ran clean and the register is empty

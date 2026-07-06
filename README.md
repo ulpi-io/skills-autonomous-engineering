@@ -104,17 +104,12 @@ hook **blocks the tool call** (reason shown to the model):
 | `auto-ship/scripts/guard-ship-irreversibles.sh` | Unilateral irreversibles — plain `push --force`, `push --delete` |
 | `checkpoint-resume/scripts/checkpoint.mjs` | Destroying run state — refuses re-init over a live run, demoting `done` units, false `finalize done` |
 
-All behavior-tested in CI (`scripts/test-guards.sh` — 36 cases incl. resolver + fail-open + scoping —
-and `scripts/test-checkpoint.sh` — the full contract incl. zero lost writes under 20-way concurrency).
-
-## The pipeline
-
-```
- auto-spec → auto-plan → auto-build → auto-simplify → auto-test → auto-review → auto-performance → auto-ship
-                                            ▲                                                          │
-                                            └───────────────── autonomous-pipeline ───────────────────┘
-                                              (chains all 8 unattended, one approval, checkpointed, CI-watching)
-```
+All behavior-tested in CI (`scripts/test-guards.sh` — 40 cases incl. resolver, fail-open, live-run
+staleness scoping, and the one-shot `.ulpi/allow-test-weaken` escape hatch — and
+`scripts/test-checkpoint.sh` — the full contract incl. durable `item` persistence, `gc` retention, and
+zero lost writes under 20-way concurrency). Runs are resumable at ANY point (phase- and task-granular
+checkpoints), and when a Codex integration is installed you can delegate build/review/verify roles to it
+per run (never assumed; degrades to native with an honest register note).
 
 ## What makes these "autonomous" (and not "runaway")
 

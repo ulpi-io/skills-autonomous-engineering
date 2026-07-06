@@ -2,14 +2,7 @@
 name: auto-plan
 version: 0.1.0
 description: |
-  Turn a spec into a self-reviewed DAG of small, independently-verifiable build tasks — autonomously. It
-  grounds every task in the real repo, decomposes the spec into atomic slices each with acceptance
-  criteria + a disjoint write scope + a slice-scoped validate command, wires the dependency edges, and
-  orders the tasks into topological layers so nothing is ever built before its dependencies integrate.
-  Then it adversarially self-reviews the plan — acyclicity, correct topological order, no phantom paths,
-  genuine task independence, "if two slices can't each validate alone they're one task" — and loops until
-  the graph is clean. Writes `.ulpi/plans/<name>.json` (+ a rendered `.md`). This is the PLAN phase that
-  feeds auto-build. Composes adversarial-verify, converge-loop, and checkpoint-resume.
+  Turn a spec into a self-reviewed DAG of atomic build tasks: each task gets acceptance criteria, a disjoint write scope (≤3 files), and a slice-scoped validate; dependencies are wired and layered topologically so nothing builds on a missing base. Adversarial critics then attack the graph (cycles, phantom paths, coverage vs spec, task independence) until it is clean. Writes .ulpi/plans/<name>.json. Use when a spec needs an implementable, ordered breakdown before building.
 allowed-tools:
   - Bash
   - Read
@@ -78,8 +71,24 @@ Break the spec's acceptance criteria into tasks. Each task carries:
 - **agent/stack hint** — the kind of work (so the build can route a specialist);
 - notes / patterns to follow.
 
-Keep tasks thin: a task should be a single vertical slice. Split a fat task; MERGE two that can't validate
-independently.
+Keep tasks thin: a task should be a single vertical slice touching **at most 3 files** — split anything
+bigger; MERGE two that can't validate independently. Four planning failure modes to design out per task:
+
+- **Capability providers** — a task claiming a side effect (persistence, network I/O, registration,
+  queueing) must STATE where that capability comes from (an existing module, or the task that provides
+  it as a dependency). A capability from nowhere is a phantom.
+- **Export/registration ownership** — every NEW file needs a named owner for its export/barrel/registry/
+  router wiring: this task or a specific dependent. Unowned wiring is how "done" tasks ship dead code.
+- **Semantic-hardening splits** — if a task could be "completed" with placeholders or dead wiring, split
+  the semantic hardening into an explicit follow-up task; never let structure-only pass as behavior.
+- **No vague contract language** — "graceful degradation", "eventually consistent", "internal update"
+  are banned unless the task defines owner, concrete behavior, and recovery path.
+
+And make each `validate` genuinely slice-scoped in COMMAND FORM, not just intent: scope it to the task's
+own test files (e.g. `pnpm --filter <pkg> exec vitest run <file>` — NOT `pnpm --filter <pkg> test --
+<file>`, where the `--` makes vitest ignore the positional and run the whole package, leaking unrelated
+failures into this task's gate). Every test file the command runs must be in this task's writeScope or
+guaranteed green by an integrated dependency.
 
 **Success criteria:** a set of atomic tasks, each with criteria, disjoint write scope, and a slice-scoped
 validate.
@@ -143,6 +152,8 @@ allows (widest layer). This plan is the input to `auto-build`.
 ## Guardrails
 
 - Never emit phantom paths or ungrounded validate commands.
+- Never create a task touching more than 3 files, claiming an unsourced capability, leaving a new file's
+  export/registration unowned, or hiding placeholder-completable work without a hardening follow-up.
 - Never put dependent or write-scope-overlapping tasks in the same layer.
 - Never order a task before its dependencies; never ship a cyclic graph.
 - Never leave a spec criterion uncovered by some task.

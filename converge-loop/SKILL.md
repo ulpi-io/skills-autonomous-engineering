@@ -2,14 +2,7 @@
 name: converge-loop
 version: 0.1.0
 description: |
-  Run a bounded, self-correcting loop that drives a codebase toward a target state and STOPS honestly —
-  it converges or reports, but never spins. Two modes: UNTIL-GREEN (run a validate command, diagnose the
-  failure, apply a minimal fix, re-run — until it passes) and UNTIL-DRY (find items, act on them, re-find
-  — until N consecutive rounds surface nothing new). Every loop carries a full termination set: a
-  done-condition, a max-iteration cap, a token/tool budget, and no-progress / anti-thrash detection. Use
-  this as the core of any autonomous fix/clean/harden/test loop instead of hand-rolling a "keep going
-  until it works" loop (which is how agents burn hours and tokens). Compose it inside phase skills
-  (auto-test, auto-build's fix loop, auto-simplify, auto-review, auto-performance).
+  Run a bounded, self-correcting loop that drives code toward a target state and STOPS honestly — until-green (validate → diagnose → minimal fix → re-run) or until-dry (find → act → re-find until N dry rounds). Every loop declares a termination set (done-condition, max iterations, budget, no-progress stop) and compiles onto native /goal + /loop. Use for any "repeat until a measurable condition holds" work instead of hand-rolling a keep-going loop.
 allowed-tools:
   - Bash
   - Read

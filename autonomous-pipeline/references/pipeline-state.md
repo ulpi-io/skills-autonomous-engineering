@@ -51,7 +51,7 @@ checkpoint):
   "task": "<the request>",
   "status": "running",                 // running | done | needs_attention | aborted
   "currentPhase": "build",
-  "config": { "simplify": true, "performance": false, "shipDeploy": false },
+  "config": { "simplify": true, "performance": false, "shipPrep": true },
   "workingBranch": "<branch>",
   "approvedPlan": true,
   "phases": {
@@ -62,19 +62,23 @@ checkpoint):
     "test":        { "status": "pending" },
     "review":      { "status": "pending" },
     "performance": { "status": "skipped" },
-    "ship":        { "status": "pending" }
+    "ship_prep":   { "status": "pending" }
   },
   "openRegister": [],                    // verified findings carried to the end
   "result": null
 }
 ```
 
-## Resume
+## Resume (any-point)
 
-On resume: read the checkpoint, jump to `currentPhase`, and within it defer to that phase's own
-`checkpoint-resume` (skip its `done` units). Never restart from `spec`; never overwrite the pipeline
-checkpoint with a fresh pending doc. A phase recorded `done` is skipped; a `running`/`blocked` phase is
-re-entered.
+On resume: the workflow's preflight reads the checkpoint and (a) SKIPS every phase whose key is
+recorded `done` (canonical keys, written by the workflow itself: `build`, `simplify`, `test`,
+`review`, `performance`, `ship_prep` — each phase writes `running` when it starts and `done` when it
+ends), (b) rebuilds the register from the durably-persisted `openItems` of those done phases, and
+(c) within the build, skips every `done` unit. The returned register is identical whether the run was
+interrupted or not. Never restart from `spec`; never overwrite the pipeline checkpoint with a fresh
+pending doc. `spec`/`plan`/approval are SKILL-owned phases (they happen before launch); the workflow
+owns the six keys above.
 
 ## Escalation ↔ pause
 

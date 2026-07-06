@@ -12,9 +12,20 @@
 set -u
 
 [ "${AUTO_TEST_ALLOW_WEAKEN:-0}" = "1" ] && exit 0
+# File-based escape hatch — actionable MID-SESSION (an env var is not: the hook env is fixed at launch).
+# `touch .ulpi/allow-test-weaken` approves exactly ONE weakening edit: the guard consumes the flag.
+if [ -f .ulpi/allow-test-weaken ]; then rm -f .ulpi/allow-test-weaken; exit 0; fi
 
 if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  live=$(grep -l '"status"[[:space:]]*:[[:space:]]*"running"' .ulpi/runs/*.json 2>/dev/null | head -1)
+  # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
+  # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
+  # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
+  live=""
+  if [ -d .ulpi/runs ]; then
+    for f in $(find .ulpi/runs -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null); do
+      grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
+    done
+  fi
   [ -z "$live" ] && exit 0
 fi
 
@@ -36,11 +47,9 @@ print((ti.get("new_string") or ti.get("content") or "").replace("\n", "\\n"))
 ' 2>/dev/null)
   fp=$(printf '%s\n' "$parsed" | sed -n 1p)
   added=$(printf '%s\n' "$parsed" | sed -n 2p)
-elif command -v jq >/dev/null 2>&1; then
-  fp=$(printf '%s' "$raw" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
-  added=$(printf '%s' "$raw" | jq -r '(.tool_input.new_string // .tool_input.content // "")' 2>/dev/null)
 else
-  fp=""; added="$raw"
+  echo "guard-test-integrity: python3 not found — guard skipped (fail-open)" >&2
+  exit 0
 fi
 [ -z "$added" ] && exit 0
 
@@ -51,7 +60,7 @@ case "$fp" in
 esac
 [ "$is_test" = "0" ] && [ -n "$fp" ] && exit 0
 
-block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intended and user-approved, re-run with AUTO_TEST_ALLOW_WEAKEN=1 and explain why in the reply)" >&2; exit 2; }
+block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intended and user-approved: run 'touch .ulpi/allow-test-weaken' then retry the edit — the flag approves ONE edit and is consumed — and state the reason in your reply)" >&2; exit 2; }
 
 # Skip/only/todo — silences or narrows the suite.
 if printf '%s' "$added" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(xit|xdescribe|xtest)[[:space:]]*\(|\.(todo)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then

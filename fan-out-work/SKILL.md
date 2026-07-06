@@ -18,6 +18,8 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+disable-model-invocation: true
+user-invocable: true
 effort: high
 argument-hint: "<the work — e.g. 'add tests to every untested module' or a path to a work-list>"
 arguments:

@@ -2,15 +2,7 @@
 name: auto-simplify
 version: 0.1.0
 description: |
-  Reduce a change's complexity WITHOUT changing its behavior — autonomously and provably. It finds the
-  simplification opportunities in the diff (duplication, dead code, over-abstraction, needless
-  indirection, tangled conditionals), and for each one applies the smallest clarifying edit, then PROVES
-  behavior is preserved (tests still green + an adversarial check that the observable semantics are
-  identical) before keeping it — looping until a round finds nothing more to simplify. It respects
-  Chesterton's Fence (never removes code whose purpose it hasn't established), prefers clarity over
-  cleverness, and fails closed: anything it can't prove behavior-preserving is reverted, not shipped. This
-  is the SIMPLIFY phase. Composes converge-loop (until-dry), adversarial-verify (behavior-preserving
-  gate), and checkpoint-resume.
+  Reduce a change's complexity WITHOUT changing behavior, provably: find duplication/dead code/over-abstraction in the diff, apply the smallest clarifying edit, then prove behavior preserved (tests green + adversarial semantic check) or REVERT — looping until dry. Respects Chesterton's Fence: never removes code whose purpose isn't established. Use when code works but reads worse than it should.
 allowed-tools:
   - Bash
   - Read

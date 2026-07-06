@@ -2,14 +2,7 @@
 name: adversarial-verify
 version: 0.1.0
 description: |
-  Before an autonomous agent acts on a finding — a bug, a proposed fix, a "this is safe to ship" claim —
-  PROVE it by trying to disprove it. Spawn N independent skeptic agents, each prompted to REFUTE the
-  claim (optionally each through a distinct lens: correctness / security / does-it-actually-reproduce /
-  perf), and keep the claim only if a majority fails to refute it. This is the gate that turns "plausible"
-  into "verified" and stops false positives from driving edits, false negatives from being waved through,
-  and confident-but-wrong findings from surviving. Use it to gate any finding list before you fix it, any
-  fix before you commit it, and any clean verdict before you report it. Composes inside auto-review,
-  auto-build's fix loop, auto-simplify, and go-live gating.
+  Prove a claim before acting on it: spawn N independent skeptics prompted to REFUTE it (optionally through distinct lenses — correctness, reproduction, security, regression, measurement) and keep it only if a majority fails. Fails closed on ties. Use to gate findings before fixing, fixes before committing, and any "clean/safe" verdict before trusting it.
 allowed-tools:
   - Agent
   - Workflow

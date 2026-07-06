@@ -35,9 +35,11 @@ t 2 "clean -fd blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 0 "non-git command allowed"      AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"npm test"}}' $G
 t 2 "env-prefixed git blocked"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"FOO=1 git add -A"}}' $G
 echo "── guard-git-hygiene (plugin-scoped: live-run gating) ──"
-t 0 "no live run → allow"          _=_ -- '{"tool_input":{"command":"git add -A"}}' $G
+t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 mkdir -p .ulpi/runs && echo '{"status": "running"}' > .ulpi/runs/x.json
-t 2 "live run → block"             _=_ -- '{"tool_input":{"command":"git add -A"}}' $G
+t 2 "live run → block"             AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
+touch -t 202601010000 .ulpi/runs/x.json   # same running checkpoint, 6 months stale
+t 0 "STALE running run → allow (no permanent lockout)" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 rm -rf .ulpi
 
 G=auto-test/scripts/guard-test-integrity.sh
@@ -51,7 +53,12 @@ t 2 "rust #[ignore] blocked"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_
 t 0 "normal test edit allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"expect(add(1,2)).toBe(3)"}}' $G
 t 0 "non-test file allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/utils.ts","new_string":"steps.skip(2)"}}' $G
 t 0 "escape hatch honored"         AUTO_GUARD_ALWAYS=1 AUTO_TEST_ALLOW_WEAKEN=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
-t 0 "no live run → allow"          _=_ -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+mkdir -p .ulpi && touch .ulpi/allow-test-weaken
+t 0 "file escape hatch (one-shot)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+[ ! -f .ulpi/allow-test-weaken ] && echo "PASS (consumed) file hatch removed after use" || { echo "FAIL file hatch not consumed"; fails=$((fails+1)); }
+t 2 "hatch consumed → blocks again" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
+rm -rf .ulpi
+t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
 
 G=auto-ship/scripts/guard-ship-irreversibles.sh
 echo "── guard-ship-irreversibles ──"
@@ -65,13 +72,17 @@ t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 echo "── frontmatter resolvers find + exec the scripts (installed-skill layout) ──"
 mkdir -p proj/.claude/skills
 for s in auto-build auto-test auto-ship; do ln -sfn "$ROOT/$s" "proj/.claude/skills/$s"; done
-resolver() { # resolver <skill> — extract the frontmatter hook command
+resolver() { # resolver <skill> — extract the frontmatter hook command (indent-agnostic)
   python3 - "$ROOT/$1/SKILL.md" <<'PY'
 import sys, re
 text = open(sys.argv[1]).read()
 fm = re.match(r'^---\n(.*?)\n---\n', text, re.S).group(1)
-m = re.search(r'command: \|\n((?:            .*\n?)+)', fm)
-print(re.sub(r'^            ', '', m.group(1), flags=re.M))
+m = re.search(r'command: \|\n(( +).*\n(?:(?:\2.*)?\n?)*)', fm)
+assert m, "no block-scalar hook command found"
+indent = m.group(2)
+out = re.sub(r'^' + indent, '', m.group(1), flags=re.M).strip()
+assert out, "extracted hook command is EMPTY — extraction regression, tests would pass vacuously"
+print(out)
 PY
 }
 rt() { # rt <want> <desc> <skill> <json>

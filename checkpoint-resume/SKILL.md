@@ -2,13 +2,7 @@
 name: checkpoint-resume
 version: 0.1.0
 description: |
-  Make any long-running autonomous task durable and resumable by writing a live JSON status file and, on
-  resume, SKIPPING every unit already done — session-independent, not dependent on an agent/runtime cache.
-  Write `.ulpi/runs/<id>.json` with overall status + per-unit state as work lands; a stopped, crashed, or
-  handed-off run reads it back and rebuilds only what's left. Use this to wrap multi-unit work (a DAG
-  build, a file-by-file migration, a long fix/clean loop, a fan-out over many items) so a run is
-  stoppable and restartable without losing or redoing work. Status writes are OBSERVABILITY and are
-  NON-FATAL — a failed write is logged and ignored, never blocking the work.
+  Make long autonomous work durable and resumable: a live .ulpi/runs/<id>.json status file (per-unit + per-phase state, atomic locked writes via the bundled scripts/checkpoint.mjs CLI) that a resume reads to SKIP everything already done — session-independent. Status writes are non-fatal observability. Use for any multi-unit run worth resuming after a stop or crash.
 allowed-tools:
   - Bash
   - Read
@@ -77,7 +71,9 @@ node <skill-dir>/scripts/checkpoint.mjs unit  <file> <unit> <pending|in_progress
 node <skill-dir>/scripts/checkpoint.mjs phase <file> <phase> <pending|running|done|blocked|skipped>
 node <skill-dir>/scripts/checkpoint.mjs get   <file> --summary
 node <skill-dir>/scripts/checkpoint.mjs resume <file>     # → { skip, eligible, dep_blocked }
+node <skill-dir>/scripts/checkpoint.mjs item  <file> --json '<object-or-array>'   # append durable openItems
 node <skill-dir>/scripts/checkpoint.mjs finalize <file> <done|needs_attention|aborted> [--result "…"]
+node <skill-dir>/scripts/checkpoint.mjs gc    <runs-dir> [--keep-days 7]  # archive old TERMINAL runs
 ```
 
 Append `|| true` at call sites — status writes are non-fatal. The CLI exits 2 (refuses) on the
@@ -138,8 +134,10 @@ loses at most the in-flight unit.
 On resume, read the file and compute the work set:
 
 1. Load `units`. A unit is **done** → skip it entirely.
-2. A unit is **pending / in_progress / blocked** and all its `dependsOn` are `done` → it's eligible;
-   rebuild it. (An `in_progress` unit was interrupted mid-flight — redo it; it never reached `done`.)
+2. ANY unit not `done` — **pending / in_progress / blocked / dep_blocked** — whose `dependsOn` are all
+   `done` → it's eligible; rebuild it. (`in_progress` was interrupted mid-flight — redo it. A
+   `dep_blocked` unit whose dependency has since landed is eligible again — `done` is the ONLY state
+   that skips.)
 3. A unit whose dependency is NOT done → `dep_blocked`, pointing at the missing root; do not build it on
    a partial base.
 

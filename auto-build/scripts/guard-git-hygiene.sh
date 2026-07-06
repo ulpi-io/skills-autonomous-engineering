@@ -15,7 +15,15 @@ raw=$(cat 2>/dev/null || true)
 
 # Scoping: skill-scoped installs export AUTO_GUARD_ALWAYS=1; otherwise only guard live runs.
 if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  live=$(grep -l '"status"[[:space:]]*:[[:space:]]*"running"' .ulpi/runs/*.json 2>/dev/null | head -1)
+  # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
+  # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
+  # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
+  live=""
+  if [ -d .ulpi/runs ]; then
+    for f in $(find .ulpi/runs -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null); do
+      grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
+    done
+  fi
   [ -z "$live" ] && exit 0
 fi
 
@@ -55,23 +63,7 @@ for t in toks("clean"):
   exit $?
 fi
 
-# Fallback (no python3): conservative grep. Accepts rare false positives; still fails safe.
-cmd=""
-if command -v jq >/dev/null 2>&1; then
-  cmd=$(printf '%s' "$raw" | jq -r '.tool_input.command // empty' 2>/dev/null)
-else
-  cmd="$raw"
-fi
-[ -z "$cmd" ] && exit 0
-block() { echo "guard-git-hygiene: $1" >&2; exit 2; }
-if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|-a|\.)([[:space:]]|$)'; then
-  block "bulk 'git add' is banned during an autonomous run — stage the task files explicitly."
-fi
-if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+push[[:space:]][^|;&]*--force([[:space:]]|$)' \
-   && ! printf '%s' "$cmd" | grep -q -- '--force-with-lease'; then
-  block "plain 'git push --force' is banned during an autonomous run — use --force-with-lease or escalate."
-fi
-if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+reset[[:space:]]+--hard'; then
-  block "'git reset --hard' destroys in-flight task work — checkpoint or escalate instead."
-fi
+# No python3 → honest fail-open (a half-strength lookalike guard is worse than a declared no-op;
+# the prompt-level contract still applies and the resolver already fails open when the script is absent).
+echo "guard-git-hygiene: python3 not found — guard skipped (fail-open)" >&2
 exit 0
