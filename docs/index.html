@@ -9,6 +9,19 @@
 <meta property="og:title" content="Autonomous Engineering Skills">
 <meta property="og:description" content="Run engineering work unattended — without the agent cheating, spinning, or losing work. Bounded loops, fail-closed gates, deterministic enforcement.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/">
+<link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/">
+<!-- Google tag (gtag.js) — property shared across GitHub Pages sites, so track the FULL URL/path -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-2JN5Y3QCSS', {
+    page_location: window.location.href,
+    page_path: window.location.pathname + window.location.search
+  });
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23111318'/%3E%3Cpath d='M6 22V10M6 10l5 6 5-9 5 12 5-7' fill='none' stroke='%23d8763f' stroke-width='2.2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -97,18 +110,18 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
 @media (max-width:720px){.bar nav a:not(.gh){display:none}}
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-.hero{position:relative; padding-block:clamp(48px,9vw,104px)}
-.hero .grid{display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(32px,5vw,64px); align-items:center}
-@media (max-width:900px){.hero .grid{grid-template-columns:1fr; gap:36px}}
+.hero{position:relative; padding-block:clamp(44px,7vw,84px)}
+.herohead{max-width:62ch; margin-bottom:clamp(32px,5vw,52px)}
 .hero h1{font-family:var(--serif); font-weight:800; letter-spacing:-.02em; line-height:1.02;
   font-size:clamp(38px,6.4vw,74px); text-wrap:balance}
 .hero h1 .hl{color:var(--accent)}
 .hero .sub{margin-top:22px; max-width:34ch; font-size:clamp(17px,2vw,20px); color:var(--ink-2)}
 .hero .cta{margin-top:30px; display:flex; gap:14px; flex-wrap:wrap; align-items:center}
-.reveal{opacity:0; transform:translateY(14px)}
-.in .reveal, .reveal.shown{opacity:1; transform:none; transition:opacity .6s var(--ease), transform .6s var(--ease)}
-.in .reveal.d1{transition-delay:.06s}.in .reveal.d2{transition-delay:.12s}.in .reveal.d3{transition-delay:.2s}.in .reveal.d4{transition-delay:.28s}
-@media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none}}
+/* reveal = ENHANCEMENT: visible by default; only .pre (added by JS) hides, removed on scroll/fallback */
+.reveal{transition:opacity .55s var(--ease), transform .55s var(--ease)}
+.reveal.pre{opacity:0; transform:translateY(14px)}
+.reveal.d1{transition-delay:.05s}.reveal.d2{transition-delay:.11s}.reveal.d3{transition-delay:.18s}
+@media (prefers-reduced-motion: reduce){.reveal.pre{opacity:1;transform:none}}
 
 /* terminal panel */
 .panel{position:relative; background:var(--ground-2); border:1px solid var(--rule); border-radius:var(--r)}
@@ -130,18 +143,21 @@ header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, va
 @keyframes bl{50%{opacity:0}}
 @media (prefers-reduced-motion: reduce){.caret{animation:none}}
 
-/* self-improving loop diagram */
+/* self-improving pipeline diagram (hero centerpiece) */
 .loopwrap{padding:0}
-.looptop{padding:12px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center}
-.loopsvg{display:block;width:100%;height:auto;padding:14px 12px 8px}
-.loopsvg .box{fill:var(--ground);stroke:var(--rule);stroke-width:1.5}
-.loopsvg .t{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:17px;letter-spacing:.04em}
-.loopsvg .s{fill:var(--ink-2);font-family:var(--mono);font-size:11.5px}
-.loopsvg .flow{stroke:var(--ink-2);stroke-width:1.6;fill:none}
-.loopsvg .ahf{fill:var(--ink-2)}
+.looptop{padding:12px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center;flex-wrap:wrap}
+.loopscroll{overflow-x:auto}
+.loopsvg{display:block;width:100%;height:auto;padding:16px 14px 10px;min-width:900px}
+.loopsvg .box{fill:var(--ground);stroke:var(--rule);stroke-width:1.4}
+.loopsvg .num{fill:var(--accent);font-family:var(--mono);font-size:10.5px;letter-spacing:.12em}
+.loopsvg .cmd{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:12px}
+.loopsvg .role{fill:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:.02em}
+.loopsvg .chev path{stroke:var(--ink-2);stroke-width:1.5;fill:none;stroke-linejoin:round;stroke-linecap:round}
 .loopsvg .fb{stroke:var(--accent);stroke-width:2;fill:none}
 .loopsvg .ahfb{fill:var(--accent)}
-.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.02em}
+.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12.5px;letter-spacing:.01em}
+.loopsvg .pill{fill:var(--ground-2);stroke:var(--accent);stroke-width:1.4}
+.loopsvg .pillt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:11.5px}
 
 /* blocked stamp */
 .stamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;
@@ -238,34 +254,43 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
 <a id="top"></a>
 <!-- ── HERO ─────────────────────────────────────────────────────────────── -->
 <section class="hero" style="border-top:0">
-  <div class="wrap grid" id="herogrid">
-    <div>
-      <p class="lab reveal"><span class="mk">▸</span> 18 skills · autonomous &amp; self-improving · Claude Code + Codex</p>
-      <h1 class="reveal d1">Autonomous engineering that <span class="hl">learns from every run.</span></h1>
-      <p class="sub reveal d2">One approval sends eight phases unattended, spec to ship. Then the machine harvests what the run learned, refreshes its own map of your code, and the next run starts smarter. Deterministic hooks make cheating impossible along the way.</p>
+  <div class="wrap" id="herogrid">
+    <div class="herohead">
+      <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
+      <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
+      <p class="sub reveal d2">Eight autonomous phases behind one approval — then the machine improves itself for the next run.</p>
       <div class="cta reveal d3">
         <a class="btn" href="#install">Install &rarr;</a>
-        <a class="btn ghost" href="#loop">See the loop</a>
+        <a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering">View source</a>
       </div>
     </div>
-    <div class="panel loopwrap reveal d2">
-      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving loop</div>
-      <svg class="loopsvg" viewBox="0 0 560 300" role="img" aria-label="A closed feedback loop: RUN the eight phases, then LEARN harvests and verifies lessons, then MAP refreshes the context map, and the next run reads the learnings and map before it plans.">
+    <div class="panel loopwrap reveal d3" id="pipeline">
+      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline &nbsp;·&nbsp; <span style="color:var(--ink-2)">one approval, then unattended</span></div>
+      <div class="loopscroll">
+      <svg class="loopsvg" viewBox="0 0 1160 300" role="img" aria-label="The eight phases run in sequence — auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship — then a feedback loop passes through auto-learn and auto-map and returns to the start, so the next run reads the learnings and the refreshed map before it plans.">
         <defs>
-          <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahf"/></marker>
-          <marker id="ahb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
+          <marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
         </defs>
-        <!-- boxes -->
-        <g><rect class="box" x="10" y="24" width="150" height="90" rx="2"/><text class="t" x="85" y="60" text-anchor="middle">RUN</text><text class="s" x="85" y="82" text-anchor="middle">the 8 phases</text><text class="s" x="85" y="98" text-anchor="middle">spec → ship</text></g>
-        <g><rect class="box" x="205" y="24" width="150" height="90" rx="2"/><text class="t" x="280" y="56" text-anchor="middle">LEARN</text><text class="s" x="280" y="77" text-anchor="middle">harvest · verify</text><text class="s" x="280" y="93" text-anchor="middle">route lessons</text></g>
-        <g><rect class="box" x="400" y="24" width="150" height="90" rx="2"/><text class="t" x="475" y="56" text-anchor="middle">MAP</text><text class="s" x="475" y="77" text-anchor="middle">refresh the</text><text class="s" x="475" y="93" text-anchor="middle">context map</text></g>
-        <!-- forward flow -->
-        <path class="flow" d="M162,69 L201,69" marker-end="url(#ah)"/>
-        <path class="flow" d="M357,69 L396,69" marker-end="url(#ah)"/>
-        <!-- feedback return (the self-improvement — accented) -->
-        <path class="fb" d="M475,116 L475,232 L85,232 L85,118" marker-end="url(#ahb)"/>
-        <text class="fbt" x="280" y="256" text-anchor="middle">↻ the next run reads them BEFORE it plans</text>
+        <!-- 8 phase cards -->
+        <g><rect class="box" x="6"    y="34" width="136" height="92" rx="2"/><text class="num" x="74"   y="56" text-anchor="middle">01 DEFINE</text><text class="cmd" x="74"   y="80" text-anchor="middle">/auto-spec</text><text class="role" x="74"   y="100" text-anchor="middle">testable spec</text></g>
+        <g><rect class="box" x="149"  y="34" width="136" height="92" rx="2"/><text class="num" x="217"  y="56" text-anchor="middle">02 PLAN</text><text class="cmd" x="217"  y="80" text-anchor="middle">/auto-plan</text><text class="role" x="217"  y="100" text-anchor="middle">task DAG</text></g>
+        <g><rect class="box" x="292"  y="34" width="136" height="92" rx="2"/><text class="num" x="360"  y="56" text-anchor="middle">03 BUILD</text><text class="cmd" x="360"  y="80" text-anchor="middle">/auto-build</text><text class="role" x="360"  y="100" text-anchor="middle">per-task commit</text></g>
+        <g><rect class="box" x="435"  y="34" width="136" height="92" rx="2"/><text class="num" x="503"  y="56" text-anchor="middle">04 CLEAN</text><text class="cmd" x="503"  y="80" text-anchor="middle">/auto-simplify</text><text class="role" x="503"  y="100" text-anchor="middle">behavior-safe</text></g>
+        <g><rect class="box" x="578"  y="34" width="136" height="92" rx="2"/><text class="num" x="646"  y="56" text-anchor="middle">05 PROVE</text><text class="cmd" x="646"  y="80" text-anchor="middle">/auto-test</text><text class="role" x="646"  y="100" text-anchor="middle">mutation-checked</text></g>
+        <g><rect class="box" x="721"  y="34" width="136" height="92" rx="2"/><text class="num" x="789"  y="56" text-anchor="middle">06 GATE</text><text class="cmd" x="789"  y="80" text-anchor="middle">/auto-review</text><text class="role" x="789"  y="100" text-anchor="middle">verified findings</text></g>
+        <g><rect class="box" x="864"  y="34" width="136" height="92" rx="2"/><text class="num" x="932"  y="56" text-anchor="middle">07 MEASURE</text><text class="cmd" x="932"  y="80" text-anchor="middle">/auto-performance</text><text class="role" x="932"  y="100" text-anchor="middle">benchmark-gated</text></g>
+        <g><rect class="box" x="1007" y="34" width="136" height="92" rx="2"/><text class="num" x="1075" y="56" text-anchor="middle">08 SHIP</text><text class="cmd" x="1075" y="80" text-anchor="middle">/auto-ship</text><text class="role" x="1075" y="100" text-anchor="middle">fail-closed</text></g>
+        <!-- forward chevrons in the gaps -->
+        <g class="chev">
+          <path d="M143,75 l6,5 -6,5"/><path d="M286,75 l6,5 -6,5"/><path d="M429,75 l6,5 -6,5"/><path d="M572,75 l6,5 -6,5"/><path d="M715,75 l6,5 -6,5"/><path d="M858,75 l6,5 -6,5"/><path d="M1001,75 l6,5 -6,5"/>
+        </g>
+        <!-- the self-improving feedback loop (accented) -->
+        <path class="fb" d="M1143,88 L1150,88 Q1156,88 1156,98 L1156,240 Q1156,250 1146,250 L80,250 Q70,250 70,240 L70,132" marker-end="url(#ahb)"/>
+        <text class="fbt" x="612" y="192" text-anchor="middle">↻ every run then feeds the next — it reads the learnings + map BEFORE it plans</text>
+        <rect class="pill" x="735" y="237" width="120" height="26" rx="2"/><text class="pillt" x="795" y="254" text-anchor="middle">▸ auto-learn</text>
+        <rect class="pill" x="405" y="237" width="112" height="26" rx="2"/><text class="pillt" x="461" y="254" text-anchor="middle">▸ auto-map</text>
       </svg>
+      </div>
     </div>
   </div>
 </section>
@@ -300,30 +325,6 @@ footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--acce
       <div class="fail"><span class="x">✗</span><div><b>Poisons the history.</b><p><code style="font-family:var(--mono);font-size:13px">git add -A</code>s unrelated work into a commit, then force-pushes it. Bulk staging and plain force-push are blocked during a run; every task is its own clean rollback point.</p></div></div>
       <div class="fail"><span class="x">✗</span><div><b>Lies about done.</b><p>Reports "done" for gates that never ran. Gates fail closed: a gate that did not execute is never reported clean, and a red validate is reported red.</p></div></div>
     </div>
-  </div>
-</section>
-
-<!-- ── PIPELINE ─────────────────────────────────────────────────────────── -->
-<section id="pipeline">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> the pipeline</p>
-      <h2>Eight phases. One approval. It runs the rest.</h2>
-      <p>Each phase is a bounded, checkpoint-resumable loop that composes the same primitives. Chain them with <code style="font-family:var(--mono);font-size:14px;color:var(--accent)">/autonomous-pipeline "&lt;feature&gt;"</code> — a single human gate on the plan, then unattended.</p>
-    </div>
-    <div class="strip-scroll">
-      <div class="strip" role="list">
-        <div class="stage" role="listitem"><div class="n">01 · define</div><div class="cmd">/auto-spec</div><div class="d">grounded, testable spec</div></div>
-        <div class="stage" role="listitem"><div class="n">02 · plan</div><div class="cmd">/auto-plan</div><div class="d">self-reviewed task DAG</div></div>
-        <div class="stage" role="listitem"><div class="n">03 · build</div><div class="cmd">/auto-build</div><div class="d">worktree, per-task commit</div></div>
-        <div class="stage" role="listitem"><div class="n">04 · clean</div><div class="cmd">/auto-simplify</div><div class="d">behavior-preserving</div></div>
-        <div class="stage" role="listitem"><div class="n">05 · prove</div><div class="cmd">/auto-test</div><div class="d">mutation-verified tests</div></div>
-        <div class="stage" role="listitem"><div class="n">06 · gate</div><div class="cmd">/auto-review</div><div class="d">verified findings only</div></div>
-        <div class="stage" role="listitem"><div class="n">07 · measure</div><div class="cmd">/auto-performance</div><div class="d">benchmark-gated</div></div>
-        <div class="stage" role="listitem"><div class="n">08 · ship</div><div class="cmd">/auto-ship</div><div class="d">fail-closed gates</div></div>
-      </div>
-    </div>
-    <p class="loopnote"><b>↻ then every run closes the loop:</b> <span>/auto-learn</span> harvests the checkpoint into verified lessons → <span>/auto-map</span> refreshes the tiered context map → the next run reads both <b>before planning</b>. The machine improves while it runs.</p>
   </div>
 </section>
 
