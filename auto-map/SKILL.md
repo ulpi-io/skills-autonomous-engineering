@@ -4,8 +4,9 @@ version: 0.1.0
 description: |
   Generate and refresh the project's CONTEXT ARCHITECTURE — a disclosure-tiered map so Claude starts
   every session knowing the repo without paying for what it doesn't need: a lean root CLAUDE.md (loads
-  always), path-scoped .claude/rules/*.md (load only when touching matching files), nested per-package
-  CLAUDE.md for monorepos (load on demand), and linked-not-imported deep references. Every claim is
+  always), path-scoped .claude/rules/*.md (load only when touching matching files), nested CLAUDE.md files
+  throughout the tree so Claude understands EVERY significant folder the moment it works there (loaded
+  on demand — zero cost until then), and linked-not-imported deep references. Every claim is
   VERIFIED against the real repo before it ships (commands actually run; paths actually exist) — the map
   cannot lie. Use to initialize project context, refresh it after meaningful changes, or as the
   pipeline's final phase so the map always reflects what just shipped.
@@ -35,8 +36,9 @@ This skill mutates durable project memory — the files every future session tru
    repo before writing; every build/test command is actually EXECUTED (or explicitly marked unverified).
    A stale or invented map is worse than none — it poisons every future session.
 2. DISCLOSURE-TIERED BY CONSTRUCTION. Root CLAUDE.md ≤150 lines (loads every session). Topic depth goes
-   in path-scoped `.claude/rules/*.md` (loads only when matching files are touched) and nested
-   per-package CLAUDE.md (loads on demand when working there). Deep references are LINKED as literal
+   in path-scoped `.claude/rules/*.md` (loads only when matching files are touched) and a nested
+   `CLAUDE.md` in EVERY significant directory — every repo, not just monorepos (loads on demand the
+   moment Claude reads a file there). Deep references are LINKED as literal
    backtick paths with "read when needed" — NEVER `@`-imported: @imports load at launch and silently
    defeat the entire tiering (they do not reduce context).
 3. UPDATE, DON'T CLOBBER. Preserve existing human-written instructions; refresh the generated sections
@@ -52,7 +54,7 @@ This skill mutates durable project memory — the files every future session tru
 ## Overview
 
 Build the project's context architecture the way Claude Code actually loads context — a small
-always-loaded core, path-triggered topic depth, and on-demand package maps — instead of one fat file
+always-loaded core, path-triggered topic depth, and an on-demand map in every significant folder — instead of one fat file
 (or worse, `@`-imports that pay full context tax at launch while looking modular). Then prove every
 claim before shipping it. The result: every future session starts oriented, pays only for the tier it
 touches, and can trust what the map says.
