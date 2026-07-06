@@ -1,42 +1,21 @@
 # @ulpi/skills-autonomous-engineering
 
-**Let your agent run engineering work unattended — without it cheating, spinning, or losing work.**
+**Spec to ship, unattended. Then it learns.**
+
+Eight autonomous engineering phases behind one approval — then the machine harvests what it learned and
+improves itself for the next run. **18 skills · Claude Code + Codex · [skills.sh](https://skills.sh).**
 
 Every AI agent can loop. The failure modes are what kill you: it "fixes" the suite by skipping the red
 test, grinds for three hours past the point of progress, `git add -A`s unrelated work into a commit it
 later force-pushes, and reports "done" for gates that never ran. This collection makes those failure
-modes **mechanically impossible**, not just discouraged.
+modes **mechanically impossible** — bounded loops, fail-closed gates, and PreToolUse hooks that block the
+tool call — then feeds every run's lessons forward so the next run starts smarter.
 
-## 30 seconds of it
+## The self-improving pipeline
 
-```text
-> /auto-test src/auth
-
-⏺ Baseline: 47 tests, 2 failing · coverage gaps: 7 untested behaviors (token expiry,
-  refresh race, 5 error paths). Checkpoint: .ulpi/runs/auto-test-....json
-
-⏺ Writing test: "rejects expired token with 401"… mutation check: broke verifyToken()
-  → test FAILED (good — it actually tests something). Restored → green. Kept.
-
-⏺ Writing test: "refresh() is idempotent"… mutation check: broke refresh() → test still
-  PASSED. Tautology — rejected, rewriting with state assertions…
-
-⏺ Fixing failing test 1/2: root cause is a real bug in session.ts:41 (clock injected
-  nowhere) — surfacing it, NOT rewriting the assertion to match the wrong output.
-
-✗ Edit blocked by guard-test-integrity: this edit weakens the test signal (skip/only/
-  suppression in a test file) — that fakes the done-condition.   ← the hook, not a promise
-
-⏺ Converged: 54 tests green, 7 behaviors covered (all mutation-verified), 1 real bug
-  surfaced, 0 tests skipped/weakened. Iterations 4/6, ~38k tokens of 150k budget.
-```
-
-That last part is the point: the agent **tried** to take the shortcut every agent takes, and the
-skill's own PreToolUse hook — a tested shell script that travels with it — blocked the tool call.
-The loop is bounded (iterations + budget + no-progress), the run is resumable from its checkpoint
-after any interruption, and "done" fails closed (a red suite is reported red).
-
-## The pipeline
+The eight phases run left to right. The two that close every run are what make it *self-improving*:
+`auto-learn` harvests the run into verified, routed lessons and `auto-map` refreshes the context map —
+and the loop feeds both back to the top, so the next run reads them before it plans.
 
 ```
  DEFINE        PLAN         BUILD          CLEAN         PROVE        GATE         MEASURE        SHIP
@@ -70,6 +49,38 @@ after any interruption, and "done" fails closed (a red suite is reported red).
 | Keep any loop from running away | `converge-loop` + `budget-guard` | declared termination set; compiles into native `/goal` |
 | Make every session start knowing the repo | `/auto-map` | disclosure-tiered context map (root ≤150 lines + path-scoped rules + nested folder maps), every claim verified against the code |
 | Stop repeating last run's mistakes | `/auto-learn` | harvests the run's checkpoint into verified learnings; the next plan reads them before deciding |
+
+## One phase, up close
+
+Here is `/auto-test` on a single module. Watch the agent try the shortcut every agent takes — and get
+stopped by the skill's own hook, not by a promise:
+
+```text
+> /auto-test src/auth
+
+⏺ Baseline: 47 tests, 2 failing · coverage gaps: 7 untested behaviors (token expiry,
+  refresh race, 5 error paths). Checkpoint: .ulpi/runs/auto-test-....json
+
+⏺ Writing test: "rejects expired token with 401"… mutation check: broke verifyToken()
+  → test FAILED (good — it actually tests something). Restored → green. Kept.
+
+⏺ Writing test: "refresh() is idempotent"… mutation check: broke refresh() → test still
+  PASSED. Tautology — rejected, rewriting with state assertions…
+
+⏺ Fixing failing test 1/2: root cause is a real bug in session.ts:41 (clock injected
+  nowhere) — surfacing it, NOT rewriting the assertion to match the wrong output.
+
+✗ Edit blocked by guard-test-integrity: this edit weakens the test signal (skip/only/
+  suppression in a test file) — that fakes the done-condition.   ← the hook, not a promise
+
+⏺ Converged: 54 tests green, 7 behaviors covered (all mutation-verified), 1 real bug
+  surfaced, 0 tests skipped/weakened. Iterations 4/6, ~38k tokens of 150k budget.
+```
+
+The blocked edit is the whole point: the agent **tried** the shortcut, and the skill's own PreToolUse
+hook — a tested shell script that travels with it — blocked the tool call. Every phase runs like this —
+the loop is bounded (iterations + budget + no-progress), the run resumes from its checkpoint after any
+interruption, and "done" fails closed (a red suite is reported red).
 
 ## Install
 
