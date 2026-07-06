@@ -107,12 +107,21 @@ data models and stores; integration points (queues, external APIs); repo-provide
 **Success criteria:** all tiers written within budget; nothing duplicated across tiers; no `@`-imports
 of generated content; human-written content preserved verbatim.
 
-## Phase 3: Verify the map against reality (the anti-lie gate)
+## Phase 3: Verify the map against reality (the anti-lie gate — it is CODE)
 
-`adversarial-verify` every claim: paths exist (`test -e` each referenced path), commands run (execute
-build/test/lint — a command that fails is fixed or marked `(unverified)`), exports/routes match the
-code (grep each named symbol), and NO `@import` of a generated file slipped in. In `verify` mode,
-report drift (claims vs reality) without rewriting unless asked.
+Run the bundled verifier — the gate is a script, not a request to be careful:
+
+```bash
+node <skill-dir>/scripts/verify-map.mjs <project-root> --run-commands --expect-dirs "<sig-dirs>"
+```
+
+It mechanically enforces: tier budgets (comment-stripped line counts), zero `@`-imports outside code
+spans, every backtick-claimed path exists, every command line executes (or carries an explicit
+`(verified: <date>)`/`(unverified)` marker), generation stamps present, and a nested CLAUDE.md for
+every expected significant directory. Exit 1 = the map lies; fix and re-run until 0. On top of the
+script, `adversarial-verify` the SEMANTIC claims the script can't check (does the invariant prose
+match the code's actual behavior; do named exports/routes exist — grep each symbol). In `verify`
+mode, run the script + semantic audit and report drift without rewriting unless asked.
 
 **Success criteria:** zero unverified claims shipped silently; drift enumerated with evidence.
 
@@ -151,6 +160,10 @@ real (non-aborted) run — the map then describes the code that just shipped.
 
 ## When To Load References
 
+- `references/map-templates.md` — the CRAFT: per-tier templates, the generation-stamp format that
+  makes update-don't-clobber implementable, the git-churn significant-directory heuristic, and the
+  per-stack discovery table. Load in Phases 1–2 before writing anything.
+- `scripts/verify-map.mjs` — the anti-lie gate as code (Phase 3 and `verify` mode). CI-tested — 13 contract cases in the collection test suite prove it catches every class of lying map.
 - `fan-out-work` (skill) — parallel per-package discovery on large repos (Phase 1).
 - `adversarial-verify` (skill) — the anti-lie gate over the map's claims (Phase 3).
 - `autonomous-pipeline` (skill) — composes this as its closing map-refresh phase on real runs.

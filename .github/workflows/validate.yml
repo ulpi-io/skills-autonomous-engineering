@@ -19,3 +19,5 @@ jobs:
         run: bash scripts/test-guards.sh
       - name: Checkpoint CLI contract (lifecycle + fail-closed refusals)
         run: bash scripts/test-checkpoint.sh
+      - name: Map verifier contract (anti-lie gate catches every class of lying map)
+        run: bash scripts/test-map-verify.sh
