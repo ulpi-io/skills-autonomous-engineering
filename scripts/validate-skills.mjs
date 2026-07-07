@@ -7,8 +7,10 @@
 //   4. every scripts/*.sh|*.mjs is executable and passes a syntax check (bash -n / node --check;
 //      workflow templates are wrapped in an async fn like the runtime executes them, AND linted for
 //      Workflow-sandbox-banned constructs: Date.now/Math.random/argless new Date/require/ESM import)
-//   5. frontmatter hooks (if any) parse and their resolver covers the plugin root path
+//   5. frontmatter hooks (if any) carry ALL FIVE install-layout resolver paths + AUTO_GUARD_ALWAYS=1
+//      (anti-drift: the resolver is hand-copied per skill; a dropped layout silently loses enforcement)
 //   6. no references to external skill packs (non-ulpi GitHub URLs, examples/ paths) in skill content
+//   6b. RETRY_DELAYS is identical across Workflow templates (a retry tune must land in all, not one)
 //   7. plugin manifest (if present) points at real paths
 // Exit 0 = all green; exit 1 = violations (printed).
 
@@ -124,10 +126,18 @@ for (const dir of skillDirs) {
     }
   }
 
-  // 5. frontmatter hooks: resolver must cover the plugin root
+  // 5. frontmatter hooks: the resolver is hand-copied per skill (self-containment forces it), so CI is
+  //    the only thing that keeps the copies from drifting. Require ALL FIVE install layouts (a missing
+  //    one silently loses enforcement at that install location) AND the AUTO_GUARD_ALWAYS=1 exec.
   if (/^hooks:/m.test(fm)) {
-    if (!fm.includes('CLAUDE_PLUGIN_ROOT')) p(`${dir}: frontmatter hooks resolver misses CLAUDE_PLUGIN_ROOT (plugin installs won't enforce)`);
-    if (!fm.includes('.agents/skills')) p(`${dir}: frontmatter hooks resolver misses .agents/skills (universal installs won't enforce)`);
+    const layouts = [
+      '${CLAUDE_PLUGIN_ROOT', '${CLAUDE_PROJECT_DIR:-.}/.claude/skills',
+      '${CLAUDE_PROJECT_DIR:-.}/.agents/skills', '$HOME/.claude/skills', '$HOME/.agents/skills',
+    ];
+    for (const layout of layouts) {
+      if (!fm.includes(layout)) p(`${dir}: frontmatter hooks resolver missing install layout '${layout}' — enforcement would differ per install location`);
+    }
+    if (!fm.includes('AUTO_GUARD_ALWAYS=1')) p(`${dir}: frontmatter hooks resolver missing AUTO_GUARD_ALWAYS=1 — the skill-scoped guard wouldn't always enforce while the skill is active`);
   }
 
   // 6. self-containment: no external pack references
@@ -135,6 +145,24 @@ for (const dir of skillDirs) {
   for (const url of [...text.matchAll(/github\.com\/([A-Za-z0-9-]+)\//g)].map(m => m[1])) {
     if (url !== 'ulpi-io') p(`${dir}: links a non-ulpi GitHub repo (${url}) — the collection must not reference external packs`);
   }
+}
+
+// 6b. anti-drift: the retry policy is duplicated across the Workflow templates (the sandbox has no
+//     module loader, so runtime sharing is impossible — copy-per-template is the right execution shape).
+//     But a retry tune (e.g. 3→10 attempts) that lands in ONE template silently diverges resilience.
+//     CI — which already parses both templates — is the legitimate shared home for an equality assertion.
+const retrySnippets = [];
+for (const dir of skillDirs) {
+  const refsDir = join(ROOT, dir, 'references');
+  if (!existsSync(refsDir)) continue;
+  for (const f of readdirSync(refsDir).filter(f => f.endsWith('.js'))) {
+    const src = readFileSync(join(refsDir, f), 'utf8');
+    const m = src.match(/RETRY_DELAYS\s*=\s*(\[[^\]]*\])/);
+    if (m) retrySnippets.push({ where: `${dir}/references/${f}`, val: m[1].replace(/\s+/g, '') });
+  }
+}
+if (new Set(retrySnippets.map(r => r.val)).size > 1) {
+  p(`RETRY_DELAYS diverged across Workflow templates — a retry-policy tune must land in ALL of them: ${retrySnippets.map(r => `${r.where}=${r.val}`).join(' vs ')}`);
 }
 
 // 7. plugin manifest paths are real
