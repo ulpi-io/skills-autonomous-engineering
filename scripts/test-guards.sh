@@ -162,9 +162,13 @@ hs() { # hs <want-substr-or-EMPTY> <desc> <env...> -- <json> <mtime|"">
     printf '%s' "$o" | grep -q "$want" && echo "PASS (emitted $want) $desc" || { echo "FAIL (missing '$want') $desc :: $o"; fails=$((fails+1)); }
   fi
 }
-hs additionalContext "quiet running run → non-blocking reminder (default)" -- '{"hook_event_name":"Stop"}' "$OLD"
-hs '"decision": "block"' "quiet running run + STRICT → hard block" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' "$OLD"
-hs EMPTY "FRESH running run → no-op (active work not flagged)" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' ""
+hs additionalContext "running run → non-blocking reminder (default)" -- '{"hook_event_name":"Stop"}' "$OLD"
+hs '"decision": "block"' "running run + STRICT → hard block" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' "$OLD"
+# REGRESSION: a FRESH running run is the MOST COMMON dishonest stop (wrote last unit, reported done,
+# stopped without finalizing → fresh mtime). The old mtime floor let it slip; it must now be surfaced.
+hs additionalContext "FRESH running run → surfaced (common dishonest-stop caught)" -- '{"hook_event_name":"Stop"}' ""
+STALE4H="$(date -v-5H +%Y%m%d%H%M 2>/dev/null || date -d '5 hours ago' +%Y%m%d%H%M)"
+hs EMPTY ">4h stale running run → no-op (abandoned; gc territory)" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' "$STALE4H"
 hs EMPTY "stop_hook_active → allow (loop guard)" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop","stop_hook_active":true}' "$OLD"
 # no .ulpi/runs at all → immediate no-op
 empt="$(mktemp -d)"; o="$(printf '%s' '{"hook_event_name":"Stop"}' | CLAUDE_PROJECT_DIR="$empt" ULPI_STOP_STRICT=1 bash "$HS" 2>/dev/null)"; rm -rf "$empt"
@@ -178,6 +182,17 @@ CLAUDE_PLUGIN_ROOT="$ROOT" CLAUDE_PROJECT_DIR="$GD" bash "$ROOT/hooks/session-en
 [ -f "$GD/.ulpi/runs/archive/old-done.json" ] && echo "PASS terminal run archived" || { echo "FAIL terminal run not archived"; fails=$((fails+1)); }
 [ -f "$GD/.ulpi/runs/live.json" ] && echo "PASS running run left in place" || { echo "FAIL running run wrongly moved"; fails=$((fails+1)); }
 rm -rf "$GD"
+
+echo "── session-start-announce (SessionStart hook: running-first priority) ──"
+SD="$(mktemp -d)"; mkdir -p "$SD/.ulpi/runs"
+# REGRESSION: 3 FRESH needs_attention runs + 1 OLDER running run — the running run must still be
+# announced (not crowded out of the top-3 by fresher needs_attention runs) per the header's promise.
+for i in 1 2 3; do echo '{"id":"na'$i'","status":"needs_attention","units":{"x":{"status":"blocked"}}}' > "$SD/.ulpi/runs/na$i.json"; done
+echo '{"id":"LIVERUN","status":"running","units":{"a":{"status":"done"},"b":{"status":"in_progress"}}}' > "$SD/.ulpi/runs/run.json"
+touch -t "$OLD" "$SD/.ulpi/runs/run.json"   # running run is the OLDEST of the four
+SOUT="$(CLAUDE_PROJECT_DIR="$SD" bash "$ROOT/hooks/session-start-announce.sh" 2>/dev/null)"
+printf '%s' "$SOUT" | grep -q "LIVERUN" && echo "PASS running run survives the top-3 cap (running-first sort)" || { echo "FAIL running run crowded out :: $SOUT"; fails=$((fails+1)); }
+rm -rf "$SD"
 
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails guard test(s) failed"; exit 1; fi

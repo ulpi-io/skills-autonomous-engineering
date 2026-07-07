@@ -34,7 +34,9 @@ for fp in sys.argv[1:]:
         continue                     # old open-items runs stop nagging after a week (gc archives them)
     runs.append((age, status, fp, d))
 
-runs.sort()                          # freshest first
+runs.sort(key=lambda r: (r[1] != "running", r[0]))   # running FIRST (the header's promise), then freshest —
+                                     # so a live/interrupted run is never crowded out of the top-3 by
+                                     # fresher needs_attention runs (the case a re-init must be warned about)
 for age, status, fp, d in runs[:3]:
     units = d.get("units", {})
     done = sum(1 for u in units.values() if u.get("status") == "done")

@@ -6,10 +6,11 @@
 # refuses a lying `done`) by catching the case where the agent just stops WITHOUT finalizing at all.
 #
 # SAFE BY DESIGN — mirrors this collection's guard philosophy ("a guard must never brick a session"):
-#   · NO-OP unless a `running` checkpoint under $CLAUDE_PROJECT_DIR/.ulpi/runs has gone QUIET (untouched
-#     10min–4h). A live pipeline writes status constantly, so an actively-progressing run (fresh mtime) is
-#     never flagged — only a run left `running` while nothing is advancing. Ordinary sessions (no
-#     .ulpi/runs) are untouched entirely.
+#   · NO-OP unless a `running` checkpoint under $CLAUDE_PROJECT_DIR/.ulpi/runs exists and is not ancient
+#     (>4h = abandoned; gc archives it). A run left `running` at stop time is surfaced REGARDLESS of how
+#     recently it was written — the single most common dishonest stop is "write the last unit, report
+#     done, stop without finalizing", which leaves a FRESH mtime; an mtime floor (the old behaviour) let
+#     exactly that case slip through. Ordinary sessions (no .ulpi/runs) are untouched entirely.
 #   · LOOP-SAFE: a stop that is itself a Stop-hook continuation (`stop_hook_active`) is always allowed.
 #   · NON-BLOCKING by default (injects an honesty reminder via additionalContext). `ULPI_STOP_STRICT=1`
 #     upgrades it to a hard block ({"decision":"block"}) for synchronous runs that want the deterministic
@@ -33,7 +34,7 @@ if d.get("stop_hook_active"):
     sys.exit(0)
 runs = os.environ["ULPI_RUNS"]
 now = time.time()
-QUIET_MIN, STALE_MAX = 10 * 60, 4 * 3600
+STALE_MAX = 4 * 3600
 live = []
 for fp in glob.glob(os.path.join(runs, "*.json")):
     try:
@@ -42,8 +43,7 @@ for fp in glob.glob(os.path.join(runs, "*.json")):
         continue
     if r.get("status") != "running":
         continue
-    age = now - os.path.getmtime(fp)
-    if age < QUIET_MIN or age > STALE_MAX:      # fresh = actively progressing (skip); >4h = abandoned (gc handles it)
+    if now - os.path.getmtime(fp) > STALE_MAX:   # >4h = abandoned (gc archives it); anything fresher is surfaced
         continue
     units = r.get("units", {})
     openu = [k for k, u in units.items() if u.get("status") != "done"]
@@ -51,11 +51,11 @@ for fp in glob.glob(os.path.join(runs, "*.json")):
 if not live:
     sys.exit(0)
 ids = "; ".join("%s (%d/%d units still open)" % (i, o, t) for i, o, t in live)
-reason = ("Honest-termination check: %d autonomous run(s) are still status=running and have gone quiet — %s. "
+reason = ("Honest-termination check: %d autonomous run(s) are still status=running — %s. "
           "Before ending this turn, reconcile each checkpoint with reality: finalize it to its TRUE terminal "
-          "state (checkpoint.mjs finalize <file> done|needs_attention|aborted). Never leave a run 'running' "
-          "while reporting it done, and never report a clean verdict for a gate that did not run. If work is "
-          "genuinely still in flight in a tracked background task, this is just a reminder to say so."
+          "state (checkpoint.mjs finalize <file> done|needs_attention|aborted). Never leave a run marked "
+          "running while reporting it done, and never report a clean verdict for a gate that did not run. If "
+          "work is genuinely still in flight in a tracked background task, this is just a reminder to say so."
           % (len(live), ids))
 if os.environ.get("ULPI_STRICT") == "1":
     print(json.dumps({"decision": "block", "reason": reason}))
