@@ -116,12 +116,15 @@ file Claude Code does not load; memory deduped and within budget.
 
 ## Phase 3: Close the loop — the feed-forward is now AUTOMATIC
 
-Because the learnings live in CLAUDE.md, `.claude/rules`, and auto memory, Claude Code loads them into
-the very next session with zero extra steps: the loop closes by construction, not by asking a phase to
-read a file. Confirm and report that each learning actually landed in a loaded location (`/memory` lists
-what is loaded; check the CLAUDE.md `## Learnings` section and any new `.claude/rules` file). In pipeline
-composition this skill runs BEFORE `auto-map`, which then verifies the CLAUDE.md/rules the learnings
-touched against the real repo.
+Because the learnings live in native, auto-loaded memory, the next run picks them up with no extra step —
+with one nuance to state honestly: **CLAUDE.md and auto-memory `MEMORY.md` load in full EVERY session**, so
+lessons routed there close the loop unconditionally; a **`.claude/rules/<area>.md` lesson loads only when a
+future session touches files matching its `paths:` glob** (path-scoped by design — that is the point of an
+area-specific rule). So route a lesson the next run must ALWAYS see to CLAUDE.md / auto-memory, and an
+area-specific one to `.claude/rules`. Confirm and report that each learning actually landed in a loaded
+location (`/memory` lists what is loaded; check the CLAUDE.md `## Learnings` section and any new
+`.claude/rules` file). In pipeline composition this skill runs BEFORE `auto-map`, which then verifies the
+CLAUDE.md/rules the learnings touched against the real repo.
 
 **Success criteria:** every lesson is in a location Claude Code confirms it loads; none stranded in a
 file nothing reads.

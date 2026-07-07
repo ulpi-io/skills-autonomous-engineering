@@ -5,7 +5,8 @@
 //   2. description + when_to_use ≤ 1536 chars combined (Claude Code truncates past that — routing bug)
 //   3. every `references/<file>` and `scripts/<file>` mentioned in a SKILL.md exists; no orphans
 //   4. every scripts/*.sh|*.mjs is executable and passes a syntax check (bash -n / node --check;
-//      workflow templates are checked wrapped in an async fn, as the Workflow runtime executes them)
+//      workflow templates are wrapped in an async fn like the runtime executes them, AND linted for
+//      Workflow-sandbox-banned constructs: Date.now/Math.random/argless new Date/require/ESM import)
 //   5. frontmatter hooks (if any) parse and their resolver covers the plugin root path
 //   6. no references to external skill packs (non-ulpi GitHub URLs, examples/ paths) in skill content
 //   7. plugin manifest (if present) points at real paths
@@ -66,12 +67,12 @@ for (const dir of skillDirs) {
   const budget = desc.length + when.length;
   if (budget > 1536) p(`${dir}: description+when_to_use = ${budget} chars > 1536 (Claude Code truncates — routing degraded)`);
 
-  // 3. referenced files exist (own dir first; a mention may point at ANOTHER skill's file —
-  //    accept it if it exists under any skill dir, flag only if it exists nowhere)
+  // 3. referenced files exist (own dir first; a mention may point at ANOTHER skill's file, or a
+  //    repo-root scripts/ file like the CI test suites — accept any of those, flag only if nowhere)
   for (const ref of new Set([...text.matchAll(/`?(references|scripts)\/([A-Za-z0-9._-]+)`?/g)].map(m => `${m[1]}/${m[2]}`))) {
     const local = existsSync(join(ROOT, dir, ref));
-    const anywhere = local || skillDirs.some(d2 => existsSync(join(ROOT, d2, ref)));
-    if (!anywhere) p(`${dir}: SKILL.md mentions ${ref} but the file exists in no skill`);
+    const anywhere = local || existsSync(join(ROOT, ref)) || skillDirs.some(d2 => existsSync(join(ROOT, d2, ref)));
+    if (!anywhere) p(`${dir}: SKILL.md mentions ${ref} but the file exists nowhere (own dir, repo root, or any skill)`);
   }
   for (const sub of ['references', 'scripts']) {
     const subdir = join(ROOT, dir, sub);
@@ -107,6 +108,19 @@ for (const dir of skillDirs) {
       try {
         execFileSync('node', ['--input-type=module', '--check', '-'], { input: wrapped, stdio: 'pipe' });
       } catch (e) { p(`${dir}: references/${f} body fails Workflow-context syntax check: ${String(e.stderr || e.message).slice(0, 300)}`); }
+      // A --check proves the body PARSES; it does NOT prove it will RUN in the Workflow sandbox, which
+      // BANS Date.now()/Math.random()/argless new Date() (they break resume determinism) and
+      // require()/ESM import (no module loader). Lint for them so a template that would throw at runtime
+      // fails CI here. Require call syntax so a mention in a comment/prompt string doesn't false-positive.
+      for (const [re, name] of [
+        [/\bDate\.now\s*\(/, 'Date.now()'],
+        [/\bMath\.random\s*\(/, 'Math.random()'],
+        [/\bnew\s+Date\s*\(\s*\)/, 'argless new Date()'],
+        [/\brequire\s*\(/, 'require()'],
+        [/^\s*import\s[^\n]*\sfrom\s/m, 'ESM import'],
+      ]) {
+        if (re.test(body)) p(`${dir}: references/${f} uses '${name}' — BANNED in the Workflow sandbox (breaks resume / no module loader). Remove it.`);
+      }
     }
   }
 

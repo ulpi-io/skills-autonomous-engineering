@@ -198,12 +198,15 @@ Finalize the checkpoint and report honestly (see Output Contract). Include the b
 ## Enforcement (deterministic, not prose)
 
 While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-test-integrity.sh` on
-every Edit/Write: adding `.only`/`.skip`/`xit`/`@pytest.mark.skip`/`#[ignore]`/`@ts-ignore`/
-`eslint-disable` to a test file is BLOCKED at the tool layer. The cardinal sin (gaming the suite
-green) is mechanically impossible, not merely discouraged. Genuine, user-approved weakening goes
-through the explicit escape hatch — `touch <project>/.ulpi/allow-test-weaken` opens a 2-minute
-approval window (then expires; `AUTO_TEST_ALLOW_WEAKEN=1` exists for settings-level use) — with the
-reason stated in the reply.
+every Edit/Write: adding a `.only`/`.skip`/`xit`/`xdescribe`/`.todo`/`@pytest.mark.skip`/`@unittest.skip`/
+`#[ignore]` marker or a `@ts-ignore`/`@ts-expect-error`/`eslint-disable`/`# type: ignore` suppression to a
+test file is BLOCKED at the tool layer. That makes the skip/only/ignore/suppression class of gaming
+mechanically impossible. The OTHER cheat vectors this skill forbids (deleting a test, a vacuous
+`expect(true)`, weakening an assertion, masking a flake with sleeps) are not statically detectable at the
+edit layer — they stay enforced by the mutation-check discipline and the fail-closed contract above, not
+by this hook. Genuine, user-approved weakening goes through the explicit escape hatch —
+`touch <project>/.ulpi/allow-test-weaken` opens a 2-minute approval window (then expires;
+`AUTO_TEST_ALLOW_WEAKEN=1` exists for settings-level use) — with the reason stated in the reply.
 
 ## Guardrails
 

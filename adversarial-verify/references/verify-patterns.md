@@ -52,7 +52,10 @@ Don't run identical skeptics when the claim can break two ways — assign the le
 const lenses = ['correctness', 'security']              // or ['regression','reproduction'], etc.
 const vs = (await parallel(lenses.map(L => () =>
   agent(verifierPrompt(claim, L), { schema: VERDICT })))).filter(Boolean)
-const verdict = vs.every(v => !v.refuted)               // both lenses must clear it (AND, not majority)
+// FAIL CLOSED: require EVERY lens to have actually returned before AND-ing. agent() returns null on
+// death/skip and .filter(Boolean) drops it, and [].every() / a short array's .every() is `true` — so
+// without the length check a dead (or half-dead) panel would falsely "clear" a safe-to-ship claim.
+const verdict = vs.length === lenses.length && vs.every(v => !v.refuted)   // both lenses RAN and cleared it
 ```
 
 For a claim that must hold under ALL lenses (a "safe to ship"), use AND across lenses. For a defect that
@@ -67,11 +70,14 @@ as soon as each finding is ready (pipeline, no barrier):
 export const meta = { name:'gate-findings', description:'adversarially verify each finding before acting',
   phases:[{title:'Verify'}] }
 
-const verified = (await parallel(findings.map(f => () =>
-  parallel(pickLenses(f).map(L => () =>
+const verified = (await parallel(findings.map(f => () => {
+  const lenses = pickLenses(f)
+  return parallel(lenses.map(L => () =>
     agent(verifierPrompt(f, L), { phase:'Verify', schema: VERDICT })))
-    .then(vs => ({ f, real: tally(vs.filter(Boolean)) }))
-))).filter(Boolean)
+    // pass the EXPECTED count so tally fails closed on a dead panel: a filtered-empty verdict set must
+    // be REJECTED, never survive. tally(returned, expected) → rejected when returned < ceil(expected/2).
+    .then(vs => ({ f, real: tally(vs.filter(Boolean), lenses.length) }))
+}))).filter(Boolean)
 
 return {
   survivors:  verified.filter(v => v.real).map(v => v.f),
@@ -84,8 +90,9 @@ return {
 
 ## The tally rule, stated once
 
-A claim SURVIVES iff:
-1. a quorum of verifiers actually returned (dead/timed-out don't count), AND
+A claim SURVIVES iff (`tally(returned, expected)` enforces all three — pass it BOTH the surviving verdicts
+and the count you dispatched, or it cannot check #1):
+1. a quorum of verifiers actually returned (`returned ≥ ceil(expected/2)`; dead/timed-out don't count), AND
 2. a majority of returned verdicts are `refuted=false`, AND
 3. no single high-confidence, counterexample-backed refutation stands.
 

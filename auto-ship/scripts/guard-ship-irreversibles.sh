@@ -1,5 +1,6 @@
 #!/bin/bash
-# guard-ship-irreversibles - PreToolUse[Bash] hook. Blocks: plain force-push and push --delete during ship runs
+# guard-ship-irreversibles - PreToolUse[Bash] hook. Blocks history-rewriting/ref-removing pushes during ship runs:
+#   force (--force, -f clusters, a `+refspec`, --mirror) and ref-delete (--delete/-d, a `:refspec`, --prune, --mirror).
 # Quote-aware + newline-aware parsing (shlex): flags inside quoted strings never leak into
 # parsing; every line and ;|& segment is analyzed separately. Anchored to CLAUDE_PROJECT_DIR.
 # exit 0 = allow; exit 2 = BLOCK (stderr shown to Claude). Fail-open without python3.
@@ -67,9 +68,14 @@ PREFIX = "guard-ship-irreversibles: "
 for seg in segments(c):
     t = git_args(seg, "push")
     if t is None: continue
-    if ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)) and "--force-with-lease" not in t:
-        block("plain git push --force rewrites shared history - an irreversible step. Use --force-with-lease, or stop and get explicit user sign-off.")
-    if "--delete" in t or "-d" in t:
-        block("git push --delete removes a remote ref (branch/tag) - irreversible for consumers. Get explicit user sign-off first.")
+    positionals = [x for x in t if not x.startswith("-")]
+    forced_refspec = any(x.startswith("+") for x in positionals)   # `+main` / `+refs/...` force a rewrite WITHOUT --force
+    forces = ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)
+              or forced_refspec or "--mirror" in t)
+    if forces and "--force-with-lease" not in t:
+        block("a plain force-push (--force, a -f cluster, a +refspec like `+main`, or --mirror) rewrites shared history - an irreversible step. Use --force-with-lease, or stop and get explicit user sign-off.")
+    delete_refspec = any(x.startswith(":") for x in positionals)   # `:main` (empty source) deletes the remote ref
+    if "--delete" in t or "-d" in t or delete_refspec or "--prune" in t or "--mirror" in t:
+        block("removing a remote ref (git push --delete/-d, a `:refspec`, --prune, or --mirror) is irreversible for consumers. Get explicit user sign-off first.")
 '
 exit $?

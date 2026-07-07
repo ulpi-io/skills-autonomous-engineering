@@ -2,8 +2,10 @@
 name: schedule-recurring-agent
 version: 0.1.0
 description: |
-  Stand up a recurring cron routine for standing work (triage, monitoring, audits, digests): a self-contained IDEMPOTENT brief (each run wakes memory-less and must dedup prior work), a cadence matched to how often work actually arrives, a per-run budget, escalation rules, and a teardown condition. Use for scheduled repeat work — not one-off waits (watch-and-act).
+  Stand up a recurring scheduled agent for standing work (triage, monitoring, audits, digests): a self-contained IDEMPOTENT brief (each run wakes memory-less and must dedup prior work), a cadence matched to how often work actually arrives, a per-run BOUND, escalation rules, and a teardown condition. For durable unattended work that runs while you're offline, use claude.ai Routines (the /schedule skill / RemoteTrigger); an in-session CronCreate is the lighter, session-scoped alternative. Use for scheduled repeat work — not one-off waits (watch-and-act).
 allowed-tools:
+  - Skill
+  - RemoteTrigger
   - Bash
   - Read
   - Write
@@ -82,21 +84,42 @@ The brief is what the routine wakes into with zero memory — make it complete a
 **Success criteria:** a brief a fresh, memory-less agent can execute correctly and repeatedly without
 duplicating work or exceeding its mandate.
 
-## Phase 2: Pick the cadence and create the routine
+## Phase 2: Pick the cadence and the mechanism, then create the routine
 
 - Choose the cron cadence from the work's real arrival rate: issue triage → weekday mornings; CVE watch →
   weekly; PR babysitting → a few times a day; nightly audit → once daily. Prefer the LEAST frequent
   cadence that still catches the work in time.
-- Create it with `CronCreate` (the schedule + the brief). Confirm it registered.
+- **Pick the mechanism honestly — this is the load-bearing choice:**
+  - **Durable / unattended (the usual case)** — work that must run on its own timeline even while you are
+    offline (nightly audits, CVE watch, weekday triage): stand it up as a **claude.ai Routine** via the
+    **`/schedule` skill** (backed by the `RemoteTrigger` API). Routines run on Anthropic's infrastructure
+    on a cron schedule, persist across sessions, and their runs count against your plan's usage/rate
+    limits. This is the ONLY mechanism that actually delivers "runs when no one's kicking it off."
+  - **In-session only (the lighter alternative)** — a recurrence you want ONLY while a session stays
+    open: `CronCreate`. It is NOT a standing cloud agent — see the constraints below before choosing it.
+- Create it, then confirm it registered (`/schedule` list for a Routine; `CronList` for an in-session cron).
 
-**Success criteria:** the routine is created on a justified cadence; registration confirmed.
+### Constraints of each mechanism (state these to the user — they change what "recurring" means)
+
+| | claude.ai Routine (`/schedule` · `RemoteTrigger`) | In-session cron (`CronCreate`) |
+|---|---|---|
+| Runs while you're offline | **Yes** — on Anthropic infra | **No** — only while this session's REPL is idle |
+| Survives closing Claude | **Yes** — persistent | **No** — in-memory; gone when the session exits |
+| Lifetime | until you disable/remove it | **auto-expires after 7 days** (one final fire, then deleted) |
+| Per-run token budget | **no native cap** — bound via brief + `budget-guard`; runs count against plan usage | same — no native cap |
+
+There is NO native per-run token budget on either — the per-run bound is enforced by the brief +
+`budget-guard`, not a platform parameter.
+
+**Success criteria:** created on the mechanism that matches its durability need, on a justified cadence;
+registration confirmed; the mechanism's constraints stated to the user.
 
 ## Phase 3: Manage the lifecycle
 
-- List/inspect existing routines (`CronList`) before creating a near-duplicate — extend one rather than
-  stacking overlapping schedules.
-- When the teardown condition is met (or the user asks), delete it (`CronDelete`). Don't leave dead
-  routines running.
+- List/inspect existing routines before creating a near-duplicate — extend one rather than stacking
+  overlapping schedules (`/schedule` list for claude.ai Routines; `CronList` for in-session crons).
+- When the teardown condition is met (or the user asks), tear it down (disable/remove via `/schedule`
+  for a Routine; `CronDelete` for an in-session cron). Don't leave dead routines running.
 
 **Success criteria:** no duplicate/overlapping routines; completed/cancelled routines are torn down.
 
@@ -146,7 +169,9 @@ briefing the former correctly.
 
 Report:
 
-1. the routine created — its job, cadence (with the rationale), and the idempotency rule
+1. the routine created — its job, cadence (with the rationale), the MECHANISM (claude.ai Routine vs
+   in-session cron) and why, and the idempotency rule
 2. the per-run bound and the report/escalation channel
-3. the teardown condition + how to list/cancel it (cron tools)
+3. the teardown condition + how to list/cancel it (via `/schedule` for a Routine, or the cron tools for
+   an in-session cron)
 4. confirmation it registered (or the duplicate it extended instead)

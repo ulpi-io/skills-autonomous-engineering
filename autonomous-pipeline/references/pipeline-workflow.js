@@ -93,6 +93,16 @@ const MAX_FIX = CFG.maxFix ?? 3
 const MAX_BUILD_PARALLEL = CFG.maxBuildParallel ?? 4   // worktree engineers are heavy (full checkout)
 const MAX_PARALLEL = CFG.maxParallel ?? 6              // read-only reviewers/verifiers
 
+// ── whole-run budget (SKILL rule #5: "BUDGET THE WHOLE RUN") — the Workflow `budget` global is the
+//    turn's token target and a HARD ceiling. Stop-and-report at the next phase boundary once the run
+//    dips below the floor, rather than paying for an overshoot. Null total = no target set → never fires.
+const BUDGET_FLOOR = CFG.budgetFloor ?? 60_000
+const overBudget = () => !!(typeof budget !== 'undefined' && budget?.total && budget.remaining() < BUDGET_FLOOR)
+const budgetStop = (where) => {
+  register.push({ phase: where, kind: 'budget', why: `pipeline token budget floor (${BUDGET_FLOOR}) reached — stopped before ${where}; remaining work is OPEN, not done (fail closed)` })
+  log(`BUDGET STOP before ${where}: ~${(typeof budget !== 'undefined' && budget?.remaining?.()) || '?'} tokens left`)
+}
+
 const ck = (opArgs) => CK ? `node "${CK}" ${opArgs} || true` : `true`
 const register = []   // verified open findings — the return value
 const gateFail = (phase, why) => { register.push({ phase, kind: 'gate', why }); log(`GATE FAILED [${phase}]: ${why}`) }
@@ -222,6 +232,7 @@ if (buildDone) log('Build: already done (checkpoint) — skipped entirely')
 else if (CK) await agent(`Run: ${ck(`phase ${STATUS} build running`)}`, { label: 'status:build', phase: 'Build' }).catch(() => null)
 const buildOut = []
 for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
+  if (overBudget()) { budgetStop(`build layer ${li + 1}`); break }   // remaining layers' tasks stay OPEN (not in DONE → converged:false)
   const todo = layer.filter(id => !DONE.has(id))
   log(`layer ${li + 1}/${PLAN.layers.length}: ${todo.length} task(s) to build, ${layer.length - todo.length} skipped (done)`)
   const results = await mapAll(todo, async (id) => {
@@ -293,6 +304,7 @@ async function phaseAgent(title, enabled, prompt, schema) {
   const key = title.toLowerCase().replace(/\s+/g, '_')
   if (DONE_PHASES.has(key)) { log(`${title}: already done (checkpoint) — skipped, register rebuilt from openItems`); return { skippedDone: true, ok: true } }
   if (!enabled) { log(`${title}: skipped by config (recorded, not counted clean)`); return { skipped: true } }
+  if (overBudget()) { budgetStop(key); return { skipped: true, budget: true } }
   const out = await rAgent(`FIRST (non-fatal): run ${ck(`phase ${STATUS} ${key} running`)}\n` + prompt, { label: title.toLowerCase(), phase: title, schema })
   if (!out) gateFail(title.toLowerCase(), `${title} agent died — a gate that did not run is NOT clean`)
   return out || { died: true }
@@ -309,7 +321,7 @@ if (!simp?.skippedDone && !simp?.skipped) await persistPhase('simplify', simpIte
 
 const test = await phaseAgent('Test', true,
   `Run the auto-test contract over the diff of ${BRANCH} in ${ROOT}: find untested behaviors in the changed code; write ONE meaningful test per behavior (state-based, spec-named); MUTATION-CHECK each (break the target — the test must fail; restore — must pass; reject tautologies); loop until the scoped suite is green, max 6 iterations, never skipping/weakening a test. Return { ok: suiteGreen && allMutationChecked, summary, findings: [gaps left, blocked units] }.`, RES_SCHEMA)
-if (test && !test.skipped && !test.skippedDone && !test.ok) gateFail('test', test?.summary || 'suite not green / tests not mutation-verified')
+if (test && !test.skipped && !test.skippedDone && !test.died && !test.ok) gateFail('test', test?.summary || 'suite not green / tests not mutation-verified')  // !died: phaseAgent already recorded a died gate — don't double-count
 const testItems = (test?.findings || []).map(f => ({ phase: 'test', ...f }))
 register.push(...testItems)
 if (!test?.skippedDone) await persistPhase('test', testItems, 'Test', test?.died || (test && !test.skipped && !test.ok) ? 'blocked' : 'done')
@@ -317,12 +329,17 @@ if (!test?.skippedDone) await persistPhase('test', testItems, 'Test', test?.died
 phase('Review')
 const DIMENSIONS = ['correctness', 'security', 'test adequacy', 'API/contract compatibility']
 const reviewDone = DONE_PHASES.has('review')
+const reviewBudgetSkip = !reviewDone && overBudget()
 if (reviewDone) log('Review: already done (checkpoint) — skipped, confirmed findings rebuilt from openItems')
-const raw = reviewDone ? [] : (await mapAll(DIMENSIONS, (dim) => agentGate(() => agent(
+else if (reviewBudgetSkip) budgetStop('review')
+// Review is an INLINE phase (not via phaseAgent) — write its 'running' status itself, or currentPhase
+// stays stuck on 'test' and a status query mid-review misreports the phase.
+else if (CK) await agent(`Run: ${ck(`phase ${STATUS} review running`)}`, { label: 'status:review', phase: 'Review' }).catch(() => null)
+const raw = (reviewDone || reviewBudgetSkip) ? [] : (await mapAll(DIMENSIONS, (dim) => agentGate(() => agent(
   `Review the diff of ${BRANCH} vs its base in ${ROOT} through the ${dim.toUpperCase()} lens only. Return JSON { findings: [{file, line, issue, severity: "blocker"|"concern"|"nit", scenario}] } — concrete failure scenarios only, no style opinions.`,
   { label: `review:${dim}`, phase: 'Review', schema: { type: 'object', required: ['findings'],
     properties: { findings: { type: 'array', items: { type: 'object' } } } } }), `review:${dim}`))).filter(Boolean)
-if (!reviewDone && raw.length < DIMENSIONS.length) gateFail('review', `${DIMENSIONS.length - raw.length} review dimension(s) did not run`)
+if (!reviewDone && !reviewBudgetSkip && raw.length < DIMENSIONS.length) gateFail('review', `${DIMENSIONS.length - raw.length} review dimension(s) did not run`)
 const sevRank = { blocker: 0, concern: 1, nit: 2 }
 const byKey = {}
 for (const f of raw.flatMap(r => r.findings || [])) {
@@ -356,7 +373,7 @@ if (!perf?.skippedDone && !perf?.skipped) await persistPhase('performance', perf
 const reviewBlockers = register.filter(r => r.phase === 'review' && r.severity === 'blocker').length
 const ship = await phaseAgent('Ship prep', OPT.shipPrep && reviewBlockers === 0,
   `Run the auto-ship PREP contract (NO irreversible step — no push --force, no deploy, no publish) for ${BRANCH} in ${ROOT}: audit the pre-launch gates (final validate readiness, docs for public changes, rollback path), draft the changelog FROM the actual commits, and prepare (do not open) the PR body with gate results. Return { ok, summary, findings: [gate blockers] }.`, RES_SCHEMA)
-if (ship && !ship.skipped && !ship.skippedDone && !ship.ok) gateFail('ship_prep', ship?.summary || 'pre-launch gates not clean')
+if (ship && !ship.skipped && !ship.skippedDone && !ship.died && !ship.ok) gateFail('ship_prep', ship?.summary || 'pre-launch gates not clean')  // !died: phaseAgent already recorded a died gate — don't double-count
 const shipItems = (ship?.findings || []).map(f => ({ phase: 'ship_prep', ...f }))
 register.push(...shipItems)
 if (!ship?.skippedDone && !ship?.skipped) await persistPhase('ship_prep', shipItems, 'Ship prep', ship?.died || (ship && !ship.skipped && !ship.ok) ? 'blocked' : 'done')

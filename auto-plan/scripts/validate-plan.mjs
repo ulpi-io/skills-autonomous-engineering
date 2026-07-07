@@ -12,9 +12,10 @@
 //   4. INDEPENDENT — within a layer, write scopes are disjoint (prefix-aware: src/api and
 //                    src/api/handlers.ts overlap) — parallel writers must never race.
 //   5. ATOMIC      — ≤3 entries per writeScope (split bigger tasks).
-//   6. SLICE VALIDATE — non-empty per task; flags the vitest footgun (`... test -- <file>` runs the
-//                    WHOLE package: the `--` makes vitest ignore the positional) and whole-suite
-//                    commands that can only pass at end-state.
+//   6. SLICE VALIDATE — non-empty per task; BLOCKS whole-suite e2e gates (a bare playwright/cypress
+//                    runner that only greens at end-state); WARNS (non-blocking) on the ambiguous
+//                    `<runner> test -- <file>` form — the vitest footgun (`--` drops the positional)
+//                    but ALSO canonical for Jest, so it advises an explicit runner without blocking.
 //
 // Usage:  node validate-plan.mjs <plan.json> [--json] [--render]   (--render prints the derived human view)
 // Exit:   0 = plan is structurally safe to build · 1 = violations (listed) · 2 = unreadable
@@ -29,6 +30,8 @@ catch (e) { console.error(`cannot read/parse ${file}: ${e.message}`); process.ex
 
 const problems = [];
 const p = (task, issue) => problems.push({ task, issue });
+const warnings = [];                              // non-blocking advisories (heuristics, not structural facts)
+const warn = (task, issue) => warnings.push({ task, issue });
 
 const tasks = Array.isArray(plan.tasks) ? plan.tasks : [];
 const layers = Array.isArray(plan.layers) ? plan.layers : [];
@@ -101,11 +104,19 @@ for (const t of tasks) if ((t?.writeScope || []).length > 3) p(t.id, `writeScope
 // ── 6. slice-validate command form ─────────────────────────────────────────────────
 for (const t of tasks) {
   const v = t?.validate || '';
-  if (/\btest\s+--\s+\S/.test(v) && /vitest|pnpm|npm|yarn/.test(v)) {
-    p(t.id, `validate '${v}' hits the vitest footgun: '... test -- <file>' makes the runner IGNORE the positional and run the whole package — use '... exec vitest run <file>'`);
+  // ADVISORY (non-blocking): `<runner> test -- <file>` is the vitest footgun (the `--` makes vitest
+  // ignore the positional and run the WHOLE package) — but it is ALSO the canonical single-file form
+  // for Jest / react-scripts / CRA (a huge slice of npm & yarn repos), where it works correctly. The
+  // runner is not knowable from the command, so this WARNS (never hard-blocks a possibly-correct plan
+  // — auto-build treats exit 1 as "never build"): prefer an explicit `exec vitest run`/`exec jest`.
+  if (/\btest\s+--\s+\S/.test(v)) {
+    warn(t.id, `validate '${v}' uses the ambiguous '<runner> test -- <file>' form — canonical for Jest but the vitest footgun (the '--' drops the positional, running the whole package). Prefer an explicit runner: '... exec vitest run <file>' or '... exec jest <file>'.`);
   }
-  if (/\b(e2e|playwright test\s*$|cypress run\s*$)\b/.test(v)) {
-    p(t.id, `validate '${v}' looks like a whole-suite/e2e gate that only passes at end-state — slice-scope it to this task's files`);
+  // BLOCKING: a bare e2e runner with NO positional only greens at end-state (structural whole-suite
+  // gate). Anchored to end-of-command so an ordinary path that merely CONTAINS "e2e"
+  // (e.g. `vitest run src/e2e/x.test.ts`) is not mis-flagged.
+  if (/(^|\s)(playwright test|cypress run)\s*$/.test(v)) {
+    p(t.id, `validate '${v}' looks like a whole-suite e2e gate that only passes at end-state — slice-scope it to this task's files`);
   }
 }
 
@@ -126,8 +137,11 @@ if (rest.includes('--render')) {
   console.log(lines.join('\n'));
 }
 
-const out = { file, tasks: tasks.length, layers: layers.length, violations: problems.length, problems };
+const out = { file, tasks: tasks.length, layers: layers.length, violations: problems.length, problems, warnings };
 if (rest.includes('--json')) console.log(JSON.stringify(out, null, 2));
-else if (problems.length) console.error(`✗ plan is NOT safe to build: ${problems.length} violation(s)\n` + problems.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));
-else console.log(`✓ plan is structurally safe to build: ${tasks.length} tasks, ${layers.length} layers — acyclic, topologically ordered, intra-layer disjoint, atomic, slice-validated`);
+else {
+  if (warnings.length) console.error(`⚠ ${warnings.length} advisory warning(s) (non-blocking):\n` + warnings.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));
+  if (problems.length) console.error(`✗ plan is NOT safe to build: ${problems.length} violation(s)\n` + problems.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));
+  else console.log(`✓ plan is structurally safe to build: ${tasks.length} tasks, ${layers.length} layers — acyclic, topologically ordered, intra-layer disjoint, atomic, slice-validated`);
+}
 process.exit(problems.length ? 1 : 0);

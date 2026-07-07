@@ -12,7 +12,7 @@ per-iteration scoping).
 |---|---|---|
 | **done-condition** | `/goal` objective — verified after each turn by a SEPARATE model (the actor never grades itself) | `/goal` objective — the completion audit must PROVE each requirement against current evidence before `update_goal complete` |
 | **maxIterations** | `/loop` stop conditions (count/time/event) | goal turns bound by the token budget |
-| **budget** | the session/turn token target; routines have per-run budgets | budgeted goals — a hard token budget on the goal; usage reported at completion |
+| **budget** | the session/turn token target (in a Workflow, `budget.remaining()` — a hard ceiling). A scheduled Routine has NO native per-run token budget — bound each run via the brief + budget-guard; its runs count against your plan's usage/rate limits | budgeted goals — a hard token budget on the goal; usage reported at completion |
 | **maxStall (no-progress)** | NOT native — keep the skill's stall/oscillation detection inside the loop body | `update_goal blocked` fires only after the SAME blocking condition recurs 3 consecutive goal turns — native maxStall=3 |
 | **escalation triggers** | the loop body stops and asks (AskUserQuestion); hooks block irreversibles deterministically | `blocked` status returns control to the user; the brief must name the escalation triggers |
 
@@ -30,7 +30,9 @@ per-iteration scoping).
   the outer `maxIterations`.
 - **`ScheduleWakeup`** (dynamic /loop) for self-paced ticks — pick delays per the cache-window rules in
   `watch-and-act`.
-- **Routines** (scheduled cloud agents) for standing loops — see `schedule-recurring-agent`.
+- **Routines** (durable scheduled cloud agents via the `/schedule` skill / `RemoteTrigger`, run on
+  Anthropic infra) for standing loops — see `schedule-recurring-agent`. (A `CronCreate` cron is the
+  session-only, non-durable alternative — it dies with the session and auto-expires in 7 days.)
 - **What stays hand-rolled here:** the anti-thrash detectors (flat-signal, oscillation-hash,
   regression-revert) and one-unit-per-iteration scoping — the native loop bounds time and cost, not
   futility. Keep Step 3 of `converge-loop` active inside the goal.

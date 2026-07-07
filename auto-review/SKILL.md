@@ -101,7 +101,8 @@ scenario).
   severity (a blocker gets a stronger panel). Only survivors are kept; refuted findings go to a rejection
   ledger (reported, so you see what was filtered).
 
-**Success criteria:** a deduped list of VERIFIED findings, each severity-labeled; rejected findings logged.
+**Success criteria:** a deduped list of VERIFIED findings, each severity-labeled; unverified (dead-panel)
+findings kept open; rejected findings logged.
 
 ## Phase 3: Report — or, if asked, fix the blockers (bounded)
 
@@ -162,5 +163,8 @@ Report:
 1. scope + diff size (flag if it should be split); dimensions that ran (coverage — fail closed on gaps)
 2. verified findings by severity (Blocker / Concern / Nit / FYI): file:line, issue, failure scenario,
    suggested fix
-3. rejection ledger — findings refuted by verification (so filtering is visible)
-4. if `--fix`: confirmed blockers resolved (each re-verified, no regressions) vs. left for the user
+3. unverified findings — where the skeptic panel died below quorum (fail closed: kept OPEN as
+   needing re-verification or hand review, never dropped or counted clean) — matches the workflow's
+   `unverified` return
+4. rejection ledger — findings refuted by verification (so filtering is visible)
+5. if `--fix`: confirmed blockers resolved (each re-verified, no regressions) vs. left for the user

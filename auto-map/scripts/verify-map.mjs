@@ -88,14 +88,20 @@ const checkFile = (file, kind) => {
   if (kind === 'root' && !hasGenerated) p(file, `no auto-map generation stamp — update-don't-clobber cannot distinguish generated from human sections`);
   for (const m of text.matchAll(/^\s*[-*]?\s*`([^`\n]+)`\s*—?.*$/gm)) {
     const cmd = m[1];
-    if (!/^(npm|pnpm|yarn|bun|make|cargo|go|pytest|node|npx|composer|php|rake|mvn|gradle)\b/.test(cmd)) continue;
+    // Match a runner binary followed by whitespace or end-of-span — NOT a word boundary, or `go\b`
+    // would match `go.mod`/`go.work`/`go.sum` and `node\b` would match `node.js`, mis-flagging an
+    // ordinary Key-files bullet as an unproven command.
+    if (!/^(npm|pnpm|yarn|bun|deno|make|cargo|go|pytest|python|node|npx|composer|php|rake|bundle|ruby|mvn|gradle|dotnet|poetry|uv|just|task)(\s|$)/.test(cmd)) continue;
     const lineText = m[0];
     const marked = /\((verified[^)]*|unverified)\)/.test(lineText);
-    if (RUN_CMDS) {
+    // Long-running verbs (dev/serve/start/watch/preview) never exit — executing one would hang until
+    // the timeout and be reported as a failure. Verify these by MARKER only, never by execution.
+    const longRunning = /(^|\s)(dev|serve|start|watch|preview)(\s|$)/.test(cmd);
+    if (RUN_CMDS && !longRunning) {
       try { execFileSync('bash', ['-c', cmd], { cwd: ROOT, stdio: 'pipe', timeout: 300000 }); }
       catch { p(file, `command \`${cmd}\` FAILS when executed — a map command that fails on first use destroys trust in the whole map`); }
     } else if (!marked) {
-      p(file, `command \`${cmd}\` carries no (verified)/(unverified) marker and --run-commands not used — unproven claim`);
+      p(file, `command \`${cmd}\` carries no (verified)/(unverified) marker${longRunning ? ' (long-running — must be marker-verified, not executed)' : ' and --run-commands not used'} — unproven claim`);
     }
   }
   return text;

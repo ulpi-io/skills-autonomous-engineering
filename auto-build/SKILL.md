@@ -84,9 +84,10 @@ stepping *between* tasks, not the verification: every task still earns a passing
 
 ## Phase 0: Preflight — plan, clean baseline, working branch
 
-- Resolve the plan (`$plan`, or newest `.ulpi/plans/*`); validate its shape (tasks with id / write scope /
-  validate, acyclic `layers` that respect `dependsOn`). No plan → route to `auto-plan`. Malformed/cyclic
-  plan → STOP (it would build on a broken base).
+- Resolve the plan (`$plan`, or newest `.ulpi/plans/*`), then run the deterministic gate:
+  `node <auto-plan-dir>/scripts/validate-plan.mjs <plan.json>` — a non-zero exit is disqualifying (the
+  same structural judge auto-plan and the pipeline preflight run; mechanically checked, never prose-only).
+  No plan → route to `auto-plan`. Malformed/cyclic plan → STOP (it would build on a broken base).
 - Confirm `root` is a git work tree with a committed `workingBranch`; never build on a protected branch
   without explicit confirmation.
 - Require a CLEAN baseline: `git status --porcelain` shows only expected planning artifacts
@@ -181,7 +182,8 @@ reflects the final state.
 ## Enforcement (deterministic, not prose)
 
 While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-git-hygiene.sh` on
-every Bash call: `git add -A/./--all`, `commit -a/--all`, `reset --hard`, and `clean -f` are BLOCKED
+every Bash call: bulk staging (`git add`/`stage -A/./--all` and whole-repo pathspecs like `:/`),
+`commit -a/--all`, plain `git push --force` (non-lease), `reset --hard`, and `clean -f` are BLOCKED
 at the tool layer (token-parsed — `--amend` and commit-message contents never false-positive). The
 clean-rollback contract is enforced by machinery, not by asking nicely. Rules 2–3 above are therefore
 not aspirational.

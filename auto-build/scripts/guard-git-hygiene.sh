@@ -65,9 +65,10 @@ def block(msg):
 
 PREFIX = "guard-git-hygiene: "
 for seg in segments(c):
-    t = git_args(seg, "add")
-    if t is not None and any(x in ("-A", "--all", "-a", ".") for x in t):
-        block("bulk staging (git add -A/./--all) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
+    for _sub in ("add", "stage"):   # `git stage` is a documented synonym for `git add`
+        t = git_args(seg, _sub)
+        if t is not None and any(x in ("-A", "--all", "-a", ".", ":/", ":(top)") or x.startswith(":/") for x in t):
+            block("bulk staging (git add/stage -A/./--all or a whole-repo pathspec) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
     t = git_args(seg, "commit")
     if t is not None and any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
         block("git commit -a/--all stages everything implicitly - add the task files explicitly, then commit.")
