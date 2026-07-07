@@ -32,6 +32,7 @@ w("dup.json",      {"tasks": [task("T1"), task("T1")], "layers": [["T1"]]})
 w("unlayered.json",{"tasks": [task("T1"), task("T2", dep=["T1"])], "layers": [["T1"]]})
 w("thin.json",     {"tasks": [task("A", acc=["only one"])], "layers": [["A"]]})
 w("footgun.json",  {"tasks": [task("A", val="pnpm --filter pkg test -- src/a.test.ts")], "layers": [["A"]]})
+w("jestcanon.json",{"tasks": [task("A", val="npm test -- src/a.test.ts")], "layers": [["A"]]})
 w("e2e.json",      {"tasks": [task("A", val="playwright test")], "layers": [["A"]]})
 PY
 
@@ -45,7 +46,9 @@ catch   "phantom dependsOn"        "does not exist" ghostdep.json
 catch   "duplicate id"             "duplicate"    dup.json
 catch   "unlayered task"           "never build"  unlayered.json
 catch   "thin acceptance"          "acceptance criteria" thin.json
-catch   "vitest -- footgun"        "footgun"      footgun.json
+catch   "vitest -- footgun warned"  "footgun"      footgun.json
+want 0  "footgun is a WARNING, not a build-blocker" footgun.json
+want 0  "Jest-canonical 'npm test -- <file>' not blocked" jestcanon.json
 catch   "whole-suite e2e validate" "end-state"    e2e.json
 want 2  "unreadable plan exits 2"                 nope.json
 

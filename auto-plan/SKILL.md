@@ -88,8 +88,8 @@ engineer should invoke for correct patterns), and `reviewer` (the installed spec
 each the real installed name, or **null** when nothing genuinely fits (the build then runs a general
 engineer). Never invent an agent/skill that isn't installed, and never route on a guessed name.
 
-Keep tasks thin: a task should be a single vertical slice touching **at most 3 files** — split anything
-bigger; MERGE two that can't validate independently. Four planning failure modes to design out per task:
+Keep tasks thin: a task should be a single vertical slice with **at most 3 write-scope entries** (files or
+dirs) — split anything bigger; MERGE two that can't validate independently. Four planning failure modes to design out per task:
 
 - **Capability providers** — a task claiming a side effect (persistence, network I/O, registration,
   queueing) must STATE where that capability comes from (an existing module, or the task that provides
@@ -137,9 +137,11 @@ node <skill-dir>/scripts/validate-plan.mjs .ulpi/plans/<name>.json
 
 The DAG's safety properties are deterministic, so they are enforced by script, not prose: acyclicity,
 topological layer order (nothing builds on a missing base), intra-layer write-scope disjointness
-(prefix-aware), the ≤3-file atomicity cap, ≥2 acceptance criteria per task, and slice-validate command
-form (it catches the vitest `test -- <file>` footgun and whole-suite e2e validates). Exit 1 = fix the
-graph and re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
+(prefix-aware), the ≤3-entry atomicity cap, ≥2 acceptance criteria per task, and BLOCKING on whole-suite
+e2e validates (a bare `playwright test`/`cypress run`). The ambiguous `<runner> test -- <file>` form is a
+non-blocking WARNING — it is the vitest footgun but ALSO canonical for Jest, and the gate can't know the
+runner, so it advises an explicit runner rather than blocking a correct plan. Exit 1 = fix the graph and
+re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
 
 ## Phase 3: Adversarial self-review (converge until clean)
 
@@ -196,8 +198,9 @@ allows (widest layer). This plan is the input to `auto-build`.
 
 ## When To Load References
 
-- `scripts/validate-plan.mjs` — the deterministic structural gate (Phase 2.5). CI-tested (13 contract
-  cases). auto-build's preflight runs it too — a plan that fails it never builds.
+- `scripts/validate-plan.mjs` — the deterministic structural gate (Phase 2.5), CI-tested by
+  `scripts/test-plan-validate.sh`. auto-build's preflight and the pipeline preflight run it too — a plan
+  that fails it never builds.
 - `adversarial-verify` (skill) — the plan critics in Phase 3.
 - `converge-loop` (skill) — the until-clean review loop.
 - `checkpoint-resume` (skill) — durable plan-run state.

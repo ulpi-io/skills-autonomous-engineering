@@ -76,6 +76,12 @@ Before scheduling anything:
 
 ## Phase 2: Poll → observe → act
 
+**On the FIRST cycle, record the bound as DURABLE state** — an absolute deadline timestamp and a poll
+counter (a line in `.ulpi/runs/<id>.json` or a scratch file). `ScheduleWakeup` re-invokes you in a FRESH
+turn with no memory of when you started or how many times you've polled, so a deadline / max-poll stop can
+fire honestly only if the absolute deadline and the count live on disk and each cycle reads-then-bumps
+them. A relative "wait 30 min" held only in context evaporates on the next wake — and the loop never stops.
+
 Each cycle (schedule the next check with `ScheduleWakeup` at the chosen delay):
 
 1. **Check** the signal with a real command (`gh run list`/`gh pr checks`, a curl health check, a queue

@@ -2,7 +2,7 @@
 # session-start-announce — SessionStart hook.
 # Announce RESUMABLE autonomous runs so a session starts with the durable state in context —
 # bounded, recency-aware, and silence-able:
-#   · running runs are announced while fresh (touched <24h ago); older ones are noted as stale
+#   · running runs are always announced; those untouched >4h are flagged [STALE] (guards no longer armed by them)
 #   · needs_attention runs are announced only if updated in the last 7 days
 #   · at most the 3 most recent runs are announced; the rest collapse into one summary line
 #   · `node <checkpoint-resume>/scripts/checkpoint.mjs gc .ulpi/runs` archives old terminal runs

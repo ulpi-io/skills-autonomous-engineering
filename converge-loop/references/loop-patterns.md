@@ -65,10 +65,12 @@ verifying, and fixing are agents.
 export const meta = { name: 'converge-clean', description: 'find → verify → fix until dry',
   phases: [{title:'Find'},{title:'Verify'},{title:'Fix'}] }
 
-const seen = new Set(); const resolved = []; let dry = 0
-while (dry < 2 && (!budget.total || budget.remaining() > 40_000)) {
+const seen = new Set(); const resolved = []; let dry = 0, rounds = 0
+const MAX_ROUNDS = 8                                        // the mandated max-iteration cap (never loop on budget+dry alone)
+while (dry < 2 && rounds++ < MAX_ROUNDS && (!budget.total || budget.remaining() > 40_000)) {
   const found = await agent('Find the next batch of <X>. Return {items:[{id,file,line,desc}]}.',
                             {phase:'Find', schema: FOUND})
+  if (!found || !found.items?.length) { dry++; continue }  // null = finder died → dry round, never crash (found.items would throw)
   const fresh = found.items.filter(f => !seen.has(f.id))
   if (!fresh.length) { dry++; continue }
   dry = 0; fresh.forEach(f => seen.add(f.id))
@@ -76,7 +78,7 @@ while (dry < 2 && (!budget.total || budget.remaining() > 40_000)) {
   // verify each fresh finding (majority-refute) before fixing — see the adversarial-verify skill
   const real = (await parallel(fresh.map(f => () =>
     agent(`Try to REFUTE this finding: ${f.desc}. Default refuted=true if uncertain.`,
-          {phase:'Verify', schema: VERDICT}).then(v => ({f, keep: !v.refuted})))))
+          {phase:'Verify', schema: VERDICT}).then(v => ({f, keep: v ? !v.refuted : false})))))  // dead verifier → not kept (fail closed)
     .filter(Boolean).filter(x => x.keep).map(x => x.f)
 
   await parallel(real.map(f => () =>

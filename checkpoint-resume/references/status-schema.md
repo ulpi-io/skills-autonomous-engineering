@@ -66,14 +66,23 @@ pending ──▶ in_progress ──▶ done
 - **resume** → re-invoke the run pointing at the existing id/file. Read `units`, skip `done`, rebuild the
   eligible rest, write back to the SAME file.
 
-## Atomic, incremental writes
+## Atomic, incremental writes (and the lost-update caveat)
 
-Concurrent writers (parallel agents each finishing a unit) will clobber a full rewrite. Two rules:
+Two independent failure modes arise when writers touch the file:
 
-1. **Patch, don't rewrite** — `jq` a single unit's field, never regenerate the whole document from
-   memory (you'd drop another writer's just-finished unit).
-2. **Atomic swap** — write to `<file>.tmp` then `mv` over the original; `mv` is atomic on the same
-   filesystem, so a reader never sees a half-written file.
+1. **Torn reads** — a reader sees a half-written file. Fixed by an **atomic swap**: write `<file>.tmp`,
+   then `mv` over the original (`mv` is atomic on the same filesystem).
+2. **Lost updates** — two writers each read the same snapshot, each writes its own version, and the
+   second `mv` silently drops the first's change. An atomic swap does NOT fix this: `jq` (like any
+   read-modify-write) reads the WHOLE document, so a patch built from a stale snapshot loses a
+   concurrently-finished unit. **Genuine concurrent-writer safety requires serialization** — which is
+   exactly why `checkpoint.mjs` takes a `mkdir` lock around every mutation (its own header says atomic
+   rename "prevents torn FILES but still LOSES updates"). Prefer `checkpoint.mjs` whenever parallel
+   agents write the same status file.
+
+The bash `jq` recipe below is the lightweight SINGLE-writer form (atomic swap, no lock): correct when the
+writes are effectively serialized (one coordinator patching between phases), NOT when many agents patch at
+once — use `checkpoint.mjs` for that.
 
 ```bash
 patch() {  # patch <file> <unit> <status> [note]

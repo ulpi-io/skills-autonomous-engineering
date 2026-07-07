@@ -25,6 +25,8 @@ t 2 "git add -A blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 2 "git add . blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add ."}}' $G
 t 0 "explicit paths allowed"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add src/a.ts src/b.ts"}}' $G
 t 0 "git add ./src allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add ./src"}}' $G
+t 2 "git stage -A blocked (add synonym)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git stage -A"}}' $G
+t 2 "git add :/ whole-repo pathspec blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add :/"}}' $G
 t 2 "commit -am blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -am wip"}}' $G
 t 0 "commit --amend allowed"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit --amend --no-edit"}}' $G
 t 0 "commit -m with dash-a text"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -m \"x-a thing\""}}' $G
@@ -54,6 +56,7 @@ echo "── guard-test-integrity ──"
 t 2 ".only blocked in test file"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/a.test.ts","new_string":"it.only(\"x\")"}}' $G
 t 2 ".skip blocked"                AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"tests/b.spec.js","new_string":"describe.skip(\"y\")"}}' $G
 t 2 "xit blocked"                  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"__tests__/c.js","content":"xit(\"z\")"}}' $G
+t 2 "xit at a line start blocked (multiline)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"__tests__/c.js","content":"beforeEach(reset)\nxit(\"z\")"}}' $G
 t 2 "@ts-ignore blocked"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"// @ts-ignore"}}' $G
 t 2 "pytest skip blocked"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"test_x.py","new_string":"@pytest.mark.skip"}}' $G
 t 2 "rust #[ignore] blocked"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/lib_test.rs","new_string":"#[ignore]"}}' $G
@@ -75,7 +78,11 @@ t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 2 "push -f blocked"              AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -f origin main"}}' $G
 t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease"}}' $G
 t 2 "push --delete blocked"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin --delete old"}}' $G
+t 2 "push +refspec force blocked"  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin +main"}}' $G
+t 2 "push :refspec delete blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin :old"}}' $G
+t 2 "push --mirror blocked"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --mirror origin"}}' $G
 t 0 "normal push allowed"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -u origin feat"}}' $G
+t 0 "push branch:branch allowed"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin feat:feat"}}' $G
 t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"gh pr create --title x"}}' $G
 t 0 "MULTILINE: push then rm -f"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin main\nrm -f tmp.txt"}}' $G
 t 2 "MULTILINE: quoted line then force" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"done\"\ngit push --force"}}' $G
@@ -120,6 +127,40 @@ cmd=$(resolver auto-build)
 printf '%s' '{"tool_input":{"command":"git add -A"}}' | env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR=/nonexistent HOME=/nonexistent bash -c "$cmd" >/dev/null 2>&1
 rc=$?
 if [ "$rc" = "0" ]; then echo "PASS (0) resolver fail-open when script absent"; else echo "FAIL (got $rc want 0) resolver fail-open"; fails=$((fails+1)); fi
+
+echo "── honest-stop (Stop hook: fail-closed termination, safe by design) ──"
+HS="$ROOT/hooks/honest-stop.sh"
+OLD="$(date -v-30M +%Y%m%d%H%M 2>/dev/null || date -d '30 min ago' +%Y%m%d%H%M)"   # 30min ago: quiet but not stale
+hs() { # hs <want-substr-or-EMPTY> <desc> <env...> -- <json> <mtime|"">
+  local want=$1 desc=$2; shift 2; local envs=(); while [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
+  local json=$1 mt=$2
+  local d; d="$(mktemp -d)"; mkdir -p "$d/.ulpi/runs"
+  echo '{"status":"running","units":{"a":{"status":"done"},"b":{"status":"blocked"}}}' > "$d/.ulpi/runs/r.json"
+  [ -n "$mt" ] && touch -t "$mt" "$d/.ulpi/runs/r.json"
+  local o; o="$(printf '%s' "$json" | env "${envs[@]:-_=_}" CLAUDE_PROJECT_DIR="$d" bash "$HS" 2>/dev/null)"
+  rm -rf "$d"
+  if [ "$want" = "EMPTY" ]; then
+    [ -z "$o" ] && echo "PASS (no-op) $desc" || { echo "FAIL (expected no output) $desc :: $o"; fails=$((fails+1)); }
+  else
+    printf '%s' "$o" | grep -q "$want" && echo "PASS (emitted $want) $desc" || { echo "FAIL (missing '$want') $desc :: $o"; fails=$((fails+1)); }
+  fi
+}
+hs additionalContext "quiet running run → non-blocking reminder (default)" -- '{"hook_event_name":"Stop"}' "$OLD"
+hs '"decision": "block"' "quiet running run + STRICT → hard block" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' "$OLD"
+hs EMPTY "FRESH running run → no-op (active work not flagged)" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop"}' ""
+hs EMPTY "stop_hook_active → allow (loop guard)" ULPI_STOP_STRICT=1 -- '{"hook_event_name":"Stop","stop_hook_active":true}' "$OLD"
+# no .ulpi/runs at all → immediate no-op
+empt="$(mktemp -d)"; o="$(printf '%s' '{"hook_event_name":"Stop"}' | CLAUDE_PROJECT_DIR="$empt" ULPI_STOP_STRICT=1 bash "$HS" 2>/dev/null)"; rm -rf "$empt"
+[ -z "$o" ] && echo "PASS (no-op) no .ulpi/runs → no-op" || { echo "FAIL no-op expected :: $o"; fails=$((fails+1)); }
+
+echo "── session-end-gc (SessionEnd hook: archive terminal runs, never running) ──"
+GD="$(mktemp -d)"; mkdir -p "$GD/.ulpi/runs"
+echo '{"status":"done","units":{}}'    > "$GD/.ulpi/runs/old-done.json";   touch -t 202601010000 "$GD/.ulpi/runs/old-done.json"
+echo '{"status":"running","units":{}}' > "$GD/.ulpi/runs/live.json"
+CLAUDE_PLUGIN_ROOT="$ROOT" CLAUDE_PROJECT_DIR="$GD" bash "$ROOT/hooks/session-end-gc.sh" >/dev/null 2>&1
+[ -f "$GD/.ulpi/runs/archive/old-done.json" ] && echo "PASS terminal run archived" || { echo "FAIL terminal run not archived"; fails=$((fails+1)); }
+[ -f "$GD/.ulpi/runs/live.json" ] && echo "PASS running run left in place" || { echo "FAIL running run wrongly moved"; fails=$((fails+1)); }
+rm -rf "$GD"
 
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails guard test(s) failed"; exit 1; fi

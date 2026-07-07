@@ -70,16 +70,21 @@ when you need a tighter per-phase limit than the default.)
 Each item gets its own bounded convergence loop; the fan-out runs those loops concurrently.
 
 ```js
+const MAX_ROUNDS = 6                                        // every loop needs a HARD iteration cap
 await parallel(items.map(item => () => (async () => {
-  const seen = new Set(); let dry = 0
-  while (dry < 2) {
+  const seen = new Set(); let dry = 0, rounds = 0
+  // stop on: 2 dry rounds (done) OR the round cap OR budget floor — a bare `while (dry < 2)` is a runaway.
+  while (dry < 2 && rounds++ < MAX_ROUNDS && (!budget.total || budget.remaining() > 50_000)) {
     const found = await agent(`Find next issue in ${item}, excluding ${[...seen]}. {items}`, {schema:F})
+    if (!found || !found.items?.length) { dry++; continue }  // null = agent died → a dry round, never a crash (found.items would throw)
     const fresh = found.items.filter(x => !seen.has(x.id))
     if (!fresh.length) { dry++; continue }
     dry = 0; fresh.forEach(x => seen.add(x.id))
-    await parallel(fresh.map(x => () => agent(`Fix ${x.desc} in ${item}.`)))
+    // SEQUENTIAL: every fix for ONE item shares that item's write scope — running them in parallel would
+    // race the same files (worktree isolation can't help; the edits must land together). Items stay parallel.
+    for (const x of fresh) await agent(`Fix ${x.desc} in ${item}.`)
   }
-  return { item, resolved: seen.size }
+  return { item, resolved: seen.size, exhausted: rounds >= MAX_ROUNDS }
 })()))
 ```
 
@@ -97,10 +102,11 @@ return { merged, covered: partials.length, failed: items.length - partials.lengt
 
 ## Lighter equivalent — single-message Agent batch
 
-For a modest list where a Workflow is overkill: one assistant message with N `Agent(...)` calls (parallel;
-`run_in_background: true` for independent lanes; `isolation:'worktree'` for writers). Same rules — prove
-independence, isolate writers, aggregate every lane (including failures). Beyond ~a dozen items or
-multi-stage per item, prefer the Workflow for the caps + accounting.
+For a modest list where a Workflow is overkill: issue N `Agent(...)` calls in ONE assistant message —
+they run in the background by default (so, concurrently); add `isolation:'worktree'` for writers. (There
+is no `run_in_background` on the Agent tool — that is a Bash-tool parameter; Agent backgrounding is the
+default.) Same rules — prove independence, isolate writers, aggregate every lane (including failures).
+Beyond ~a dozen items or multi-stage per item, prefer the Workflow for the caps + accounting.
 
 ## The invariant across all shapes
 

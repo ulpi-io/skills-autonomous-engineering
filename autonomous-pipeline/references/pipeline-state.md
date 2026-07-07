@@ -8,7 +8,7 @@ each phase must clear before the next starts, the phase-to-phase handoff, and th
 | # | Phase | Consumes | Produces | Gate to pass before next phase |
 |---|-------|----------|----------|-------------------------------|
 | 1 | auto-spec | the request | `.ulpi/spec/<name>.md` | spec exists; all acceptance criteria testable; non-goals stated; open questions resolved or flagged |
-| 2 | auto-plan | the spec | `.ulpi/plans/<name>.{json,md}` | DAG acyclic + topologically layered; every spec criterion covered; self-review clean |
+| 2 | auto-plan | the spec | `.ulpi/plans/<name>.json` (single canonical artifact; the human view is rendered on demand, never stored) | DAG acyclic + topologically layered; every spec criterion covered; self-review clean |
 | — | **APPROVAL** | the plan | user affirmative | unambiguous "approve/go/yes" (the single human gate) |
 | 3 | auto-build | the plan | integrated commits per task | all tasks `done` (none blocked/dep_blocked); final workspace validate GREEN |
 | 4 | auto-simplify | the build diff | cleaner diff | every kept edit verified behavior-preserving; suite still green |
@@ -41,8 +41,10 @@ Thread artifacts by PATH/REF, not by inlining content — the phases read what t
 
 ## Pipeline checkpoint schema
 
-Extends `checkpoint-resume` with one unit per phase (each phase ALSO keeps its own per-task/per-unit
-checkpoint):
+ONE `checkpoint-resume` status file holds BOTH a `phases` map (the lifecycle phases) AND a top-level
+`units` map with one entry per BUILD TASK — there is no separate per-phase checkpoint file; the build's
+per-task units live in this same document (exactly what `checkpoint.mjs` writes and `pipeline-workflow.js`
+reads via `doneUnits`/`openItems`):
 
 ```json
 {
@@ -55,16 +57,20 @@ checkpoint):
   "workingBranch": "<branch>",
   "approvedPlan": true,
   "phases": {
-    "spec":        { "status": "done",    "artifact": ".ulpi/spec/x.md" },
-    "plan":        { "status": "done",    "artifact": ".ulpi/plans/x.json" },
-    "build":       { "status": "running", "checkpoint": ".ulpi/runs/build-x.json" },
+    "spec":        { "status": "done", "artifact": ".ulpi/spec/x.md" },      // skill-recorded, pre-launch
+    "plan":        { "status": "done", "artifact": ".ulpi/plans/x.json" },   // skill-recorded, pre-launch
+    "build":       { "status": "running" },                                  // ── the workflow owns these six keys ──
     "simplify":    { "status": "pending" },
     "test":        { "status": "pending" },
     "review":      { "status": "pending" },
     "performance": { "status": "skipped" },
     "ship_prep":   { "status": "pending" }
   },
-  "openRegister": [],                    // verified findings carried to the end
+  "units": {                             // one entry per BUILD TASK (auto-plan id), IN THIS SAME FILE
+    "T1": { "status": "done" },
+    "T2": { "status": "in_progress" }
+  },
+  "openItems": [],                       // verified findings persisted as each phase ends (the register)
   "result": null
 }
 ```
@@ -83,12 +89,12 @@ owns the six keys above.
 ## Escalation ↔ pause
 
 Any phase's escalation (unfixable failure, ambiguity, irreversible step) sets the pipeline
-`status: needs_attention`, records the blocking detail in `openRegister`, and stops. The user resolves it
+`status: needs_attention`, records the blocking detail in `openItems`, and stops. The user resolves it
 and re-invokes `autonomous-pipeline resume` — it continues from `currentPhase`. The pipeline never decides
 a user-owned question to keep itself moving.
 
 ## One pass, then stop
 
-After `auto-ship` (or an early fail-closed stop), the pipeline verifies + returns `openRegister` and sets
+After `auto-ship` (or an early fail-closed stop), the pipeline verifies + returns the `register` (rebuilt from the persisted `openItems`) and sets
 `status` (`done` if empty and everything shipped, else `needs_attention`). It does NOT loop the lifecycle.
 A fix round is a fresh invocation with the findings as the request.

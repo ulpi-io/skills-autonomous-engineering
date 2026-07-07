@@ -75,12 +75,16 @@ esac
 
 block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intended and user-approved: run 'touch <project-root>/.ulpi/allow-test-weaken' then retry — the flag approves weakening edits for 2 minutes, then expires — and state the reason in your reply)" >&2; exit 2; }
 
+# The payload arrived with real newlines escaped to the literal chars backslash+n (so the added text
+# stays on ONE line for the two-line extraction above). Restore real newlines before matching, or the
+# ^ / boundary anchors below (xit/xdescribe/xtest at a line start) silently never fire on multi-line edits.
+added_lines=${added//\\n/$'\n'}
 # Skip/only/todo — silences or narrows the suite.
-if printf '%s' "$added" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(xit|xdescribe|xtest)[[:space:]]*\(|\.(todo)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then
+if printf '%s' "$added_lines" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(xit|xdescribe|xtest)[[:space:]]*\(|\.(todo)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then
   block "this edit adds a test skip/only/ignore marker to a test file — that silences the suite instead of fixing it (fail-closed contract)"
 fi
 # Type-error / assert silencing inside tests.
-if printf '%s' "$added" | grep -qE '@ts-ignore|@ts-expect-error|eslint-disable(-next-line)?\b|# type: ignore'; then
+if printf '%s' "$added_lines" | grep -qE '@ts-ignore|@ts-expect-error|eslint-disable(-next-line)?\b|# type: ignore'; then
   block "this edit adds a suppression directive to a test file — silencing the checker fakes the done-condition"
 fi
 

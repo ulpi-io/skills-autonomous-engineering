@@ -91,7 +91,8 @@ npx skills add https://github.com/ulpi-io/skills-autonomous-engineering         
 npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-test   # one skill
 ```
 
-**Claude Code plugin** (adds the plugin-level hooks: session resume-announcer + live-run guards):
+**Claude Code plugin** (adds the plugin-level hooks: `SessionStart` resume-announcer, `PreToolUse`
+live-run guards, a `Stop` honest-termination backstop, and a `SessionEnd` checkpoint gc):
 
 ```
 /plugin marketplace add ulpi-io/skills-autonomous-engineering
@@ -121,18 +122,22 @@ hook **blocks the tool call** (reason shown to the model):
 
 | Guard | Cardinal sin it makes impossible |
 |---|---|
-| `auto-test/scripts/guard-test-integrity.sh` | Gaming the suite green — adding `.only`/`.skip`/`xit`/suppressions to test files |
-| `auto-build/scripts/guard-git-hygiene.sh` | Breaking per-task rollback — `git add -A/.`, `commit -a`, `reset --hard`, `clean -f` |
-| `auto-ship/scripts/guard-ship-irreversibles.sh` | Unilateral irreversibles — plain `push --force`, `push --delete` |
+| `auto-test/scripts/guard-test-integrity.sh` | Gaming the suite green — `.only`/`.skip`/`xit`/suppressions in test files (incl. at a line start) |
+| `auto-build/scripts/guard-git-hygiene.sh` | Breaking per-task rollback — `git add`/`stage -A/.`, whole-repo pathspecs, `commit -a`, plain `push --force`, `reset --hard`, `clean -f` |
+| `auto-ship/scripts/guard-ship-irreversibles.sh` | Unilateral irreversibles — force-push (`--force`, a `+refspec`, `--mirror`) and ref-delete (`--delete`, a `:refspec`, `--prune`) |
 | `checkpoint-resume/scripts/checkpoint.mjs` | Destroying run state — refuses re-init over a live run, demoting `done` units, false `finalize done` |
 
-All behavior-tested in CI (`scripts/test-guards.sh` — 52 cases incl. resolver, fail-open, live-run
-staleness scoping, multi-line/quoted/global-option command parsing, and the 2-minute
-`.ulpi/allow-test-weaken` approval window — and
-`scripts/test-checkpoint.sh` — the full contract incl. durable `item` persistence, `gc` retention, and
-zero lost writes under 20-way concurrency). Runs are resumable at ANY point (phase- and task-granular
-checkpoints), and when a Codex integration is installed you can delegate build/review/verify roles to it
-per run (never assumed; degrades to native with an honest register note).
+Plus two plugin-level lifecycle hooks (session-scoped, safe by design — they no-op outside a live run):
+a **`Stop`** hook (`hooks/honest-stop.sh`) that surfaces a run left `status:running` at stop time so the
+checkpoint is reconciled honestly — a non-blocking reminder by default, a hard block under
+`ULPI_STOP_STRICT=1` — and a **`SessionEnd`** hook (`hooks/session-end-gc.sh`) that archives terminal runs.
+
+All behavior-tested in CI (`scripts/test-guards.sh` — resolver, fail-open, live-run staleness scoping,
+multi-line/quoted/global-option command parsing, the 2-minute `.ulpi/allow-test-weaken` approval window,
+and the Stop/SessionEnd hooks — and `scripts/test-checkpoint.sh` — the full contract incl. durable `item`
+persistence, `gc` retention, and zero lost writes under 20-way concurrency). Runs are resumable at ANY
+point (phase- and task-granular checkpoints), and when a Codex integration is installed you can delegate
+build/review/verify roles to it per run (never assumed; degrades to native with an honest register note).
 
 ## When the network drops (or you just want to check in)
 
@@ -190,7 +195,7 @@ Every skill honors the same contract — it's the whole point of the collection:
 | [auto-map](#auto-map) | Verified, disclosure-tiered context architecture: lean root + path-scoped rules + nested folder maps, anti-lie gate as code |
 | [auto-learn](#auto-learn) | The self-improvement loop: harvest run artifacts → verify → route to the right memory layer → feed the next run |
 | [watch-and-act](#watch-and-act) | Wait on an external signal (CI/deploy/queue) on a cache-aware cadence and act on change |
-| [schedule-recurring-agent](#schedule-recurring-agent) | Stand up a recurring cron routine — idempotent brief, bounded per run, with a teardown condition |
+| [schedule-recurring-agent](#schedule-recurring-agent) | Stand up a recurring scheduled agent — a durable claude.ai Routine (or an in-session cron) with an idempotent brief, bounded per run, and a teardown condition |
 
 ### Primitives
 
@@ -331,10 +336,13 @@ automatically).
 npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill schedule-recurring-agent
 ```
 
-Stands up a recurring cron routine for standing work — issue triage, CVE watch, PR babysitting, nightly
+Stands up a recurring scheduled agent for standing work — issue triage, CVE watch, PR babysitting, nightly
 audits. Writes a self-contained, **idempotent** brief (each run wakes with no memory, so it must dedup
 against prior work), picks a cadence matched to how often the work arrives, bounds each run, and defines
-reporting, escalation, and a teardown condition. Manages the routine lifecycle via the cron tools.
+reporting, escalation, and a teardown condition. For durable, unattended work it uses **claude.ai Routines**
+(the `/schedule` skill / `RemoteTrigger`, which run on Anthropic infra even while you're offline); an
+in-session `CronCreate` cron is the lighter, session-scoped alternative (it dies with the session and
+auto-expires in 7 days). Neither has a native per-run token budget — each run is bounded by the brief + `budget-guard`.
 
 ---
 
