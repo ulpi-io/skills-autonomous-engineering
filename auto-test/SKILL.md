@@ -1,6 +1,8 @@
 ---
 name: auto-test
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Raise test health to a green, MEANINGFUL suite: find untested behaviors, write real tests, loop-until-green — with every added test MUTATION-CHECKED (break the code, the test must fail; tautologies rejected). Fails closed: never games the suite green (a skill-scoped hook mechanically blocks .skip/.only/suppressions in test files). Checkpointed and resumable. Use after a build, on a risky module, for a bug repro, or to de-flake (auto-test flaky).
 allowed-tools:

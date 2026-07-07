@@ -318,6 +318,28 @@ anything irreversible. Fail-closed gates between phases, a durable pipeline chec
 phase/task), a whole-run budget, and a verified findings register at the end. It runs one pass and stops —
 no autonomous whole-lifecycle recursion; a fix round is the user's call.
 
+### auto-map
+
+```bash
+npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-map
+```
+
+Builds a **verified, disclosure-tiered context architecture** so every future session starts oriented: a
+lean root `CLAUDE.md` (≤150 lines) + path-scoped rule files + nested per-folder maps, with **every claim
+checked against the actual code by a runnable anti-lie gate** (`scripts/verify-map.mjs`) — a map that
+lies is worse than no map. Run it after a real change lands (the pipeline does this automatically).
+
+### auto-learn
+
+```bash
+npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-learn
+```
+
+The **self-improvement loop**: harvest a finished run's structured artifacts (the checkpoint register,
+blocked-task reasons, guard trips, degradations), adversarially verify each candidate lesson, and route
+it to the right memory layer (a rule file, a skill, `CLAUDE.md`) so the *next* run doesn't repay this
+run's tuition. Runs after every pipeline pass; machine defects it finds are reported, never self-patched.
+
 ### watch-and-act
 
 ```bash

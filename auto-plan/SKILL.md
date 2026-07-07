@@ -1,6 +1,8 @@
 ---
 name: auto-plan
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Turn a spec into a self-reviewed DAG of atomic build tasks: each task gets acceptance criteria, a disjoint write scope (≤3 files), and a slice-scoped validate; dependencies are wired and layered topologically so nothing builds on a missing base. Adversarial critics then attack the graph (cycles, phantom paths, coverage vs spec, task independence) until it is clean. Writes .ulpi/plans/<name>.json. Use when a spec needs an implementable, ordered breakdown before building.
 allowed-tools:

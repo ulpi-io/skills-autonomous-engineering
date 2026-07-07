@@ -349,7 +349,7 @@ else if (reviewBudgetSkip) budgetStop('review')
 // stays stuck on 'test' and a status query mid-review misreports the phase.
 else if (CK) await agent(`Run: ${ck(`phase ${STATUS} review running`)}`, { label: 'status:review', phase: 'Review' }).catch(() => null)
 const raw = (reviewDone || reviewBudgetSkip) ? [] : (await mapAll(DIMENSIONS, (dim) => agentGate(() => agent(
-  `Review the diff of ${BRANCH} vs its base in ${ROOT} through the ${dim.toUpperCase()} lens only. Return JSON { findings: [{file, line, issue, severity: "blocker"|"concern"|"nit", scenario}] } — concrete failure scenarios only, no style opinions.`,
+  `Review the diff of ${BRANCH} vs its base in ${ROOT} through the ${dim.toUpperCase()} lens only.${codexBrief('review')} Return JSON { findings: [{file, line, issue, severity: "blocker"|"concern"|"nit", scenario}] } — concrete failure scenarios only, no style opinions.`,
   { label: `review:${dim}`, phase: 'Review', schema: { type: 'object', required: ['findings'],
     properties: { findings: { type: 'array', items: { type: 'object' } } } } }), `review:${dim}`))).filter(Boolean)
 if (!reviewDone && !reviewBudgetSkip && raw.length < DIMENSIONS.length) gateFail('review', `${DIMENSIONS.length - raw.length} review dimension(s) did not run`)

@@ -1,6 +1,8 @@
 ---
 name: auto-learn
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Close every autonomous run with a learning pass so the machine never repeats a mistake it already
   paid for: harvest the run's STRUCTURED artifacts (checkpoint register, blocked-task reasons, guard
@@ -162,7 +164,8 @@ file nothing reads.
 
 ## When To Load References
 
-- `scripts/harvest-run.mjs` — mechanical candidate extraction from a checkpoint (Phase 0). CI-tested.
+- `scripts/harvest-run.mjs` — mechanical candidate extraction from a checkpoint (Phase 0). CI-tested by
+  `scripts/test-harvest.sh` (every signal class extracted with evidence citations; unreadable → exit 2).
 - `adversarial-verify` (skill) — the TRUE/GENERAL/ACTIONABLE gate (Phase 1).
 - `auto-map` (skill) — the routing target for repo-fact learnings (Phase 2).
 - `checkpoint-resume` (skill) — the artifact format this skill harvests.

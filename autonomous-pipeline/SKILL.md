@@ -86,6 +86,13 @@ build's test safety net, test then hardens coverage.)
   intake, load the checkpoint, continue at the recorded phase).
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
   phases to run (simplify, performance, go-live/ship-deploy), and any budget/scope steer. Keep it light.
+- **Codex delegation (D14 — offer ONLY if detected).** Probe for a Codex integration (`command -v codex`,
+  or a `codex`-type subagent in your available agents). If — and only if — one is present, offer the user
+  a choice to delegate any of three roles to Codex: **build** (the per-task engineer), **review** (the
+  slice + dimension reviewers), **verify** (the adversarial finding-verifiers). Pass their choice as
+  `delegate: { build|review|verify: 'native'|'codex' }`. If Codex is NOT detected, do not mention it —
+  every role runs native. (At run time, a `codex` role with no integration DEGRADES to native and the
+  degradation is recorded in the register — never a silent skip.)
 - **Note which specialists are actually installed** — the subagent types available to you and the domain
   skills in your available-skills list. `auto-plan` routes each task to the best fit BY DESCRIPTION (a
   Next.js task → whatever React/SSR specialist exists, whatever it's named), and you pass that installed
@@ -102,28 +109,46 @@ open.
 The skill owns the human-facing front half; the bundled **runnable Workflow template** owns the
 unattended stretch:
 
-1. **spec → plan** run first, in-session (`auto-spec`, `auto-plan`) — they may ask questions, so they
-   stay outside the Workflow. Then the SINGLE approval gate on the plan (unambiguous affirmative).
+1. **spec → plan** run first, in-session, by FOLLOWING their contracts (they may ask questions, so they
+   stay outside the Workflow). Compose them by CONTRACT, not by a programmatic `Skill()` call: `auto-spec`,
+   `auto-plan`, `auto-map` and `auto-learn` are `disable-model-invocation` skills (expensive, explicit-
+   invocation only), and the docs are explicit that dmi *blocks programmatic invocation* — so a
+   `Skill(auto-spec)` from here would fail. Instead read the installed skill's `SKILL.md` (find it under
+   `.claude/skills/`, `.agents/skills/`, or the plugin root) and execute its phases directly; if it isn't
+   installed, apply the methodology inline. Then the SINGLE approval gate on the plan (unambiguous
+   affirmative).
 2. **Create the checkpoint** (`checkpoint-resume`'s `scripts/checkpoint.mjs init`) — the Workflow
    sandbox has no filesystem access, so the skill creates the status file before launch. Pass
    `--launch '{"scriptPath":"<pipeline-workflow.js>","args":{…the full launch args…}}'` so the exact
    relaunch recipe is persisted IN the status file — then `run-status.mjs --resume` can reconstruct the
    resume with no session memory.
-3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args (root,
-   workingBranch, validate, planPath, `approved: true`, statusFile, checkpointCli path, the optional-
-   phase config, caps, and `availableAgents` — the installed specialist set from Phase 0, so each task's
-   plan-assigned agent/reviewer is honored when present and degrades to general when not). It executes
+3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args:
+   - **required**: `root`, `workingBranch`, `validate` (the whole-workspace end-state gate), `planPath`
+     (the approved DAG plan), `approved: true`, `statusFile`, `checkpointCli` (absolute path to
+     `checkpoint-resume/scripts/checkpoint.mjs` — the status-writer agents call it).
+   - **routing/quality**: `availableAgents` (the installed specialist set from Phase 0 — each task's
+     plan-assigned agent/reviewer is honored when present, degrades to general when not, recorded in
+     `missingAgents`), `allowGeneralFallback` (default true — degrade a missing specialist rather than
+     crash), and `planValidator` (absolute path to `auto-plan/scripts/validate-plan.mjs` — the
+     DETERMINISTIC DAG gate preflight runs; pass it so a cyclic/mis-ordered plan can't pass on model
+     judgment. Without it, preflight falls back to an LLM plan check).
+   - **budget/config**: the optional-phase `config` (`{simplify, performance, shipPrep}`), `budgetFloor`
+     (default 60000 — stop-and-report at a phase boundary once the run dips below it), the concurrency
+     caps (`maxBuildParallel`, `maxParallel`, `maxFix`), and `delegate` (D14 — the per-role Codex choice).
+   It executes
    build → simplify → test → review → performance → ship-prep with fail-closed gates (a phase agent that
    died = a gate failure in the register; skipped ≠ clean), the DAG walk with worktree isolation and
    bounded fix loops (each engineer/reviewer routed to its task's specialist), and per-task checkpoint
    writes. It hard-throws without `approved: true` — the human gate cannot be bypassed.
 4. AROUND the workflow (before launch / after it returns), use `watch-and-act` to gate on external signals — e.g. CI green on the pushed branch before offering a fix round. (A Workflow cannot invoke skills mid-run.)
-4b. **After EVERY run (even a bumpy one)**, close with `auto-learn` — harvest the checkpoint's
-   register/blocked-units/degradations into verified, routed learnings so the next run doesn't repay
-   this run's tuition. Machine defects it finds are surfaced in the final report, never self-patched.
-4c. **After a real (non-aborted) run**, then run `auto-map` — refresh the disclosure-tiered context
-   map so every future session starts knowing the code that just shipped. (Learn first: learnings may
-   update rules the map refresh then verifies.)
+4b. **After EVERY run (even a bumpy one)**, close by following the `auto-learn` contract (again by
+   CONTRACT — it's a dmi skill; read its installed `SKILL.md` and execute it, don't `Skill()` it) —
+   harvest the checkpoint's register/blocked-units/degradations into verified, routed learnings so the
+   next run doesn't repay this run's tuition. Machine defects it finds are surfaced in the final report,
+   never self-patched.
+4c. **After a real (non-aborted) run**, then follow the `auto-map` contract (same — read its `SKILL.md`,
+   don't `Skill()` it) — refresh the disclosure-tiered context map so every future session starts knowing
+   the code that just shipped. (Learn first: learnings may update rules the map refresh then verifies.)
 5. Any escalation (unfixable/ambiguous/irreversible) surfaces in the returned register and PAUSES the
    pipeline; on resolution, re-invoke — the checkpoint resumes at the exact phase/task.
 

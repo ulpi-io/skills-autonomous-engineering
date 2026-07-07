@@ -17,9 +17,15 @@ each phase must clear before the next starts, the phase-to-phase handoff, and th
 | 7 | auto-performance | the target | measured optimizations | (if run) each kept change benchmark-proven + no regression; else skipped |
 | 8 | auto-ship | verified work | PR / staged rollout | pre-launch gates green (fail closed); rollback ready; human sign-off for irreversible deploy |
 
-A gate is fail-closed: if a phase did not reach its bar (a blocked build task, a red validate, an unrun
-review dimension), the pipeline does NOT start the next phase with a false-green — it pauses and
-escalates, or records the phase `blocked` and returns the register early.
+A gate is fail-closed: a phase that did not reach its bar (a blocked/unbuilt build task, a red validate,
+an unrun review dimension, a died phase agent) is recorded `blocked` (never `done`) and its items go to
+the `openRegister` — so `converged` is false and, critically, a RESUME re-enters that phase rather than
+skipping it. The run is ONE forward pass: downstream phases still execute over whatever integrated
+(except `auto-simplify`, which is skipped when the build is incomplete — there's no stable base to
+simplify), and the pass returns the register at the end. The pipeline does NOT pause mid-run for a
+blocked gate (a Workflow can't ask the user); the "escalate" is post-run — the USER reads the register
+and decides the fix round. A hard escalation an engineer raises (a decision only the user can make)
+blocks THAT task with the reason in the register; it does not silently guess past it.
 
 Optional phases (user-configurable at intake): `auto-simplify`, `auto-performance`, and the deploy portion
 of `auto-ship` may be skipped. `auto-build` and `auto-test` are not skippable. A skipped phase is recorded
@@ -53,9 +59,12 @@ reads via `doneUnits`/`openItems`):
   "task": "<the request>",
   "status": "running",                 // running | done | needs_attention | aborted
   "currentPhase": "build",
-  "config": { "simplify": true, "performance": false, "shipPrep": true },
-  "workingBranch": "<branch>",
-  "approvedPlan": true,
+  "launch": {                          // the durable resume recipe — written by `checkpoint.mjs init --launch`.
+    "scriptPath": "<pipeline-workflow.js>",   // this is where the approval + config live durably:
+    "args": { "workingBranch": "<branch>", "approved": true,   // approved:true IS the recorded human sign-off
+              "config": { "simplify": true, "performance": false, "shipPrep": true },
+              "delegate": { "build": "native", "review": "native", "verify": "native" } }
+  },
   "phases": {
     "spec":        { "status": "done", "artifact": ".ulpi/spec/x.md" },      // skill-recorded, pre-launch
     "plan":        { "status": "done", "artifact": ".ulpi/plans/x.json" },   // skill-recorded, pre-launch

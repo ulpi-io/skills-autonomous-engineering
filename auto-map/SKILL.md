@@ -1,6 +1,8 @@
 ---
 name: auto-map
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Generate and refresh the project's CONTEXT ARCHITECTURE — a disclosure-tiered map so Claude starts
   every session knowing the repo without paying for what it doesn't need: a lean root CLAUDE.md (loads

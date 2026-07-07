@@ -1,6 +1,8 @@
 ---
 name: auto-performance
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Make code measurably faster without breaking it: metric + reproducible baseline FIRST, profile to the real hotspots, then per hotspot apply a change and re-benchmark — kept ONLY if the win is real beyond variance AND correctness holds; otherwise reverted. Stops at the target or diminishing returns. Never accepts an unmeasured "should be faster".
 allowed-tools:

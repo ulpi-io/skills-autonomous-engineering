@@ -39,9 +39,12 @@ as prose-only):
    runs) + a **Stop** hook (`hooks/honest-stop.sh` — surfaces a run left `status:running` at stop time so
    the turn reconciles the checkpoint with reality; NO-OP outside a live run, non-blocking reminder by
    default, `ULPI_STOP_STRICT=1` hard-blocks) + a **SessionEnd** hook (`hooks/session-end-gc.sh` — archives
-   terminal runs via `checkpoint.mjs gc`) + `checkpoint.mjs`'s exit-2 refusals. Every event a guarantee
-   maps to is wired; the rest of Claude Code's hook events are deliberately unused (a hook enforces a
-   guarantee, it doesn't exist for coverage).
+   terminal runs via `checkpoint.mjs gc`) + a **SessionStart** hook (`hooks/session-start-announce.sh` —
+   enforces the durable-resume guarantee by injecting any resumable run into the session's opening context,
+   so a fresh session never blindly re-inits or redoes integrated work; read-only, bounded output) +
+   `checkpoint.mjs`'s exit-2 refusals. Each wired event enforces a specific guarantee (test-integrity,
+   git-hygiene, ship-irreversibility, honest-stop, resume-safety, gc); the rest of Claude Code's hook
+   events are deliberately unused (a hook enforces a guarantee, it doesn't exist for coverage).
 3. **Execution** — runnable machinery: `checkpoint-resume/scripts/checkpoint.mjs` (locked, atomic state
    CLI), `autonomous-pipeline/references/pipeline-workflow.js` and
    `auto-review/references/review-workflow.js` (Workflow-tool templates), and the termination-set →

@@ -1,6 +1,8 @@
 ---
 name: auto-simplify
 version: 0.1.0
+disable-model-invocation: true
+user-invocable: true
 description: |
   Reduce a change's complexity WITHOUT changing behavior, provably: find duplication/dead code/over-abstraction in the diff, apply the smallest clarifying edit, then prove behavior preserved (tests green + adversarial semantic check) or REVERT — looping until dry. Respects Chesterton's Fence: never removes code whose purpose isn't established. Use when code works but reads worse than it should.
 allowed-tools:
