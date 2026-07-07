@@ -294,9 +294,19 @@ for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
 }
 const blocked = buildOut.filter(b => b.status !== 'done')
 const blockedItems = blocked.map(b => ({ phase: 'build', kind: b.status, task: b.id, why: b.why }))
-register.push(...blockedItems)
-if (blocked.length) log(`build: ${blocked.length} task(s) not done — continuing to gates, register carries them (fail closed)`)
-if (!buildDone) await persistPhase('build', blockedItems, 'Build', blocked.length ? 'blocked' : 'done')
+// A budget/early break leaves whole layers UNATTEMPTED — those tasks never enter buildOut, so `blocked`
+// alone under-counts. The build phase is DONE only when EVERY planned task actually integrated; anything
+// short of that (blocked tasks OR unbuilt tasks) makes it 'blocked' so a RESUME re-enters build and
+// finishes the remainder. (Persisting 'done' with tasks unbuilt is the fail-open bug: resume skips build
+// and the run can return converged:true with planned work silently missing.)
+const allTaskIds = (PLAN.layers || []).flat()
+const attemptedIds = new Set(buildOut.map(b => b.id))
+const unbuiltIds = allTaskIds.filter(id => !DONE.has(id) && !attemptedIds.has(id))
+const unbuiltItems = unbuiltIds.map(id => ({ phase: 'build', kind: 'unbuilt', task: id, why: 'not reached this run (budget/early stop) — resume to build it' }))
+register.push(...blockedItems, ...unbuiltItems)
+const buildComplete = allTaskIds.every(id => DONE.has(id))
+if (blocked.length || unbuiltIds.length) log(`build: ${blocked.length} blocked + ${unbuiltIds.length} unbuilt of ${allTaskIds.length} — build phase stays incomplete (resume finishes it), register carries them (fail closed)`)
+if (!buildDone) await persistPhase('build', [...blockedItems, ...unbuiltItems], 'Build', buildComplete ? 'done' : 'blocked')
 
 // ── Optional + verify phases (each fail-closed: a phase that died is a gate failure) ──
 async function phaseAgent(title, enabled, prompt, schema) {
@@ -324,7 +334,10 @@ const test = await phaseAgent('Test', true,
 if (test && !test.skipped && !test.skippedDone && !test.died && !test.ok) gateFail('test', test?.summary || 'suite not green / tests not mutation-verified')  // !died: phaseAgent already recorded a died gate — don't double-count
 const testItems = (test?.findings || []).map(f => ({ phase: 'test', ...f }))
 register.push(...testItems)
-if (!test?.skippedDone) await persistPhase('test', testItems, 'Test', test?.died || (test && !test.skipped && !test.ok) ? 'blocked' : 'done')
+// Do NOT persist when the phase was budget-skipped (test?.skipped) — like its three sibling phases.
+// A budget-skipped Test never ran; persisting it 'done' converts the fail-closed gate to fail-open on
+// resume (the gate is skipped and never runs). Budget-skip leaves it 'pending' so resume re-runs it.
+if (!test?.skippedDone && !test?.skipped) await persistPhase('test', testItems, 'Test', test?.died || !test?.ok ? 'blocked' : 'done')
 
 phase('Review')
 const DIMENSIONS = ['correctness', 'security', 'test adequacy', 'API/contract compatibility']

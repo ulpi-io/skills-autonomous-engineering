@@ -101,7 +101,12 @@ function orderedPhases(phases) {
 }
 function buckets(units) {
   const b = { pending: [], in_progress: [], done: [], blocked: [], dep_blocked: [] };
-  for (const [id, u] of Object.entries(units || {})) (b[u.status] || (b[u.status] = [])).push(id);
+  // A malformed/foreign/truncated file can hold a null (or non-object) unit value and still parse
+  // as JSON — a READ-ONLY status tool must render it, never crash (one bad unit must not blank every run).
+  for (const [id, u] of Object.entries(units || {})) {
+    const s = (u && typeof u === 'object' && u.status) ? u.status : 'malformed';
+    (b[s] || (b[s] = [])).push(id);
+  }
   return b;
 }
 function bar(done, total, width = 22) {

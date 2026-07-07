@@ -64,6 +64,13 @@ SNAP_AFTER="$(cd .ulpi/runs && for f in *.json; do printf '%s:%s\n' "$f" "$(cksu
 # empty project → graceful "no runs", exit 0
 cd "$TMP" && mkdir -p empty && ( cd empty && node "$RS" --no-color >/dev/null 2>&1 ); ok $? "empty project: no runs, exit 0"
 
+# REGRESSION (null-unit crash): a malformed run with a null unit value still parses as JSON — a
+# read-only status tool must render it, never crash, and never blank sibling runs. Both render and --list.
+cd "$TMP" && mkdir -p mal/.ulpi/runs
+printf '%s' '{"schemaVersion":1,"id":"mal","task":"m","status":"running","units":{"a":{"status":"done"},"b":null}}' > mal/.ulpi/runs/mal.json
+( cd mal && node "$RS" --no-color >/dev/null 2>&1 ); ok $? "render tolerates a null unit value (no crash)"
+( cd mal && node "$RS" --list --no-color >/dev/null 2>&1 ); ok $? "--list tolerates a null unit value (no crash)"
+
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails run-status test(s) failed"; exit 1; fi
 echo "✓ all run-status contract tests pass"

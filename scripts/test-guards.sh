@@ -32,6 +32,10 @@ t 0 "commit --amend allowed"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 0 "commit -m with dash-a text"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -m \"x-a thing\""}}' $G
 t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force origin main"}}' $G
 t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease"}}' $G
+t 2 "REGRESSION lease+force bypass blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease --force origin main"}}' $G
+t 2 "REGRESSION add -u blocked"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add -u"}}' $G
+t 2 "REGRESSION add * blocked"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add *"}}' $G
+t 0 "push -u set-upstream allowed (not force)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -u origin feat"}}' $G
 t 2 "reset --hard blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git reset --hard HEAD~1"}}' $G
 t 2 "clean -fd blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git clean -fd"}}' $G
 t 0 "non-git command allowed"      AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"npm test"}}' $G
@@ -50,6 +54,14 @@ t 2 "live run → block"             AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"com
 touch -t 202601010000 .ulpi/runs/x.json   # same running checkpoint, 6 months stale
 t 0 "STALE running run → allow (no permanent lockout)" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 rm -rf .ulpi
+# REGRESSION (phase-level "running" false-arm): a FINALIZED run (top-level status terminal) whose last
+# PHASE is still "running" must NOT arm the guard — the old grep-anywhere kept guards armed for 4h post-run.
+mkdir -p .ulpi/runs && printf '%s' '{"schemaVersion":1,"status":"needs_attention","phases":{"build":{"status":"running"}}}' > .ulpi/runs/x.json
+t 0 "REGRESSION finalized run w/ phase running → allow" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git reset --hard"}}' $G
+# and a task DESCRIPTION containing the word "running" must not arm it either
+printf '%s' '{"schemaVersion":1,"status":"done","task":"add a status running indicator"}' > .ulpi/runs/x.json
+t 0 "REGRESSION task text 'running' + status done → allow" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git reset --hard"}}' $G
+rm -rf .ulpi
 
 G=auto-test/scripts/guard-test-integrity.sh
 echo "── guard-test-integrity ──"
@@ -62,6 +74,10 @@ t 2 "pytest skip blocked"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_
 t 2 "rust #[ignore] blocked"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/lib_test.rs","new_string":"#[ignore]"}}' $G
 t 0 "normal test edit allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"expect(add(1,2)).toBe(3)"}}' $G
 t 0 "non-test file allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"src/utils.ts","new_string":"steps.skip(2)"}}' $G
+t 0 "REGRESSION Stream.skip in test allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"names.stream().skip(1).collect()"}}' $G
+t 0 "REGRESSION cursor.skip in test allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"api.spec.js","new_string":"coll.find({}).skip(10).limit(10)"}}' $G
+t 0 "REGRESSION model.fit in test allowed"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"ml.test.py","new_string":"model.fit(X, y)"}}' $G
+t 2 "test.skip blocked (keyword-anchored)"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"test.skip(\"x\", ()=>{})"}}' $G
 t 0 "escape hatch honored"         AUTO_GUARD_ALWAYS=1 AUTO_TEST_ALLOW_WEAKEN=1 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
 mkdir -p .ulpi && touch .ulpi/allow-test-weaken
 t 0 "file escape hatch (2-min window)" AUTO_GUARD_ALWAYS=1 CLAUDE_PROJECT_DIR=. -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
@@ -77,6 +93,7 @@ echo "── guard-ship-irreversibles ──"
 t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force"}}' $G
 t 2 "push -f blocked"              AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push -f origin main"}}' $G
 t 0 "force-with-lease allowed"     AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease"}}' $G
+t 2 "REGRESSION lease+force bypass blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force-with-lease --force"}}' $G
 t 2 "push --delete blocked"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin --delete old"}}' $G
 t 2 "push +refspec force blocked"  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin +main"}}' $G
 t 2 "push :refspec delete blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin :old"}}' $G
@@ -90,7 +107,7 @@ t 2 "git -C dir push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"co
 
 echo "── large payloads (ARG_MAX regression: stdin piping, not env) ──"
 G=auto-test/scripts/guard-test-integrity.sh
-python3 -c "import json;print(json.dumps({'tool_input':{'file_path':'big.test.ts','content':'x'*2000000+'it.skip(\"a\")'}}))" > big.json
+python3 -c "import json;print(json.dumps({'tool_input':{'file_path':'big.test.ts','content':'x'*2000000+'\nit.skip(\"a\")'}}))" > big.json
 if AUTO_GUARD_ALWAYS=1 bash "$ROOT/$G" < big.json >/dev/null 2>&1; then echo "FAIL (got 0 want 2) 2MB payload with it.skip"; fails=$((fails+1)); else echo "PASS (2) 2MB payload with it.skip blocked"; fi
 rm -f big.json
 

@@ -75,6 +75,19 @@ assert d["launch"]["scriptPath"]=="/abs/wf.js", d.get("launch")
 node "$CK" init .ulpi/runs/bad.json --task bad --launch 'not json' >/dev/null 2>&1
 [ "$?" = "1" ] && echo "PASS (rejected) invalid --launch JSON" || { echo "FAIL invalid --launch JSON not rejected"; fails=$((fails+1)); }
 
+# REGRESSION (withLock stale-steal): a STALE leftover lock must not let two concurrent writers
+# both enter the critical section and lose an update. Plant a >5s-stale lock, then fire 20 patches.
+node "$CK" init .ulpi/runs/steal.json --task steal --units "$(seq -s, 1 20)" --id steal >/dev/null
+mkdir -p .ulpi/runs/steal.json.lock
+python3 -c 'import os,time; t=time.time()-3600; os.utime(".ulpi/runs/steal.json.lock",(t,t))'  # backdate to 1h stale
+for i in $(seq 1 20); do node "$CK" unit .ulpi/runs/steal.json "$i" done >/dev/null 2>&1 & done; wait
+node "$CK" get .ulpi/runs/steal.json --summary | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["done"]==20, f"stale-steal lost writes: {d}"'; ok $? "stale lock stolen atomically, ZERO lost writes (two-writer race fixed)"
+
+# REGRESSION (init id guard): a unit id with whitespace must be refused at INIT, not silently
+# created into a permanently un-updatable (never-finalizable) state.
+node "$CK" init .ulpi/runs/ws.json --task ws --units "task a,b" --id ws >/dev/null 2>&1
+[ "$?" = "1" ] && echo "PASS (rejected) init unit id with whitespace" || { echo "FAIL whitespace unit id not rejected at init"; fails=$((fails+1)); }
+
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails checkpoint test(s) failed"; exit 1; fi
 echo "✓ all checkpoint contract tests pass"

@@ -1,43 +1,48 @@
 #!/bin/bash
-# guard-git-hygiene - PreToolUse[Bash] hook. Blocks: bulk staging, commit -a, reset --hard, clean -f during autonomous runs
+# guard-git-hygiene - PreToolUse[Bash] hook. Blocks: bulk staging, commit -a, forced/mirror push,
+# reset --hard, clean -f during autonomous runs.
 # Quote-aware + newline-aware parsing (shlex): flags inside quoted strings never leak into
 # parsing; every line and ;|& segment is analyzed separately. Anchored to CLAUDE_PROJECT_DIR.
+# Live-run scoping and rule matching happen in ONE python pass (top-level status is JSON-parsed,
+# never grepped - a phase/unit or a task-description string saying "running" must not arm the guard).
 # exit 0 = allow; exit 2 = BLOCK (stderr shown to Claude). Fail-open without python3.
 set -u
 raw=$(cat 2>/dev/null || true)
 [ -z "$raw" ] && exit 0
-
-if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  # Live-run scoping, anchored to the PROJECT ROOT (hooks run in an arbitrary cwd - worktrees,
-  # monorepo subdirs; CLAUDE_PROJECT_DIR exists exactly for this) with a 4h staleness window.
-  live=""
-  runs="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs"
-  if [ -d "$runs" ]; then
-    while IFS= read -r f; do
-      grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
-    done < <(find "$runs" -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null)
-  fi
-  [ -z "$live" ] && exit 0
-fi
-
 command -v python3 >/dev/null 2>&1 || { echo "guard-git-hygiene: python3 not found - guard skipped (fail-open)" >&2; exit 0; }
-printf '%s' "$raw" | python3 -c '
-import sys, json, re, shlex
+printf '%s' "$raw" | ULPI_RUNS="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs" ULPI_ALWAYS="${AUTO_GUARD_ALWAYS:-0}" python3 -c '
+import sys, os, json, re, shlex, glob, time
+# ── live-run scoping: enforce always under AUTO_GUARD_ALWAYS, else only while a run is genuinely
+#    live (TOP-LEVEL status == running, JSON-parsed, within a 4h staleness window). ──
+if os.environ.get("ULPI_ALWAYS") != "1":
+    runs = os.environ.get("ULPI_RUNS", "")
+    now, live = time.time(), False
+    for f in glob.glob(os.path.join(runs, "*.json")):
+        try:
+            if now - os.path.getmtime(f) > 240 * 60:
+                continue
+            with open(f) as fh:
+                doc = json.load(fh)
+            if isinstance(doc, dict) and doc.get("status") == "running":
+                live = True
+                break
+        except Exception:
+            continue
+    if not live:
+        sys.exit(0)
 try:
-    d = json.load(sys.stdin)
+    d = json.load(open(0))
 except Exception:
     sys.exit(0)
 c = d.get("tool_input", {}).get("command", "")
 def segments(cmd):
-    # newline is a command separator; quoting is respected (shlex posix), so a flag or
-    # separator INSIDE a quoted string (a commit message) can never leak into parsing.
     for line in cmd.split("\n"):
         lex = shlex.shlex(line, posix=True, punctuation_chars=";|&()")
         lex.whitespace_split = True
         try:
             toks = list(lex)
         except ValueError:
-            toks = line.split()   # unbalanced quotes: fall back to coarse split (still per-line)
+            toks = line.split()
         seg = []
         for t in toks:
             if t and all(ch in ";|&()" for ch in t):
@@ -51,30 +56,47 @@ GIT_GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", 
 def git_args(seg, sub):
     i = 0
     while i < len(seg) and re.fullmatch(r"[A-Za-z0-9_]+=.*", seg[i]):
-        i += 1   # same-line env prefixes only
+        i += 1
     if i >= len(seg) or seg[i] != "git":
         return None
     i += 1
-    while i < len(seg) and seg[i].startswith("-"):   # global options before the subcommand
+    while i < len(seg) and seg[i].startswith("-"):
         i += 2 if seg[i] in GIT_GLOBAL_WITH_VALUE else 1
     if i < len(seg) and seg[i] == sub:
         return seg[i + 1:]
     return None
 def block(msg):
     print(PREFIX + msg, file=sys.stderr); sys.exit(2)
-
 PREFIX = "guard-git-hygiene: "
+def is_bulk_add(x):
+    # whole-index / whole-tree staging in any spelling: -A/--all, -u/--update (all tracked mods),
+    # . or * (whole cwd - `*` is the LITERAL token the hook sees pre-shell-expansion), root pathspecs,
+    # and short clusters carrying A or u (e.g. -au, -uA).
+    if x in ("-A", "--all", "-u", "--update", ".", "*", ":/", ":(top)"):
+        return True
+    if x.startswith(":/") or x.startswith(":(top)"):
+        return True
+    if re.fullmatch(r"-[A-Za-z]+", x) and any(c in x[1:] for c in ("A", "u")):
+        return True
+    return False
 for seg in segments(c):
-    for _sub in ("add", "stage"):   # `git stage` is a documented synonym for `git add`
+    for _sub in ("add", "stage"):
         t = git_args(seg, _sub)
-        if t is not None and any(x in ("-A", "--all", "-a", ".", ":/", ":(top)") or x.startswith(":/") for x in t):
-            block("bulk staging (git add/stage -A/./--all or a whole-repo pathspec) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
+        if t is not None and any(is_bulk_add(x) for x in t):
+            block("bulk staging (git add/stage -A/-u/./*/--all or a whole-repo pathspec) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
     t = git_args(seg, "commit")
     if t is not None and any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
         block("git commit -a/--all stages everything implicitly - add the task files explicitly, then commit.")
     t = git_args(seg, "push")
-    if t is not None and ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)) and "--force-with-lease" not in t:
-        block("plain git push --force is banned during an autonomous run - use --force-with-lease, or stop and ask the user (irreversible-step escalation).")
+    if t is not None:
+        # A forced push in ANY form is blocked, even alongside --force-with-lease (git gives --force
+        # precedence, so `push --force-with-lease --force` silently disables the lease check). Only a
+        # LONE --force-with-lease (no --force/-f cluster/--mirror/+refspec) is allowed.
+        forced = ("--force" in t or "--mirror" in t
+                  or any(re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", x) for x in t)
+                  or any(x.startswith("+") and len(x) > 1 and not x.startswith("--") for x in t))
+        if forced:
+            block("forced push (git push --force / -f / --mirror / +refspec) rewrites shared history - use a LONE --force-with-lease, or stop and ask the user (irreversible-step escalation).")
     t = git_args(seg, "reset")
     if t is not None and "--hard" in t:
         block("git reset --hard destroys in-flight task work - checkpoint or escalate instead.")

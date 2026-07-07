@@ -42,7 +42,11 @@ function writeDoc(file, doc) {
 
 // Concurrent writers (parallel agents each finishing a unit) race on read-modify-write:
 // atomic rename alone prevents torn FILES but still LOSES updates. Serialize mutations with a
-// mkdir lock (mkdir is atomic on POSIX). Stale locks (>5s — a crashed holder) are stolen.
+// mkdir lock (mkdir is atomic on POSIX). A crashed holder leaves a stale lock (>5s); steal it
+// via an ATOMIC RENAME, never a bare rmdir. A directory can be renamed by exactly ONE caller —
+// so exactly one stealer captures a given stale lock and removes it; every other stealer's rename
+// fails ENOENT and loops. (The previous `rmdir(lock); continue` let two stealers each remove the
+// path — including the winner's FRESH lock — and both entered the critical section; proven bug.)
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 let ownedLock = null;
 process.on('exit', () => { if (ownedLock) { try { rmdirSync(ownedLock); } catch {} } });  // a refusal (process.exit) inside the lock must still release it
@@ -52,9 +56,14 @@ function withLock(file, fn) {
     try { mkdirSync(lock); }
     catch (e) {
       if (e.code === 'ENOENT') fail(`parent directory of ${file} does not exist — init creates it; check the path`);
-      // stale steal: rmdir may race another stealer (ENOENT swallowed) — mkdir on the next loop
-      // iteration is the atomic arbiter, so exactly one contender wins the recreated lock.
-      try { if (Date.now() - statSync(lock).mtimeMs > 5000) { rmdirSync(lock); continue; } } catch {}
+      // The lock is held. Steal ONLY if stale, and ONLY via atomic rename (the single-winner arbiter).
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 5000) {
+          const tomb = `${lock}.dead.${process.pid}.${i}`;
+          renameSync(lock, tomb);           // throws ENOENT for every stealer but the one that wins the rename
+          try { rmdirSync(tomb); } catch {}
+        }
+      } catch {}                            // lost the steal race (ENOENT) or not stale → just wait and retry
       sleep(10); continue;
     }
     ownedLock = lock;
@@ -94,6 +103,9 @@ switch (cmd) {
     const stamp = now();
     const units = {};
     for (const u of (opt(rest, '--units', '') || '').split(',').map(s => s.trim()).filter(Boolean)) {
+      // Same id rule as the `unit` subcommand — a unit born with whitespace would be permanently
+      // un-updatable (the unit command rejects /[,\s]/), so the run could never finalize done.
+      if (/\s/.test(u)) fail(`unit id '${u}' contains whitespace — ids must be shell-safe tokens (the 'unit' command rejects them, so it could never be marked done)`);
       units[u] = { status: 'pending', dependsOn: [], note: '', createdAt: stamp, updatedAt: stamp };
     }
     // --launch '<json>' persists the exact resume recipe ({ scriptPath, args }) so the run can be

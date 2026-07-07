@@ -23,28 +23,33 @@ if [ -f "$FLAG" ]; then
   rm -f "$FLAG"
 fi
 
-if [ "${AUTO_GUARD_ALWAYS:-0}" != "1" ]; then
-  # Live-run scoping with a STALENESS window: a real autonomous run touches its checkpoint constantly
-  # (status writes), so only a running checkpoint modified in the last 4h arms the guard. A crashed
-  # run from last week can never lock a user out of normal git usage (see also: checkpoint.mjs gc).
-  live=""
-  runs="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs"
-  if [ -d "$runs" ]; then
-    while IFS= read -r f; do
-      grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$f" 2>/dev/null && { live=1; break; }
-    done < <(find "$runs" -maxdepth 1 -name '*.json' -mmin -240 2>/dev/null)
-  fi
-  [ -z "$live" ] && exit 0
-fi
+command -v python3 >/dev/null 2>&1 || { echo "guard-test-integrity: python3 not found — guard skipped (fail-open)" >&2; exit 0; }
 
 raw=$(cat 2>/dev/null || true)
 [ -z "$raw" ] && exit 0
 
-# Pull file_path and the added text (new_string for Edit, content for Write).
-# NB: the JSON travels via env, NOT via stdin — `python3 -` + heredoc would consume stdin for the script.
-if command -v python3 >/dev/null 2>&1; then
-  parsed=$(printf '%s' "$raw" | python3 -c '
-import sys, json
+# ONE python pass does BOTH live-run scoping and payload extraction. Scoping JSON-parses the TOP-LEVEL
+# status (a phase/unit that is "running", or a task description containing that word, must NOT arm the
+# guard — the old grep-anywhere did, keeping guards armed for hours after a run finalized). When not
+# live it prints nothing → bash allows. The escape flag/env are handled in bash above.
+parsed=$(printf '%s' "$raw" | ULPI_RUNS="${CLAUDE_PROJECT_DIR:-.}/.ulpi/runs" ULPI_ALWAYS="${AUTO_GUARD_ALWAYS:-0}" python3 -c '
+import sys, os, json, glob, time
+if os.environ.get("ULPI_ALWAYS") != "1":
+    runs = os.environ.get("ULPI_RUNS", "")
+    now, live = time.time(), False
+    for f in glob.glob(os.path.join(runs, "*.json")):
+        try:
+            if now - os.path.getmtime(f) > 240 * 60:
+                continue
+            with open(f) as fh:
+                doc = json.load(fh)
+            if isinstance(doc, dict) and doc.get("status") == "running":
+                live = True
+                break
+        except Exception:
+            continue
+    if not live:
+        sys.exit(0)   # not live → print nothing → bash allows
 try:
     d = json.load(sys.stdin)
 except Exception:
@@ -53,12 +58,8 @@ ti = d.get("tool_input", {})
 print(ti.get("file_path", ""))
 print((ti.get("new_string") or ti.get("content") or "").replace("\n", "\\n"))
 ' 2>/dev/null)
-  fp=$(printf '%s\n' "$parsed" | sed -n 1p)
-  added=$(printf '%s\n' "$parsed" | sed -n 2p)
-else
-  echo "guard-test-integrity: python3 not found — guard skipped (fail-open)" >&2
-  exit 0
-fi
+fp=$(printf '%s\n' "$parsed" | sed -n 1p)
+added=$(printf '%s\n' "$parsed" | sed -n 2p)
 [ -z "$added" ] && exit 0
 
 # Only guard test files.
@@ -79,9 +80,12 @@ block() { echo "guard-test-integrity: $1 (if this weakening is genuinely intende
 # stays on ONE line for the two-line extraction above). Restore real newlines before matching, or the
 # ^ / boundary anchors below (xit/xdescribe/xtest at a line start) silently never fire on multi-line edits.
 added_lines=${added//\\n/$'\n'}
-# Skip/only/todo — silences or narrows the suite.
-if printf '%s' "$added_lines" | grep -qE '\.(only|skip)[[:space:]]*\(|(^|[^a-zA-Z_])(xit|xdescribe|xtest)[[:space:]]*\(|\.(todo)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then
-  block "this edit adds a test skip/only/ignore marker to a test file — that silences the suite instead of fixing it (fail-closed contract)"
+# Skip/only/todo — silences or narrows the suite. Anchored to test-framework keywords so a genuine
+# test-runner marker (it.skip, describe.only, test.todo, xit(...)) is caught while unrelated APIs that
+# happen to have .skip()/.only() — Stream.skip(1), a DB cursor.skip(10), RxJS — are NOT (blocking those
+# taught agents to reach for the bypass on legitimate edits).
+if printf '%s' "$added_lines" | grep -qE '(^|[^A-Za-z0-9_])(describe|context|suite|it|test|bench)\.(only|skip|todo)([^A-Za-z0-9_]|$)|(^|[^a-zA-Z_])(xit|xdescribe|xtest|fdescribe)[[:space:]]*\(|@pytest\.mark\.skip|@unittest\.skip|#\[ignore\]'; then
+  block "this edit adds a test-runner skip/only/ignore marker (it.skip/describe.only/xit/@pytest.mark.skip/…) to a test file — that silences the suite instead of fixing it (fail-closed contract)"
 fi
 # Type-error / assert silencing inside tests.
 if printf '%s' "$added_lines" | grep -qE '@ts-ignore|@ts-expect-error|eslint-disable(-next-line)?\b|# type: ignore'; then
