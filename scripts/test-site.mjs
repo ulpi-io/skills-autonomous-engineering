@@ -379,7 +379,7 @@ test('global navigation and the home/plugin hubs expose both platforms', () => {
 
 test('the full-pipeline command is prominent on the homepage and every install flow', () => {
   const claudeRun = '/autonomous-pipeline "<feature>"';
-  const codexRun = '$autonomous-pipeline "<feature>"';
+  const codexRun = '$autonomous-engineering:autonomous-pipeline "<feature>"';
   const runnerPlatforms = (html) => [...html.matchAll(
     /\bdata-runner-platform\s*=\s*(?:"([^"]+)"|'([^']+)')/gi,
   )].map((match) => decodeHtml(match[1] ?? match[2]));
@@ -420,9 +420,9 @@ test('the full-pipeline command is prominent on the homepage and every install f
   const codexText = visibleText(codexHtml);
   assert.deepEqual(runnerPlatforms(codexHtml), ['codex']);
   assert.ok(
-    codexText.indexOf('npx skills add https://github.com/ulpi-io/skills-autonomous-engineering')
+    codexText.indexOf('codex plugin add autonomous-engineering@autonomous-engineering')
       < codexText.indexOf(codexRun),
-    'Codex skills.sh installation must lead to the full-pipeline invocation',
+    'Codex plugin installation must lead to the plugin-qualified full-pipeline invocation',
   );
 
   const pipelineHtml = readFileSync(routeFile('skills/autonomous-pipeline'), 'utf8');
@@ -449,22 +449,49 @@ test('plugin pages make truthful, platform-specific availability claims', () => 
 
   const codexHtml = readFileSync(routeFile('plugins/codex'), 'utf8');
   const codexText = visibleText(codexHtml);
-  assert.match(codexText, /\b(?:preview|in development)\b/i, 'Codex plugin must be visibly marked Preview');
-  assert.doesNotMatch(
+  assert.match(codexText, /Available from source · v0\.1\.0/, 'Codex plugin must be visibly marked available');
+  assert.match(codexText, /catalog_count = 18/, 'Codex artifact panel must report the sealed adapter count');
+
+  const installFlow = [
+    'node scripts/package-codex-plugin.mjs --out /tmp/ulpi-codex-market',
+    'codex plugin marketplace add /tmp/ulpi-codex-market',
+    'codex plugin marketplace list',
+    'codex plugin add autonomous-engineering@autonomous-engineering',
+    'codex plugin list',
+    '$autonomous-engineering:autonomous-pipeline "<feature>"',
+  ];
+  let previousPosition = -1;
+  for (const command of installFlow) {
+    const position = codexText.indexOf(command);
+    assert.ok(position > previousPosition, `Codex install flow is missing or misordered: ${command}`);
+    previousPosition = position;
+  }
+
+  assert.match(codexText, /new Codex session/i, 'Codex page must explain new-session discovery');
+  assert.match(
     codexText,
-    /\bcodex\s+(?:plugins?|marketplace)\s+(?:add|install)\b/i,
-    'Codex preview must not publish a native-plugin installation command',
+    /Repository-level hook wiring is not bundled/i,
+    'Codex page must disclose the source artifact hook boundary',
   );
   assert.doesNotMatch(
     codexText,
-    /\b(?:install|enable)\s+(?:the\s+)?(?:native\s+)?codex plugin\b/i,
-    'Codex preview must not claim that the native plugin can be installed',
+    /(?:plugin|artifact) ships[^.]*Codex lifecycle hooks/i,
+    'Codex page must not claim the current artifact ships hooks',
   );
   assert.doesNotMatch(
     codexText,
-    /\b(?:native\s+)?codex plugin\s+(?:is\s+)?(?:available|released|ready to install)\b/i,
-    'Codex preview must not claim that the native plugin has shipped',
+    /\b(?:preview|in development|not installable yet)\b/i,
+    'Codex page must not retain preview-era availability copy',
   );
+
+  for (const route of substantiveRoutes()) {
+    const text = visibleText(readFileSync(routeFile(route), 'utf8'));
+    assert.doesNotMatch(
+      text,
+      /Native plugin preview|native plugin remains explicitly preview|native plugin is not presented as shipped/i,
+      `/${route} retains stale Codex preview copy`,
+    );
+  }
 });
 
 test('sitemap contains every substantive route exactly once', () => {

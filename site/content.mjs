@@ -94,13 +94,13 @@ export const enforcement = [
 ];
 
 export const pluginComparison = [
-  ['Distribution', 'Claude marketplace plugin', 'Codex plugin preview; skills.sh works today'],
-  ['Skill surface', '18 canonical root skills', '18 provider-native adapters when shipped'],
-  ['Invocation', '/skill-name and model routing', '$skill-name / plugin namespace'],
+  ['Distribution', 'Claude marketplace plugin', 'Reproducible Codex marketplace artifact'],
+  ['Skill surface', '18 canonical root skills', '18 plugin-qualified Codex adapters'],
+  ['Invocation', '/skill-name and model routing', '$autonomous-engineering:<skill>'],
   ['Context', 'CLAUDE.md, scoped rules, Claude memory', 'AGENTS.md and Codex-native project context'],
-  ['Orchestration', 'Workflow templates plus native goal/loop surfaces', 'Deterministic CLI coordinator plus codex exec'],
-  ['Hooks', 'Claude lifecycle events and skill guards', 'Codex-supported events with explicit hook trust'],
-  ['Status', 'Available now', 'Native plugin in development; universal skills available now'],
+  ['Orchestration', 'Workflow templates plus native goal/loop surfaces', 'Deterministic coordinator plus pinned codex exec'],
+  ['Hooks', 'Claude lifecycle events and skill guards', 'Repository hooks are not bundled in the source artifact'],
+  ['Status', 'Available now', 'Available now from source · v0.1.0'],
 ];
 
 export const claudeHooks = [
@@ -110,16 +110,23 @@ export const claudeHooks = [
   ['SessionEnd', 'Clean up terminal run state without touching active work.'],
 ];
 
-export const codexRoadmap = [
-  'A manifest-directed adapter tree isolated from Claude discovery.',
+export const codexCapabilities = [
+  'A manifest-directed adapter tree isolated from Claude discovery and sealed at 18 skills.',
   'A deterministic, checkpointed coordinator for Git, validation, budgets, and convergence.',
-  'Exact codex exec schemas and failure contracts instead of prose-owned control flow.',
-  'Codex-supported hooks with explicit review and trust behavior.',
-  'Provider-neutral resume, AGENTS.md context, learning, watching, and scheduling.',
-  'A reproducible marketplace artifact with a real isolated install and invocation smoke gate.',
+  'Pinned codex exec schemas with typed blocked outcomes instead of prose-owned control flow.',
+  'Durable checkpoint state, bounded fan-out, and worktree isolation around the coordinator.',
+  'Provider-native project context, resume, learning, and watching with explicit unsupported outcomes.',
+  'A reproducible marketplace artifact with isolated add/list, new-session discovery, and invocation verification.',
 ];
 
 export const universalInstall = 'npx skills add https://github.com/ulpi-io/skills-autonomous-engineering';
 export const singleSkillInstall = (slug) => `${universalInstall} --skill ${slug}`;
 export const claudePipelineRun = '/autonomous-pipeline "<feature>"';
-export const codexPipelineRun = '$autonomous-pipeline "<feature>"';
+export const codexPipelineRun = '$autonomous-engineering:autonomous-pipeline "<feature>"';
+export const codexInstallCommands = [
+  'node scripts/package-codex-plugin.mjs --out /tmp/ulpi-codex-market',
+  'codex plugin marketplace add /tmp/ulpi-codex-market',
+  'codex plugin marketplace list',
+  'codex plugin add autonomous-engineering@autonomous-engineering',
+  'codex plugin list',
+];

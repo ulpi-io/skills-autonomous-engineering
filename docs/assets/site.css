@@ -2773,13 +2773,13 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
 .callout > div > p { margin-top: 7px; color: var(--ink-2); }
 .stamp-ok { border-color: var(--verified); color: var(--verified); transform: rotate(-1deg); }
 
-.preview-panel {
+.release-panel {
   padding: 24px;
 }
 
-.preview-panel > .lab { margin-top: 26px; }
+.release-panel > .lab { margin-top: 26px; }
 
-.preview-panel > strong {
+.release-panel > strong {
   display: block;
   margin-top: 8px;
   color: var(--preview);
@@ -2787,7 +2787,7 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
   font-size: 13px;
 }
 
-.preview-panel ul {
+.release-panel ul {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
@@ -2797,7 +2797,7 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
   list-style: none;
 }
 
-.preview-panel li {
+.release-panel li {
   padding: 8px 8px 8px 0;
   border-bottom: 1px solid var(--rule);
   color: var(--ink-2);
@@ -3170,7 +3170,7 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
   .chip-grid a:nth-last-child(-n + 3) { border-bottom: 1px solid var(--rule); }
   .chip-grid a:nth-last-child(-n + 2) { border-bottom: 0; }
 
-  .preview-panel ul { grid-template-columns: 1fr; }
+  .release-panel ul { grid-template-columns: 1fr; }
 
   .roadmap-list li {
     grid-template-columns: 36px minmax(0, 1fr);
