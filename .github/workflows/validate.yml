@@ -27,3 +27,5 @@ jobs:
         run: bash scripts/test-plan-validate.sh
       - name: Harvest contract (auto-learn extracts every learning-signal class with evidence)
         run: bash scripts/test-harvest.sh
+      - name: Static site routes, links, metadata, analytics, and generated-output drift
+        run: node --test scripts/test-site.mjs

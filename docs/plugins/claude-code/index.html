@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Code plugin · Autonomous Engineering Skills</title>
+  <meta name="description" content="Install the shipped Autonomous Engineering Claude Code plugin with all 18 skills, lifecycle hooks, tested guards, and Workflow templates.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Claude Code plugin">
+  <meta property="og:description" content="Install the shipped Autonomous Engineering Claude Code plugin with all 18 skills, lifecycle hooks, tested guards, and Workflow templates.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/plugins/claude-code/">
+  <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/plugins/claude-code/">
+  <link rel="icon" type="image/png" href="../../ulpi-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/site.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+  <script defer src="../../assets/site.js" data-ga-id="G-2JN5Y3QCSS"></script>
+
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="../../" aria-label="Autonomous Engineering Skills, home">
+        <img src="../../ulpi-icon.png" alt="" width="26" height="26" class="logo">
+        <span>autonomous-engineering</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>menu</span></button>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="../../how-it-works/">How it works</a><a href="../../skills/">Skills</a><a href="../../plugins/" aria-current="page">Plugins</a>
+        <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+        <button class="themebtn" type="button" id="theme" aria-label="Toggle color theme">◐ auto</button>
+      </nav>
+    </div>
+  </header>
+  <main id="main" >
+
+  <nav class="breadcrumbs wrap" aria-label="Breadcrumb"><a href="../../">Home</a><span aria-hidden="true">/</span><a href="../../plugins/">Plugins</a><span aria-hidden="true">/</span><span aria-current="page">Claude Code</span></nav>
+  <section class="page-hero plugin-hero"><div class="wrap page-hero-grid"><div><div class="hero-meta"><p class="lab"><span class="mk">C</span> Claude Code plugin</p><span class="status-badge status-available"><span aria-hidden="true"></span>Available now</span></div><h1>All eighteen skills.<br>The guards wired in.</h1><p class="lede">The current marketplace plugin packages the canonical skills, lifecycle hooks, tested guard scripts, and runnable Workflow templates as one Claude-native distribution.</p><div class="hero-actions"><a class="btn" href="#install">Install plugin →</a><a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering/tree/main/.claude-plugin">Inspect manifest ↗</a></div></div><div class="stat-strip panel"><div class="stat"><b>18</b><span>skills</span></div><div class="stat"><b>04</b><span>hook stages</span></div><div class="stat"><b>02</b><span>workflow templates</span></div><div class="stat"><b>01</b><span>marketplace install</span></div></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> lifecycle hooks</p><h2>Defense in depth, scoped to real guarantees.</h2><p>The hooks do not replace validation, review, or budgets. They stop common dangerous tool shapes and keep run lifecycle state visible.</p></div><div class="detail-grid"><article class="detail-block"><span class="detail-number">01</span><h3>SessionStart</h3><p>Find resumable runs and surface the exact resume path.</p></article><article class="detail-block"><span class="detail-number">02</span><h3>PreToolUse</h3><p>Run the active skill’s test, Git, and ship guards.</p></article><article class="detail-block"><span class="detail-number">03</span><h3>Stop</h3><p>Surface a still-running checkpoint so termination stays honest.</p></article><article class="detail-block"><span class="detail-number">04</span><h3>SessionEnd</h3><p>Clean up terminal run state without touching active work.</p></article></div></div></section>
+  <section id="install"><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> install</p><h2>Add the marketplace, then the plugin.</h2><p>Run these commands inside Claude Code. Review the bundled hooks before trusting them in a project.</p></div><div class="cmdrow"><code id="claude-marketplace">/plugin marketplace add ulpi-io/skills-autonomous-engineering</code><button class="cp" type="button" data-copy-target="claude-marketplace" aria-label="Copy command">copy</button></div><div class="cmdrow"><code id="claude-plugin-install">/plugin install autonomous-engineering@ulpi-autonomous-engineering</code><button class="cp" type="button" data-copy-target="claude-plugin-install" aria-label="Copy command">copy</button></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> included</p><h2>The complete collection.</h2></div><div class="chip-grid"><a href="../../skills/auto-spec/">/auto-spec</a><a href="../../skills/auto-plan/">/auto-plan</a><a href="../../skills/auto-build/">/auto-build</a><a href="../../skills/auto-simplify/">/auto-simplify</a><a href="../../skills/auto-test/">/auto-test</a><a href="../../skills/auto-review/">/auto-review</a><a href="../../skills/auto-performance/">/auto-performance</a><a href="../../skills/auto-ship/">/auto-ship</a><a href="../../skills/converge-loop/">/converge-loop</a><a href="../../skills/adversarial-verify/">/adversarial-verify</a><a href="../../skills/checkpoint-resume/">/checkpoint-resume</a><a href="../../skills/fan-out-work/">/fan-out-work</a><a href="../../skills/budget-guard/">/budget-guard</a><a href="../../skills/autonomous-pipeline/">/autonomous-pipeline</a><a href="../../skills/watch-and-act/">/watch-and-act</a><a href="../../skills/schedule-recurring-agent/">/schedule-recurring-agent</a><a href="../../skills/auto-map/">/auto-map</a><a href="../../skills/auto-learn/">/auto-learn</a></div></div></section>
+  <section><div class="wrap"><div class="callout"><span class="stamp stamp-ok">available</span><div><h2>Claude-first today.</h2><p>The repository’s canonical skills and current hooks are implemented for Claude Code. The Codex plugin page separates what is universally installable now from what remains native-plugin work.</p></div><a class="btn ghost" href="../../plugins/codex/">See Codex status →</a></div></div></section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div><span class="lab"><span class="mk">▸</span> autonomous engineering</span><p>Bounded. Fail-closed. Durable. Verified before acting.</p></div>
+      <div class="footer-links">
+        <a href="../../skills/">18 skills</a>
+        <a href="../../plugins/claude-code/">Claude Code plugin</a>
+        <a href="../../plugins/codex/">Codex plugin</a>
+        <a href="https://github.com/ulpi-io/skills-autonomous-engineering">Source ↗</a>
+      </div>
+      <span class="footer-meta">© ulpi.io · MIT</span>
+    </div>
+  </footer>
+</body>
+</html>

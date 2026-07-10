@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/how-it-works/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-spec/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-plan/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-build/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-simplify/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-test/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-review/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-performance/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-ship/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/converge-loop/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/adversarial-verify/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/checkpoint-resume/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/fan-out-work/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/budget-guard/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/autonomous-pipeline/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/watch-and-act/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/schedule-recurring-agent/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-map/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-learn/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/plugins/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/plugins/claude-code/</loc></url>
+  <url><loc>https://ulpi-io.github.io/skills-autonomous-engineering/plugins/codex/</loc></url>
+</urlset>

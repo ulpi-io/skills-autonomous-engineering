@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkpoint &amp; Resume skill · Autonomous Engineering Skills</title>
+  <meta name="description" content="Persists long-run state to disk so a fresh session skips verified work already completed.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Checkpoint &amp; Resume skill">
+  <meta property="og:description" content="Persists long-run state to disk so a fresh session skips verified work already completed.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/skills/checkpoint-resume/">
+  <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/skills/checkpoint-resume/">
+  <link rel="icon" type="image/png" href="../../ulpi-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/site.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+  <script defer src="../../assets/site.js" data-ga-id="G-2JN5Y3QCSS"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Checkpoint & Resume skill","description":"Persists long-run state to disk so a fresh session skips verified work already completed.","url":"https://ulpi-io.github.io/skills-autonomous-engineering/skills/checkpoint-resume/","version":"v0.1.1","isPartOf":{"@type":"WebSite","name":"Autonomous Engineering Skills","url":"https://ulpi-io.github.io/skills-autonomous-engineering/"}}</script>
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="../../" aria-label="Autonomous Engineering Skills, home">
+        <img src="../../ulpi-icon.png" alt="" width="26" height="26" class="logo">
+        <span>autonomous-engineering</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>menu</span></button>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="../../how-it-works/">How it works</a><a href="../../skills/" aria-current="page">Skills</a><a href="../../plugins/">Plugins</a>
+        <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+        <button class="themebtn" type="button" id="theme" aria-label="Toggle color theme">◐ auto</button>
+      </nav>
+    </div>
+  </header>
+  <main id="main" data-skill="checkpoint-resume">
+
+  <nav class="breadcrumbs wrap" aria-label="Breadcrumb"><a href="../../">Home</a><span aria-hidden="true">/</span><a href="../../skills/">Skills</a><span aria-hidden="true">/</span><span aria-current="page">Checkpoint &amp; Resume</span></nav>
+  <section class="page-hero skill-hero"><div class="wrap page-hero-grid"><div><div class="hero-meta"><span class="lab"><span class="mk">▸</span> Control primitives</span><span class="version">v0.1.1</span></div><h1><code>checkpoint-resume</code></h1><p class="lede">Persists long-run state to disk so a fresh session skips verified work already completed.</p><div class="hero-actions"><a class="btn" href="#install">Install this skill →</a><a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/checkpoint-resume/SKILL.md">Read SKILL.md ↗</a></div></div><div class="skill-instrument panel" data-visual="state-tape"><div class="instrument-top"><span>WORKFLOW / 05</span><span>/checkpoint-resume &lt;run label, or a path/id to resume&gt;</span></div><ol class="workflow-rail" aria-label="Checkpoint &amp; Resume workflow"><li class="rail-step"><span>01</span><p>Decide new run or resume before touching state.</p></li><li class="rail-step"><span>02</span><p>Initialize through the locked checkpoint CLI; never overwrite a live run.</p></li><li class="rail-step"><span>03</span><p>Persist truthful phase and unit transitions as work lands.</p></li><li class="rail-step"><span>04</span><p>On resume, load disk state and rebuild only non-done eligible units.</p></li><li class="rail-step"><span>05</span><p>Finalize honestly and expose status through the read-only viewer.</p></li></ol></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> operating envelope</p><h2>Use it deliberately.</h2><p>The shortest useful definition of where this skill helps—and where it should stay out of the way.</p></div><div class="use-grid"><div class="detail-block"><h3>Use when</h3><ul class="check-list"><li>A run has many independently identifiable units.</li><li>Interruption, crash, or session loss should not restart completed work.</li><li>Operators need a read-only view of live and terminal run state.</li></ul></div><div class="detail-block"><h3>Do not use when</h3><ul class="cross-list"><li>The task is a single indivisible action.</li><li>Units cannot be identified or verified independently.</li><li>You intend to use checkpoint writes as a delivery gate.</li></ul></div></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> output contract</p><h2>What must be true when it stops.</h2></div><div class="output-grid"><div class="detail-block"><h3>Produces</h3><ul class="signal-list"><li>.ulpi/runs/&lt;id&gt;.json durable state</li><li>Per-phase and per-unit timestamps and status</li><li>Open-item and needs-attention register</li><li>Read-only rendered status and resume command</li></ul></div><div class="detail-block"><h3>Guarantees</h3><ul class="guarantee-list"><li>Disk state, not an in-memory cache, is the source of truth.</li><li>Resume skips verified done units and respects dependency readiness.</li><li>Locked atomic writes protect concurrent updates.</li><li>The CLI refuses live reinitialization, done-state demotion, and false successful finalization.</li><li>Status-write failure remains non-fatal observability and does not falsely fail delivery.</li></ul></div><div class="detail-block"><h3>Honest failure states</h3><ul class="failure-list"><li>needs_attention — work stopped with named open units</li><li>aborted — the run terminated without meeting its completion bar</li><li>stale_observability — status writes failed and state must be reconstructed from real artifacts</li><li>refused_transition — the CLI rejected an unsafe lifecycle mutation</li></ul></div></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> enforcement</p><h2>Know which claims are executable.</h2><p>Scripts are linked when this skill owns deterministic machinery. The remaining rules are explicit operating contracts and must not be marketed as hooks.</p></div><div class="evidence-grid"><a class="evidence-card" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/checkpoint-resume/scripts/checkpoint.mjs"><span class="status-dot"></span><code>checkpoint-resume/scripts/checkpoint.mjs</code><span>source ↗</span></a><a class="evidence-card" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/checkpoint-resume/scripts/run-status.mjs"><span class="status-dot"></span><code>checkpoint-resume/scripts/run-status.mjs</code><span>source ↗</span></a><a class="evidence-card" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/checkpoint-resume/references/status-schema.md"><span class="status-dot"></span><code>checkpoint-resume/references/status-schema.md</code><span>source ↗</span></a></div></div></section>
+  <section id="install"><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> install and invoke</p><h2>One skill, three honest surfaces.</h2></div><div class="install-grid"><article class="install-card"><div class="install-card-head"><h3>skills.sh</h3><span class="status-badge status-available"><span aria-hidden="true"></span>Available</span></div><p>Universal skill installation, including Claude Code and Codex.</p><div class="cmdrow"><code id="install-checkpoint-resume">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill checkpoint-resume</code><button class="cp" type="button" data-copy-target="install-checkpoint-resume" aria-label="Copy command">copy</button></div></article><article class="install-card"><div class="install-card-head"><h3>Claude Code plugin</h3><span class="status-badge status-available"><span aria-hidden="true"></span>Available</span></div><p>Install the full plugin, then invoke <code>/checkpoint-resume</code> or let routing select it from context.</p><a class="text-link" href="../../plugins/claude-code/">Claude installation →</a></article><article class="install-card"><div class="install-card-head"><h3>Codex</h3><span class="status-badge status-preview"><span aria-hidden="true"></span>Native plugin preview</span></div><p>The skills.sh version works today. Invoke the installed skill as <code>$checkpoint-resume</code>. The native plugin is not presented as shipped until its install smoke passes.</p><a class="text-link" href="../../plugins/codex/">Codex status →</a></article></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> composes with</p><h2>Related machinery.</h2></div><div class="related-grid"><a class="related-card" href="../../skills/converge-loop/"><code>converge-loop</code><p>Runs a measurable until-green or until-dry loop with explicit caps, anti-thrash, and honest termination.</p><span>Open →</span></a><a class="related-card" href="../../skills/fan-out-work/"><code>fan-out-work</code><p>Runs the same bounded pipeline over independent items in parallel without hiding failures or dropped coverage.</p><span>Open →</span></a><a class="related-card" href="../../skills/auto-build/"><code>auto-build</code><p>Walks an approved task DAG test-first, isolating parallel work and preserving one rollback point per task.</p><span>Open →</span></a><a class="related-card" href="../../skills/autonomous-pipeline/"><code>autonomous-pipeline</code><p>Runs the complete engineering lifecycle once, behind one plan approval, with durable phase gates and a verified findings register.</p><span>Open →</span></a></div></div></section>
+  <nav class="page-nav wrap" aria-label="Adjacent skills"><a href="../../skills/adversarial-verify/"><span>← previous</span><b>adversarial-verify</b></a><a href="../../skills/fan-out-work/"><span>next →</span><b>fan-out-work</b></a></nav>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div><span class="lab"><span class="mk">▸</span> autonomous engineering</span><p>Bounded. Fail-closed. Durable. Verified before acting.</p></div>
+      <div class="footer-links">
+        <a href="../../skills/">18 skills</a>
+        <a href="../../plugins/claude-code/">Claude Code plugin</a>
+        <a href="../../plugins/codex/">Codex plugin</a>
+        <a href="https://github.com/ulpi-io/skills-autonomous-engineering">Source ↗</a>
+      </div>
+      <span class="footer-meta">© ulpi.io · MIT</span>
+    </div>
+  </footer>
+</body>
+</html>

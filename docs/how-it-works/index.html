@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How it works · Autonomous Engineering Skills</title>
+  <meta name="description" content="The bounded lifecycle, deterministic enforcement, checkpoints, evidence gates, and authority model behind Autonomous Engineering Skills.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="How it works">
+  <meta property="og:description" content="The bounded lifecycle, deterministic enforcement, checkpoints, evidence gates, and authority model behind Autonomous Engineering Skills.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/how-it-works/">
+  <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/how-it-works/">
+  <link rel="icon" type="image/png" href="../ulpi-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+  <script defer src="../assets/site.js" data-ga-id="G-2JN5Y3QCSS"></script>
+
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="../" aria-label="Autonomous Engineering Skills, home">
+        <img src="../ulpi-icon.png" alt="" width="26" height="26" class="logo">
+        <span>autonomous-engineering</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>menu</span></button>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="../how-it-works/" aria-current="page">How it works</a><a href="../skills/">Skills</a><a href="../plugins/">Plugins</a>
+        <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+        <button class="themebtn" type="button" id="theme" aria-label="Toggle color theme">◐ auto</button>
+      </nav>
+    </div>
+  </header>
+  <main id="main" >
+
+  <nav class="breadcrumbs wrap" aria-label="Breadcrumb"><a href="../">Home</a><span aria-hidden="true">/</span><span aria-current="page">How it works</span></nav>
+  <section class="page-hero">
+    <div class="wrap page-hero-grid"><div><p class="lab"><span class="mk">▸</span> system architecture</p><h1>Autonomy with an instrument panel.</h1><p class="lede">The collection treats delivery as a bounded state machine: every phase has evidence, every loop has a stop set, and every long run has a durable way back in.</p></div><div class="hero-index panel"><span class="lab">RUN CONTRACT / 06</span><div><b>01</b><span>Bounded, never infinite</span></div><div><b>02</b><span>Fails closed</span></div><div><b>03</b><span>Verifies before acting</span></div><div><b>04</b><span>Durable and resumable</span></div><div><b>05</b><span>Escalates, never guesses</span></div><div><b>06</b><span>Measures, never assumes</span></div></div></div>
+  </section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> lifecycle</p><h2>Eight phases. One directional pass.</h2><p>Each phase consumes grounded artifacts from the phase before it. Optional phases are explicitly skipped; required red gates block everything downstream.</p></div><div class="phase-strip"><a class="phase-stage" href="../skills/auto-spec/"><span>01 · Define</span><code>/auto-spec</code><p>testable spec</p></a><a class="phase-stage" href="../skills/auto-plan/"><span>02 · Plan</span><code>/auto-plan</code><p>validated DAG</p></a><a class="phase-stage" href="../skills/auto-build/"><span>03 · Build</span><code>/auto-build</code><p>task commits</p></a><a class="phase-stage" href="../skills/auto-simplify/"><span>04 · Clean</span><code>/auto-simplify</code><p>simpler code</p></a><a class="phase-stage" href="../skills/auto-test/"><span>05 · Prove</span><code>/auto-test</code><p>meaningful tests</p></a><a class="phase-stage" href="../skills/auto-review/"><span>06 · Gate</span><code>/auto-review</code><p>verified findings</p></a><a class="phase-stage" href="../skills/auto-performance/"><span>07 · Measure</span><code>/auto-performance</code><p>proven gains</p></a><a class="phase-stage" href="../skills/auto-ship/"><span>08 · Ship</span><code>/auto-ship</code><p>release-ready</p></a></div><p class="loopnote"><b>↻ close the loop</b> auto-learn runs from the checkpoint; auto-map refreshes project context after a real completed run.</p></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> autonomy contract</p><h2>Six rules every skill inherits.</h2><p>The implementation differs by platform. These guarantees do not.</p></div><div class="contract"><article class="ct reveal"><h3>Bounded, never infinite</h3><p>Every unattended run declares a machine-checkable done condition, a hard cap, a cost or time budget, a no-progress rule, and escalation triggers before it starts.</p></article><article class="ct reveal"><h3>Fails closed</h3><p>A gate that did not run is not clean. Exhausted is not converged. Red evidence remains red all the way to the final report.</p></article><article class="ct reveal"><h3>Verifies before acting</h3><p>Findings that drive edits are attacked by independent skeptics. Rejected and unverified claims remain visible instead of quietly becoming work.</p></article><article class="ct reveal"><h3>Durable and resumable</h3><p>Long work records a checkpoint and resumes by skipping units already verified done. The checkpoint, not a session transcript, is the durable truth.</p></article><article class="ct reveal"><h3>Escalates, never guesses</h3><p>Ambiguity, irreversible actions, repeated stalls, and authority changes stop at a human boundary. One approval never becomes blanket permission.</p></article><article class="ct reveal"><h3>Measures, never assumes</h3><p>Tests, validators, benchmarks, diffs, and reachability decide whether work landed. Agent assertions are useful context, never proof.</p></article></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> enforcement boundary</p><h2>Be exact about what is mechanical.</h2><p>Static guards block known dangerous tool shapes. Mutation checks, validators, benchmarks, checkpoints, and adversarial review cover the claims a hook cannot decide safely.</p></div><div class="scrollx"><table class="matrix"><thead><tr><th>Mechanism</th><th>Enforces</th><th>Evidence</th></tr></thead><tbody><tr><td><code>guard-test-integrity</code></td><td>Common static suite-gaming forms added to test files: .only, .skip, xit, and suppressions.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>guard-git-hygiene</code></td><td>Bulk staging, destructive reset or clean, commit -a, and unsafe force-push forms during a live build.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>guard-ship-irreversibles</code></td><td>Unapproved forced updates and remote ref deletion while ship preparation is active.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>checkpoint.mjs</code></td><td>Reinitializing a live run, demoting done work, and finalizing an incomplete checkpoint as done.</td><td class="mono">scripts/test-checkpoint.sh</td></tr></tbody></table></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> durable truth</p><h2>Resume from evidence, not memory.</h2></div><div class="detail-grid"><article class="detail-block"><span class="detail-number">01</span><h3>Checkpoint</h3><p>Locked, atomic tooling records unit state and evidence. Observability failures stay visible instead of being promoted into clean state.</p></article><article class="detail-block"><span class="detail-number">02</span><h3>Skip done</h3><p>Resume skips only work that the durable state and repository evidence still support. Stale done records block rather than disappear.</p></article><article class="detail-block"><span class="detail-number">03</span><h3>Learn carefully</h3><p>Candidate lessons must be true, general, and actionable before they are routed into provider-native project context.</p></article><article class="detail-block"><span class="detail-number">04</span><h3>Keep authority narrow</h3><p>Plan approval governs the autonomous stretch. Ambiguity and irreversible actions still stop for a fresh user decision.</p></article></div><div class="section-actions"><a class="btn" href="../skills/autonomous-pipeline/">Open the pipeline skill →</a><a class="btn ghost" href="../plugins/">Compare runtimes</a></div></div></section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div><span class="lab"><span class="mk">▸</span> autonomous engineering</span><p>Bounded. Fail-closed. Durable. Verified before acting.</p></div>
+      <div class="footer-links">
+        <a href="../skills/">18 skills</a>
+        <a href="../plugins/claude-code/">Claude Code plugin</a>
+        <a href="../plugins/codex/">Codex plugin</a>
+        <a href="https://github.com/ulpi-io/skills-autonomous-engineering">Source ↗</a>
+      </div>
+      <span class="footer-meta">© ulpi.io · MIT</span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,530 +1,120 @@
 <!doctype html>
 <html lang="en" data-theme="auto">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Autonomous Engineering Skills: run agents unattended without them cheating</title>
-<meta name="description" content="18 skills that turn the software lifecycle into bounded, self-correcting, checkpoint-resumable phases, with deterministic hooks that make gaming tests, bulk staging, and unauthorized force-pushes mechanically impossible. For Claude Code and Codex.">
-<meta name="color-scheme" content="light dark">
-<meta property="og:title" content="Autonomous Engineering Skills">
-<meta property="og:description" content="Run engineering work unattended, without the agent cheating, spinning, or losing work. Bounded loops, fail-closed gates, deterministic enforcement.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/">
-<link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/">
-<!-- Google tag (gtag.js). Property shared across GitHub Pages sites, so track the FULL URL/path -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-2JN5Y3QCSS', {
-    page_location: window.location.href,
-    page_path: window.location.pathname + window.location.search
-  });
-</script>
-<link rel="icon" type="image/png" href="ulpi-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-/* ── locked tokens (DESIGN.md) ───────────────────────────────────────────── */
-:root{
-  --ground:#f6f3ee; --ground:oklch(0.975 0.006 75);
-  --ground-2:#eae6df; --ground-2:oklch(0.945 0.008 75);
-  --ink:#2b2d33; --ink:oklch(0.24 0.012 265);
-  --ink-2:#6c6f78; --ink-2:oklch(0.48 0.012 265);
-  --rule:rgba(43,45,51,.14); --rule:oklch(0.24 0.012 265 / .14);
-  --rule-2:rgba(43,45,51,.07); --rule-2:oklch(0.24 0.012 265 / .07);
-  --accent:#c26a34; --accent:oklch(0.56 0.17 42);
-  --verified:#3f8f5c; --verified:oklch(0.55 0.12 155);
-  --blocked:#c23b28; --blocked:oklch(0.53 0.20 27);
-  --sp:4px; --r:2px;
-  --serif: 'Archivo', 'Arial Narrow', system-ui, sans-serif;
-  --body: 'Hanken Grotesk', system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --ease: cubic-bezier(.2,.6,.2,1);
-  --maxw: 1180px;
-}
-@media (prefers-color-scheme: dark){:root[data-theme="auto"]{
-  --ground:#15171d; --ground:oklch(0.19 0.012 260);
-  --ground-2:#1c1f27; --ground-2:oklch(0.23 0.014 260);
-  --ink:#e9e6df; --ink:oklch(0.93 0.006 75);
-  --ink-2:#a7a49c; --ink-2:oklch(0.70 0.008 75);
-  --rule:rgba(233,230,223,.16); --rule:oklch(0.93 0.01 75 / .16);
-  --rule-2:rgba(233,230,223,.08); --rule-2:oklch(0.93 0.01 75 / .08);
-  --accent:#e08a4f; --accent:oklch(0.68 0.16 45);
-  --verified:#63c088; --verified:oklch(0.72 0.14 158);
-  --blocked:#e26a55; --blocked:oklch(0.66 0.20 27);
-}}
-:root[data-theme="dark"]{
-  --ground:oklch(0.19 0.012 260); --ground-2:oklch(0.23 0.014 260);
-  --ink:oklch(0.93 0.006 75); --ink-2:oklch(0.70 0.008 75);
-  --rule:oklch(0.93 0.01 75 / .16); --rule-2:oklch(0.93 0.01 75 / .08);
-  --accent:oklch(0.68 0.16 45); --verified:oklch(0.72 0.14 158); --blocked:oklch(0.66 0.20 27);
-}
-
-*{box-sizing:border-box;margin:0}
-html{scroll-behavior:smooth}
-@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
-body{
-  background:var(--ground); color:var(--ink);
-  font-family:var(--body); font-size:17px; line-height:1.55;
-  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-  /* the measurement grid: the signature */
-  background-image:
-    linear-gradient(var(--rule-2) 1px, transparent 1px),
-    linear-gradient(90deg, var(--rule-2) 1px, transparent 1px);
-  background-size: 32px 32px, 32px 32px;
-}
-a{color:inherit}
-::selection{background:var(--accent); color:var(--ground)}
-:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:1px}
-
-.wrap{max-width:var(--maxw); margin-inline:auto; padding-inline:clamp(20px,5vw,40px)}
-.rule-top{border-top:1px solid var(--rule)}
-
-/* mono labels */
-.lab{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
-.lab .mk{color:var(--accent)}
-
-/* buttons */
-.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:14px;
-  letter-spacing:.02em; padding:12px 18px; border:1px solid var(--ink); border-radius:var(--r);
-  background:var(--ink); color:var(--ground); text-decoration:none; transition:transform .15s var(--ease), background .15s}
-.btn:hover{transform:translateY(-2px)}
-.btn.ghost{background:transparent; color:var(--ink); border-color:var(--rule)}
-.btn.ghost:hover{border-color:var(--ink)}
-
-/* ── top bar ─────────────────────────────────────────────────────────────── */
-header.bar{position:sticky; top:0; z-index:20; background:color-mix(in oklab, var(--ground) 86%, transparent);
-  backdrop-filter:blur(8px); border-bottom:1px solid var(--rule)}
-.bar .wrap{display:flex; align-items:center; gap:20px; height:60px}
-.brand{display:flex; align-items:center; gap:11px; font-family:var(--mono); font-weight:600; letter-spacing:.02em; text-decoration:none; font-size:15px}
-.brand .logo{width:26px; height:26px; flex:none; border-radius:6px}
-.bar nav{margin-left:auto; display:flex; gap:22px; align-items:center}
-.bar nav a{font-family:var(--mono); font-size:13px; color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
-.bar nav a:hover{color:var(--ink)}
-.themebtn{font-family:var(--mono); font-size:12px; background:none; border:1px solid var(--rule); color:var(--ink-2);
-  border-radius:var(--r); padding:6px 9px; cursor:pointer; letter-spacing:.08em}
-.themebtn:hover{color:var(--ink); border-color:var(--ink)}
-@media (max-width:720px){.bar nav a:not(.gh){display:none}}
-
-/* ── hero ────────────────────────────────────────────────────────────────── */
-.hero{position:relative; padding-block:clamp(40px,6vw,76px)}
-.hgrid{display:grid; grid-template-columns:1fr minmax(300px,372px); gap:clamp(28px,5vw,60px); align-items:center}
-@media (max-width:880px){.hgrid{grid-template-columns:1fr; gap:36px} .herohead{max-width:60ch}}
-.hero h1{font-family:var(--serif); font-weight:800; letter-spacing:-.02em; line-height:1.02;
-  font-size:clamp(38px,6.4vw,74px); text-wrap:balance}
-.hero h1 .hl{color:var(--accent)}
-.hero .sub{margin-top:22px; max-width:34ch; font-size:clamp(17px,2vw,20px); color:var(--ink-2)}
-.hero .cta{margin-top:30px; display:flex; gap:14px; flex-wrap:wrap; align-items:center}
-/* reveal = ENHANCEMENT: visible by default; only .pre (added by JS) hides, removed on scroll/fallback */
-.reveal{transition:opacity .55s var(--ease), transform .55s var(--ease)}
-.reveal.pre{opacity:0; transform:translateY(14px)}
-.reveal.d1{transition-delay:.05s}.reveal.d2{transition-delay:.11s}.reveal.d3{transition-delay:.18s}
-@media (prefers-reduced-motion: reduce){.reveal.pre{opacity:1;transform:none}}
-
-/* terminal panel */
-.panel{position:relative; background:var(--ground-2); border:1px solid var(--rule); border-radius:var(--r)}
-.panel::before,.panel::after{content:""; position:absolute; width:9px; height:9px; border:1.5px solid var(--accent)}
-.panel::before{top:-1px; left:-1px; border-right:0; border-bottom:0}
-.panel::after{bottom:-1px; right:-1px; border-left:0; border-top:0}
-.term{font-family:var(--mono); font-size:13.5px; line-height:1.75; overflow:hidden}
-.term .top{display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--rule); color:var(--ink-2); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase}
-.term .top .dot{width:8px;height:8px;border-radius:50%;border:1px solid var(--rule)}
-.term .body{padding:16px 16px 18px; white-space:pre-wrap; word-break:break-word; min-height:340px}
-.term .ln{display:block}
-.term .cmd{color:var(--ink)} .term .cmd .p{color:var(--accent)}
-.term .mut{color:var(--ink-2)}
-.term .ok{color:var(--verified)} .term .bad{color:var(--blocked)}
-.term .tag{color:var(--accent)}
-.term.type .ln{opacity:0}
-.term.type.run .ln{opacity:1; transition:opacity .28s}
-.caret{display:inline-block;width:8px;height:1.05em;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:bl 1s steps(1) infinite}
-@keyframes bl{50%{opacity:0}}
-@media (prefers-reduced-motion: reduce){.caret{animation:none}}
-
-/* self-improving pipeline diagram (hero centerpiece) */
-.loopwrap{padding:0}
-.looptop{padding:12px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center;flex-wrap:wrap}
-.loopsvg{display:block;width:100%;height:auto;padding:14px 12px}
-.loopsvg .box{fill:var(--ground);stroke:var(--rule);stroke-width:1.4}
-.loopsvg .loopcard{fill:color-mix(in oklab, var(--accent) 8%, var(--ground));stroke:var(--accent);stroke-width:1.4}
-.loopsvg .num{fill:var(--accent);font-family:var(--mono);font-size:9px;letter-spacing:.14em}
-.loopsvg .cmd{fill:var(--ink);font-family:var(--mono);font-weight:600;font-size:12.5px}
-.loopsvg .role{fill:var(--ink-2);font-family:var(--mono);font-size:9px;letter-spacing:.02em}
-.loopsvg .lc{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:12px}
-.loopsvg .lr{fill:var(--ink-2);font-family:var(--mono);font-size:9px}
-.loopsvg .chev path{stroke:var(--ink-2);stroke-width:1.6;fill:none;stroke-linejoin:round;stroke-linecap:round}
-.loopsvg .chev.acc path{stroke:var(--accent)}
-.loopsvg .fb{stroke:var(--accent);stroke-width:2;fill:none}
-.loopsvg .ahfb{fill:var(--accent)}
-.loopsvg .fbt{fill:var(--accent);font-family:var(--mono);font-weight:600;font-size:10.5px;letter-spacing:.03em}
-
-/* blocked stamp */
-.stamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;
-  color:var(--blocked);border:1.5px solid var(--blocked);border-radius:var(--r);padding:3px 9px;transform:rotate(-1.5deg)}
-
-/* ── section frame ───────────────────────────────────────────────────────── */
-section{padding-block:clamp(52px,8vw,92px); border-top:1px solid var(--rule)}
-/* alternating block tint: a faint wash on every other section so the blocks read as distinct bands,
-   while the body's measurement-grid squares still show through (translucent, never opaque). */
-#main > section:nth-of-type(even){background:color-mix(in oklab, var(--ink) 4%, transparent)}
-.shead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:38px}
-.shead h2{font-family:var(--serif);font-weight:700;letter-spacing:-.015em;font-size:clamp(26px,3.6vw,40px);line-height:1.06}
-.shead p{color:var(--ink-2);max-width:52ch;font-size:16px}
-
-/* failure strip */
-.fails{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
-@media (max-width:720px){.fails{grid-template-columns:1fr}}
-.fail{padding:20px 22px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);display:flex;gap:14px;align-items:flex-start}
-.fail .x{font-family:var(--mono);color:var(--blocked);font-weight:600;flex:none;margin-top:2px}
-.fail b{font-weight:600}
-.fail p{color:var(--ink-2);font-size:14.5px;margin-top:3px}
-
-/* pipeline instrument strip */
-.strip-scroll{overflow-x:auto;padding-bottom:6px;margin-inline:calc(-1*clamp(20px,5vw,40px));padding-inline:clamp(20px,5vw,40px)}
-.strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(120px,1fr);border:1px solid var(--rule);border-radius:var(--r);min-width:760px}
-.stage{padding:16px 14px 18px;border-right:1px solid var(--rule);position:relative}
-.stage:last-child{border-right:0}
-.stage .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
-.stage .cmd{font-family:var(--mono);font-size:13px;font-weight:600;margin-top:8px}
-.stage .d{font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.4}
-.loopnote{margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.loopnote b{color:var(--accent);font-weight:600}
-
-/* enforcement matrix */
-.matrix{width:100%;border-collapse:collapse;font-size:15px;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
-.matrix caption{text-align:left;font-family:var(--mono);font-size:12px;color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase;padding-bottom:12px}
-.matrix th,.matrix td{text-align:left;padding:16px 18px;border-bottom:1px solid var(--rule);vertical-align:top}
-.matrix thead th{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:500;background:var(--ground-2)}
-.matrix tbody tr:last-child td{border-bottom:0}
-.matrix code{font-family:var(--mono);font-size:13px;color:var(--accent);word-break:break-word}
-.matrix .sin{color:var(--ink)}
-.matrix .mono{font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
-.matrix tr td:first-child{white-space:nowrap}
-@media (max-width:760px){.matrix tr td:first-child{white-space:normal}.matrix th,.matrix td{padding:13px}}
-.scrollx{overflow-x:auto}
-
-/* contract: ruled list */
-.contract{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
-.contract3{grid-template-columns:repeat(3,1fr)}
-@media (max-width:860px){.contract3{grid-template-columns:1fr}}
-@media (max-width:760px){.contract{grid-template-columns:1fr}}
-.ct{padding:22px 24px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
-.ct h3{font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
-.ct p{color:var(--ink-2);font-size:15px}
-
-/* skills catalog: ruled 2-col grid; the header spans full width (matches .fails / .contract) */
-.cat{display:grid; grid-template-columns:repeat(2,1fr); border:1px solid var(--rule); border-radius:var(--r); overflow:hidden; margin-bottom:22px}
-.cat:last-child{margin-bottom:0}
-@media (max-width:720px){.cat{grid-template-columns:1fr}}
-.cat-h{grid-column:1 / -1; display:flex; align-items:baseline; gap:13px; padding:15px 20px; border-bottom:1px solid var(--rule); background:var(--ground-2)}
-.cat-h b{font-family:var(--serif); font-weight:700; font-size:19px; letter-spacing:-.01em}
-.cat-h span{font-family:var(--mono); font-size:11px; color:var(--ink-2); letter-spacing:.09em; text-transform:uppercase}
-.row2{padding:18px 20px; border-right:1px solid var(--rule); border-bottom:1px solid var(--rule); position:relative; transition:background .16s var(--ease)}
-.cat > .row2:nth-child(odd){border-right:0}   /* right column (cat-h is child 1, so right cells are odd) */
-@media (max-width:720px){.row2{border-right:0}}
-.row2::before{content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--accent); transform:scaleY(0); transform-origin:top; transition:transform .18s var(--ease)}
-.row2:hover{background:color-mix(in oklab, var(--accent) 5%, transparent)}
-.row2:hover::before{transform:scaleY(1)}
-.row2 .nm{display:block; font-family:var(--mono); font-size:14.5px; font-weight:600; color:var(--accent); margin-bottom:8px; letter-spacing:.01em}
-.row2 p{color:var(--ink-2); font-size:14px; line-height:1.52}
-.row2.empty{background:repeating-linear-gradient(-45deg, transparent, transparent 9px, var(--rule-2) 9px, var(--rule-2) 10px)}
-.row2.empty::before{display:none}
-
-/* install */
-.cmdrow{display:flex;align-items:stretch;gap:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--ground-2);margin-bottom:12px}
-.cmdrow code{font-family:var(--mono);font-size:14px;padding:14px 16px;overflow-x:auto;white-space:nowrap;flex:1;color:var(--ink)}
-.cmdrow .cp{font-family:var(--mono);font-size:12px;border:0;border-left:1px solid var(--rule);background:transparent;color:var(--ink-2);padding:0 16px;cursor:pointer;letter-spacing:.06em}
-.cmdrow .cp:hover{color:var(--accent)}
-
-footer{border-top:1px solid var(--rule);padding-block:40px;color:var(--ink-2);font-family:var(--mono);font-size:13px}
-footer .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:space-between}
-footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--accent)}
-
-.skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;position:fixed;z-index:50;background:var(--ink);color:var(--ground);padding:10px 14px;border-radius:var(--r);font-family:var(--mono);font-size:13px}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autonomous Engineering Skills</title>
+  <meta name="description" content="Eighteen bounded, fail-closed, checkpoint-resumable skills for autonomous software delivery across Claude Code, Codex, and skills.sh.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Autonomous Engineering Skills">
+  <meta property="og:description" content="Eighteen bounded, fail-closed, checkpoint-resumable skills for autonomous software delivery across Claude Code, Codex, and skills.sh.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/">
+  <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/">
+  <link rel="icon" type="image/png" href="ulpi-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/site.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+  <script defer src="assets/site.js" data-ga-id="G-2JN5Y3QCSS"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Autonomous Engineering Skills","url":"https://ulpi-io.github.io/skills-autonomous-engineering/","description":"Eighteen bounded, fail-closed, checkpoint-resumable skills for autonomous software delivery across Claude Code, Codex, and skills.sh."}</script>
 </head>
 <body>
-<a href="#main" class="skip">Skip to content</a>
+  <a href="#main" class="skip">Skip to content</a>
 
-<header class="bar">
-  <div class="wrap">
-    <a class="brand" href="#top" aria-label="Autonomous Engineering Skills, home">
-      <img src="ulpi-icon.png" alt="ulpi" width="26" height="26" class="logo">
-      autonomous-engineering
-    </a>
-    <nav aria-label="Primary">
-      <a href="#pipeline">Pipeline</a>
-      <a href="#enforcement">Enforcement</a>
-      <a href="#skills">Skills</a>
-      <a href="#install">Install</a>
-      <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
-      <button class="themebtn" id="theme" aria-label="Toggle color theme">◐ theme</button>
-    </nav>
-  </div>
-</header>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="" aria-label="Autonomous Engineering Skills, home">
+        <img src="ulpi-icon.png" alt="" width="26" height="26" class="logo">
+        <span>autonomous-engineering</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>menu</span></button>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="how-it-works/">How it works</a><a href="skills/">Skills</a><a href="plugins/">Plugins</a>
+        <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+        <button class="themebtn" type="button" id="theme" aria-label="Toggle color theme">◐ auto</button>
+      </nav>
+    </div>
+  </header>
+  <main id="main" >
 
-<main id="main">
-<a id="top"></a>
-<!-- ── HERO ─────────────────────────────────────────────────────────────── -->
-<section class="hero" style="border-top:0">
-  <div class="wrap hgrid" id="herogrid">
-    <div class="herohead">
-      <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
-      <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
-      <p class="sub reveal d2">Eight autonomous phases behind one approval. Then the machine harvests what it learned and improves itself for the next run.</p>
-      <div class="cta reveal d3">
-        <a class="btn" href="#install">Install &rarr;</a>
-        <a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering">View source</a>
+  <section class="hero hero-first">
+    <div class="wrap hgrid">
+      <div class="herohead">
+        <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
+        <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
+        <p class="sub reveal d2">Eight autonomous phases behind one approval, bounded by deterministic evidence. Every run returns what it learned to the next one.</p>
+        <div class="hero-actions reveal d3"><a class="btn" href="skills/">Explore all skills →</a><a class="btn ghost" href="plugins/">Choose a plugin</a></div>
       </div>
-    </div>
-    <div class="panel loopwrap reveal d3" id="pipeline">
-      <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline</div>
-      <svg class="loopsvg" viewBox="0 0 330 512" role="img" aria-label="The eight phases run top to bottom: auto-spec, auto-plan, auto-build, auto-simplify, auto-test, auto-review, auto-performance, auto-ship, then auto-learn and auto-map, and a feedback loop returns to the top so the next run reads the learnings and refreshed map before it plans.">
-        <defs>
-          <marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker>
-        </defs>
-        <!-- 8 phase cards, stacked -->
-        <g><rect class="box" x="72" y="12"  width="246" height="42" rx="2"/><text class="num" x="86" y="30">01 DEFINE</text><text class="cmd" x="86" y="46">/auto-spec</text><text class="role" x="306" y="46" text-anchor="end">testable spec</text></g>
-        <g><rect class="box" x="72" y="60"  width="246" height="42" rx="2"/><text class="num" x="86" y="78">02 PLAN</text><text class="cmd" x="86" y="94">/auto-plan</text><text class="role" x="306" y="94" text-anchor="end">task DAG</text></g>
-        <g><rect class="box" x="72" y="108" width="246" height="42" rx="2"/><text class="num" x="86" y="126">03 BUILD</text><text class="cmd" x="86" y="142">/auto-build</text><text class="role" x="306" y="142" text-anchor="end">per-task commit</text></g>
-        <g><rect class="box" x="72" y="156" width="246" height="42" rx="2"/><text class="num" x="86" y="174">04 CLEAN</text><text class="cmd" x="86" y="190">/auto-simplify</text><text class="role" x="306" y="190" text-anchor="end">behavior-safe</text></g>
-        <g><rect class="box" x="72" y="204" width="246" height="42" rx="2"/><text class="num" x="86" y="222">05 PROVE</text><text class="cmd" x="86" y="238">/auto-test</text><text class="role" x="306" y="238" text-anchor="end">mutation-checked</text></g>
-        <g><rect class="box" x="72" y="252" width="246" height="42" rx="2"/><text class="num" x="86" y="270">06 GATE</text><text class="cmd" x="86" y="286">/auto-review</text><text class="role" x="306" y="286" text-anchor="end">verified findings</text></g>
-        <g><rect class="box" x="72" y="300" width="246" height="42" rx="2"/><text class="num" x="86" y="318">07 MEASURE</text><text class="cmd" x="86" y="334">/auto-performance</text><text class="role" x="306" y="334" text-anchor="end">benchmark-gated</text></g>
-        <g><rect class="box" x="72" y="348" width="246" height="42" rx="2"/><text class="num" x="86" y="366">08 SHIP</text><text class="cmd" x="86" y="382">/auto-ship</text><text class="role" x="306" y="382" text-anchor="end">fail-closed</text></g>
-        <!-- the two self-improving cards (accent) -->
-        <g><rect class="loopcard" x="72" y="404" width="246" height="42" rx="2"/><text class="lc" x="86" y="422">↻ /auto-learn</text><text class="lr" x="86" y="438">harvest · verify · route lessons</text></g>
-        <g><rect class="loopcard" x="72" y="452" width="246" height="42" rx="2"/><text class="lc" x="86" y="470">↻ /auto-map</text><text class="lr" x="86" y="486">refresh the verified context map</text></g>
-        <!-- forward chevrons between phases -->
-        <g class="chev">
-          <path d="M191,54 l4,4 4,-4"/><path d="M191,102 l4,4 4,-4"/><path d="M191,150 l4,4 4,-4"/><path d="M191,198 l4,4 4,-4"/><path d="M191,246 l4,4 4,-4"/><path d="M191,294 l4,4 4,-4"/><path d="M191,342 l4,4 4,-4"/>
-        </g>
-        <!-- accent chevrons into the loop cards -->
-        <g class="chev acc"><path d="M191,390 l4,4 4,-4"/><path d="M191,446 l4,4 4,-4"/></g>
-        <!-- feedback return arc up the left (accent) -->
-        <path class="fb" d="M72,473 L44,473 Q30,473 30,459 L30,40 Q30,26 44,26 L70,26" marker-end="url(#ahb)"/>
-        <text class="fbt" transform="rotate(-90 20 250)" x="20" y="250" text-anchor="middle">↻ the next run reads this first</text>
-      </svg>
-    </div>
+      <div class="panel loopwrap reveal d3" aria-label="Self-improving lifecycle diagram">
+    <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline</div>
+    <svg class="loopsvg" viewBox="0 0 330 512" role="img" aria-label="Eight delivery phases run from auto-spec through auto-ship, followed by auto-learn and auto-map feeding verified lessons into the next run.">
+      <defs><marker id="pipeline-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahfb"/></marker></defs>
+      <g><rect class="box" x="72" y="12" width="246" height="42" rx="2"/><text class="num" x="86" y="30">01 DEFINE</text><text class="cmd" x="86" y="46">/auto-spec</text><text class="role" x="306" y="46" text-anchor="end">testable spec</text></g><g><rect class="box" x="72" y="60" width="246" height="42" rx="2"/><text class="num" x="86" y="78">02 PLAN</text><text class="cmd" x="86" y="94">/auto-plan</text><text class="role" x="306" y="94" text-anchor="end">validated DAG</text></g><g><rect class="box" x="72" y="108" width="246" height="42" rx="2"/><text class="num" x="86" y="126">03 BUILD</text><text class="cmd" x="86" y="142">/auto-build</text><text class="role" x="306" y="142" text-anchor="end">task commits</text></g><g><rect class="box" x="72" y="156" width="246" height="42" rx="2"/><text class="num" x="86" y="174">04 CLEAN</text><text class="cmd" x="86" y="190">/auto-simplify</text><text class="role" x="306" y="190" text-anchor="end">simpler code</text></g><g><rect class="box" x="72" y="204" width="246" height="42" rx="2"/><text class="num" x="86" y="222">05 PROVE</text><text class="cmd" x="86" y="238">/auto-test</text><text class="role" x="306" y="238" text-anchor="end">meaningful tests</text></g><g><rect class="box" x="72" y="252" width="246" height="42" rx="2"/><text class="num" x="86" y="270">06 GATE</text><text class="cmd" x="86" y="286">/auto-review</text><text class="role" x="306" y="286" text-anchor="end">verified findings</text></g><g><rect class="box" x="72" y="300" width="246" height="42" rx="2"/><text class="num" x="86" y="318">07 MEASURE</text><text class="cmd" x="86" y="334">/auto-performance</text><text class="role" x="306" y="334" text-anchor="end">proven gains</text></g><g><rect class="box" x="72" y="348" width="246" height="42" rx="2"/><text class="num" x="86" y="366">08 SHIP</text><text class="cmd" x="86" y="382">/auto-ship</text><text class="role" x="306" y="382" text-anchor="end">release-ready</text></g>
+      <g><rect class="loopcard" x="72" y="404" width="246" height="42" rx="2"/><text class="lc" x="86" y="422">↻ /auto-learn</text><text class="lr" x="86" y="438">harvest · verify · route lessons</text></g>
+      <g><rect class="loopcard" x="72" y="452" width="246" height="42" rx="2"/><text class="lc" x="86" y="470">↻ /auto-map</text><text class="lr" x="86" y="486">refresh verified project context</text></g>
+      <g class="chev"><path d="M191,54 l4,4 4,-4"/><path d="M191,102 l4,4 4,-4"/><path d="M191,150 l4,4 4,-4"/><path d="M191,198 l4,4 4,-4"/><path d="M191,246 l4,4 4,-4"/><path d="M191,294 l4,4 4,-4"/><path d="M191,342 l4,4 4,-4"/></g>
+      <g class="chev acc"><path d="M191,390 l4,4 4,-4"/><path d="M191,446 l4,4 4,-4"/></g>
+      <path class="fb" d="M72,473 L44,473 Q30,473 30,459 L30,40 Q30,26 44,26 L70,26" marker-end="url(#pipeline-arrow)"/>
+      <text class="fbt" transform="rotate(-90 20 250)" x="20" y="250" text-anchor="middle">↻ the next run reads this first</text>
+    </svg>
   </div>
-</section>
-
-<!-- ── SELF-IMPROVING LOOP ──────────────────────────────────────────────── -->
-<section id="loop">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> the self-improving loop</p>
-      <h2>It doesn't just run. It gets better.</h2>
-      <p>Most agents forget every run. They re-discover the same footguns forever. This one closes the loop: what one run pays to learn, the next run already knows.</p>
     </div>
-    <div class="contract contract3">
-      <div class="ct"><h3>Learn · /auto-learn</h3><p>Harvests the run's checkpoint (blocked tasks, gate failures, thrash) and verifies each candidate lesson against the evidence (one flake is not a law). Survivors route to the layer that changes behavior; machine defects surface to you, never self-patched.</p></div>
-      <div class="ct"><h3>Map · /auto-map</h3><p>Refreshes a disclosure-tiered context map: a lean root plus a per-folder <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code> that loads only when the agent works there. Every path, command, and claim is verified against the real repo before it ships.</p></div>
-      <div class="ct" style="border-right:0"><h3>Feed forward</h3><p>Lessons land in the memory Claude Code loads automatically: <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">CLAUDE.md</code>, path-scoped <code style="font-family:var(--mono);font-size:13px;color:var(--accent)">.claude/rules</code>, and auto memory. So the next run starts with them in context, no step required. Run N+1 starts with run N's tuition.</p></div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="section-head reveal"><p class="lab"><span class="mk">▸</span> two native surfaces</p><h2>Same contracts. Different machinery.</h2><p>Use the platform you already trust. The methodology stays bounded and fail-closed; the adapters respect each provider’s actual capabilities.</p></div>
+      <div class="platform-grid"><article class="platform-card panel reveal">
+    <div class="platform-card-head"><p class="lab"><span class="mk">C</span> Claude Code</p><span class="status-badge status-available"><span aria-hidden="true"></span>Available now</span></div>
+    <h3>Plugin-native enforcement.</h3>
+    <p>Install all 18 skills as slash commands, with SessionStart, PreToolUse, Stop, and SessionEnd hooks that reinforce resume, live guards, honest termination, and checkpoint cleanup.</p>
+    <ul class="signal-list"><li>18 canonical skills</li><li>Lifecycle and skill guards</li><li>Resume and honest-stop hooks</li></ul>
+    <a class="text-link" href="plugins/claude-code/">View Claude Code details →</a>
+  </article><article class="platform-card panel reveal">
+    <div class="platform-card-head"><p class="lab"><span class="mk">X</span> Codex</p><span class="status-badge status-preview"><span aria-hidden="true"></span>In development</span></div>
+    <h3>Provider-native control plane.</h3>
+    <p>The universal SKILL.md pack works with Codex through skills.sh today. A native Codex plugin—with isolated Codex adapters, deterministic coordination, hook integration, and install verification—is in development and is not yet presented as shipped.</p>
+    <ul class="signal-list"><li>Universal skills work today</li><li>Native plugin stays preview until smoke-tested</li><li>No fictional install command</li></ul>
+    <a class="text-link" href="plugins/codex/">View Codex details →</a>
+  </article></div>
     </div>
-  </div>
-</section>
-
-<!-- ── FAILURE MODES ────────────────────────────────────────────────────── -->
-<section id="why">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> the problem</p>
-      <h2>Every agent can loop. The failure modes are what kill you.</h2>
-      <p>Autonomy is easy. Autonomy you can leave running is not. These four are designed out, in code, not prose.</p>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="section-head reveal"><p class="lab"><span class="mk">▸</span> the problem</p><h2>Every agent can loop. The failure modes are what kill you.</h2><p>These skills separate autonomy from wishful prompting with caps, checkpoints, independent evidence, and tested guards.</p></div>
+      <div class="fails"><article class="fail reveal"><span class="x">✗</span><div><h3>Fakes the green</h3><p>Common skip, only, suppression, bulk-stage, and irreversible-push spellings are blocked by tested guards. Deeper cheats are caught by mutation and evidence checks.</p></div></article><article class="fail reveal"><span class="x">✗</span><div><h3>Grinds forever</h3><p>Iteration, agent, time, and no-progress limits make non-convergence an honest partial result instead of an invisible runaway.</p></div></article><article class="fail reveal"><span class="x">✗</span><div><h3>Poisons the history</h3><p>Disjoint task scopes, isolated writers, explicit staging, and per-task commits preserve reviewable rollback points.</p></div></article><article class="fail reveal"><span class="x">✗</span><div><h3>Lies about done</h3><p>Required evidence is observed by the coordinator. Missing validation, dead verifiers, and skipped gates cannot be worded into success.</p></div></article></div>
     </div>
-    <div class="fails">
-      <div class="fail"><span class="x">✗</span><div><b>Fakes the green.</b><p>"Fixes" the suite by skipping the red test. Every added test is mutation-checked; adding <code style="font-family:var(--mono);font-size:13px">.skip</code> to a test file is blocked at the tool layer.</p></div></div>
-      <div class="fail"><span class="x">✗</span><div><b>Grinds forever.</b><p>Runs three hours past the point of progress. Every loop declares a termination set (done-condition, cap, budget, no-progress stop) and stops the instant one fires.</p></div></div>
-      <div class="fail"><span class="x">✗</span><div><b>Poisons the history.</b><p><code style="font-family:var(--mono);font-size:13px">git add -A</code>s unrelated work into a commit, then force-pushes it. Bulk staging and plain force-push are blocked during a run; every task is its own clean rollback point.</p></div></div>
-      <div class="fail"><span class="x">✗</span><div><b>Lies about done.</b><p>Reports "done" for gates that never ran. Gates fail closed: a gate that did not execute is never reported clean, and a red validate is reported red.</p></div></div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="section-head reveal"><p class="lab"><span class="mk">▸</span> the collection</p><h2>Eighteen skills. Four layers.</h2><p>Run one phase, compose the primitives, or take the whole lifecycle through a single governed pass.</p></div>
+      <div class="family-grid"><a class="family-card reveal" href="skills/#lifecycle"><span class="family-count">08</span><h3>Lifecycle phases</h3><p>Eight fail-closed phases carry a change from a grounded request to release-ready work.</p><span class="text-link">Explore 8 skills →</span></a><a class="family-card reveal" href="skills/#primitives"><span class="family-count">05</span><h3>Control primitives</h3><p>The bounded loops, skeptic panels, durable state, parallel maps, and stop conditions underneath every run.</p><span class="text-link">Explore 5 skills →</span></a><a class="family-card reveal" href="skills/#autonomy"><span class="family-count">03</span><h3>Autonomy layer</h3><p>Compose phases into a full run, bridge external signals, and schedule repeat-safe standing work.</p><span class="text-link">Explore 3 skills →</span></a><a class="family-card reveal" href="skills/#context"><span class="family-count">02</span><h3>Context &amp; learning</h3><p>Verify the project map and feed proven lessons into context the next session loads automatically.</p><span class="text-link">Explore 2 skills →</span></a></div>
     </div>
-  </div>
-</section>
-
-<!-- ── ENFORCEMENT ──────────────────────────────────────────────────────── -->
-<section id="enforcement">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> deterministic enforcement</p>
-      <h2>Prompt contracts bend under pressure. These don't.</h2>
-      <p>While a skill is active, its PreToolUse hook, a tested shell script that travels with the skill, blocks the tool call and shows the model why. <span class="stamp">✗ blocked by guard</span></p>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="section-head reveal"><p class="lab"><span class="mk">▸</span> deterministic enforcement</p><h2>Prompt contracts bend. Evidence does not.</h2><p>The guards cover specific static shortcuts; the coordinator and skill contracts cover the deeper cases they cannot safely infer from a single tool call.</p></div>
+      <div class="scrollx reveal"><table class="matrix"><caption>guard → bounded claim → evidence</caption><thead><tr><th>Guard</th><th>What it blocks</th><th>Verified by</th></tr></thead><tbody><tr><td><code>guard-test-integrity</code></td><td>Common static suite-gaming forms added to test files: .only, .skip, xit, and suppressions.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>guard-git-hygiene</code></td><td>Bulk staging, destructive reset or clean, commit -a, and unsafe force-push forms during a live build.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>guard-ship-irreversibles</code></td><td>Unapproved forced updates and remote ref deletion while ship preparation is active.</td><td class="mono">scripts/test-guards.sh</td></tr><tr><td><code>checkpoint.mjs</code></td><td>Reinitializing a live run, demoting done work, and finalizing an incomplete checkpoint as done.</td><td class="mono">scripts/test-checkpoint.sh</td></tr></tbody></table></div>
+      <div class="section-actions"><a class="btn ghost" href="how-it-works/">See the full contract →</a></div>
     </div>
-    <div class="scrollx">
-      <table class="matrix">
-        <caption>guard → the cardinal sin it makes impossible</caption>
-        <thead><tr><th scope="col">Guard</th><th scope="col">Makes mechanically impossible</th><th scope="col">Verified by</th></tr></thead>
-        <tbody>
-          <tr><td><code>guard-test-integrity</code></td><td class="sin">Gaming the suite green: adding <code>.only</code> / <code>.skip</code> / <code>xit</code> / suppressions to test files.</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>guard-git-hygiene</code></td><td class="sin">Breaking per-task rollback: <code>git add -A</code>, <code>commit -a</code>, <code>reset --hard</code>, <code>clean -f</code> (quote- &amp; newline-aware).</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>guard-ship-irreversibles</code></td><td class="sin">Unilateral irreversibles: plain <code>push --force</code>, <code>push --delete</code> (lease is allowed).</td><td class="mono">52 guard cases</td></tr>
-          <tr><td><code>checkpoint.mjs</code></td><td class="sin">Destroying run state: refuses re-init over a live run, demoting a <code>done</code> unit, a false <code>finalize done</code>.</td><td class="mono">contract suite</td></tr>
-        </tbody>
-      </table>
+  </section>
+  <section>
+    <div class="wrap install-callout panel reveal"><div><p class="lab"><span class="mk">▸</span> universal skill install</p><h2>Start with all eighteen.</h2><p>Install through skills.sh today, then choose the full Claude Code plugin or follow the Codex plugin’s verified release status.</p></div><div><div class="cmdrow"><code id="home-install">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering</code><button class="cp" type="button" data-copy-target="home-install" aria-label="Copy command">copy</button></div><a class="text-link" href="plugins/">Compare plugin distributions →</a></div></div>
+  </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div><span class="lab"><span class="mk">▸</span> autonomous engineering</span><p>Bounded. Fail-closed. Durable. Verified before acting.</p></div>
+      <div class="footer-links">
+        <a href="skills/">18 skills</a>
+        <a href="plugins/claude-code/">Claude Code plugin</a>
+        <a href="plugins/codex/">Codex plugin</a>
+        <a href="https://github.com/ulpi-io/skills-autonomous-engineering">Source ↗</a>
+      </div>
+      <span class="footer-meta">© ulpi.io · MIT</span>
     </div>
-  </div>
-</section>
-
-<!-- ── CONTRACT ─────────────────────────────────────────────────────────── -->
-<section id="contract">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> the autonomy contract</p>
-      <h2>What separates autonomous from runaway.</h2>
-      <p>Every skill honors the same five rules. It is the whole point of the collection.</p>
-    </div>
-    <div class="contract">
-      <div class="ct"><h3>Bounded, never infinite</h3><p>Every loop declares a termination set and stops the instant one fires, and compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:13px">/loop</code>.</p></div>
-      <div class="ct"><h3>Fails closed</h3><p>A gate that did not run is never reported clean. A loop out of budget returns the open items. No fabricated green verdicts.</p></div>
-      <div class="ct"><h3>Verifies before acting</h3><p>Findings that drive edits pass an adversarial panel: independent skeptics try to refute them. A dead panel fails closed, not open.</p></div>
-      <div class="ct"><h3>Durable and resumable</h3><p>Long runs write a live status file and skip everything already done on resume, at any point, session-independent. Every call retries 10× through a rate-limit storm or a dropped connection; a longer outage just resumes from the checkpoint when the link returns.</p></div>
-      <div class="ct"><h3>Escalates, never guesses</h3><p>Irreversible or ambiguous decisions stop and ask. Approval in one context does not extend to the next.</p></div>
-      <div class="ct"><h3>Measures, never assumes</h3><p>An optimization is accepted only when a benchmark proves it faster with no correctness regression. Otherwise it is reverted.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ── SKILLS LEDGER ────────────────────────────────────────────────────── -->
-<section id="skills">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> the collection</p>
-      <h2>Eighteen skills. Four layers.</h2>
-      <p>Phases run the lifecycle. Primitives are the machinery they compose. The autonomy layer chains them and makes them self-improving. Every one installs and runs on its own.</p>
-    </div>
-
-    <div class="cat">
-      <div class="cat-h"><b>Phases</b><span>· the lifecycle · one skill per step</span></div>
-      <div class="row2"><code class="nm">/auto-spec</code><p>Turns a request into a grounded, testable spec. Recons the real repo, drafts objectives and acceptance criteria, then runs a completeness-critic loop until no gap or untestable claim remains. No invented requirements.</p></div>
-      <div class="row2"><code class="nm">/auto-plan</code><p>Decomposes a spec into a DAG of atomic tasks, each with a disjoint write scope (≤3 files) and a slice-scoped validate. A deterministic validator proves the graph acyclic, topologically ordered, and race-free before any build.</p></div>
-      <div class="row2"><code class="nm">/auto-build</code><p>Walks the DAG behind one approval: each task built test-first in an isolated worktree, integrated, slice-reviewed, fixed in a bounded loop, and committed on its own. Never builds on an unintegrated dependency; resumes from its checkpoint.</p></div>
-      <div class="row2"><code class="nm">/auto-simplify</code><p>Loops until dry removing duplication, dead code, and over-abstraction, proving each edit behavior-preserving before keeping it. Respects Chesterton's Fence: never removes what it hasn't understood.</p></div>
-      <div class="row2"><code class="nm">/auto-test</code><p>Finds untested behaviors, writes real tests, and loops until green. Every test is mutation-checked (break the code, the test must fail), so tautologies are rejected. De-flakes, and never games the suite green.</p></div>
-      <div class="row2"><code class="nm">/auto-review</code><p>Reviews the diff across correctness, security, tests, and API dimensions at once, then keeps only findings that survive an adversarial skeptic panel. Dead panels fail closed. Optionally fixes the confirmed blockers.</p></div>
-      <div class="row2"><code class="nm">/auto-performance</code><p>Baselines a benchmark, profiles to the real hotspots, and accepts an optimization only when a re-benchmark proves it faster with no correctness regression. Unmeasured "wins" are reverted.</p></div>
-      <div class="row2"><code class="nm">/auto-ship</code><p>Runs fail-closed pre-launch gates (validate, review, security, rollback), assembles grounded release artifacts, and opens the PR or stages the rollout. The irreversible deploy stays human-gated.</p></div>
-    </div>
-
-    <div class="cat">
-      <div class="cat-h"><b>Primitives</b><span>· the machinery every phase composes</span></div>
-      <div class="row2"><code class="nm">converge-loop</code><p>The bounded self-correcting loop behind every phase: act → measure → decide, in until-green or until-dry mode, with anti-thrash, no-progress, and budget stops. Compiles onto native <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/goal</code> + <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">/loop</code>.</p></div>
-      <div class="row2"><code class="nm">adversarial-verify</code><p>Proves a finding by trying to disprove it: N independent skeptics attack it through distinct lenses, and it survives only on a majority. Ties and dead panels fail closed: the gate that turns "plausible" into "verified".</p></div>
-      <div class="row2"><code class="nm">checkpoint-resume</code><p>A durable, lock-serialized status file recording every unit's state, fully timestamped. Resume skips everything already done: session-independent, crash-safe, zero lost writes under concurrency. A read-only status reader renders any run live; refuses to clobber one.</p></div>
-      <div class="row2"><code class="nm">fan-out-work</code><p>Covers a large work-list in parallel with concurrency caps and worktree isolation, aggregating faithfully. Never silently truncates: items discovered = covered + failed + dropped.</p></div>
-      <div class="row2"><code class="nm">budget-guard</code><p>The five stop conditions every unattended run must declare (done-condition, hard cap, token/time budget, no-progress rule, escalation triggers), enforced so a run bounds itself or reports an honest partial.</p></div>
-      <div class="row2 empty" aria-hidden="true"></div>
-    </div>
-
-    <div class="cat">
-      <div class="cat-h"><b>Autonomy</b><span>· chain · watch · schedule</span></div>
-      <div class="row2"><code class="nm">autonomous-pipeline</code><p>Chains all eight phases end-to-end behind a single plan approval, with fail-closed gates between them, a durable checkpoint (resume at any phase or task), and a verified findings register at the end. One pass, never a runaway loop.</p></div>
-      <div class="row2"><code class="nm">watch-and-act</code><p>Waits on an external signal the harness can't notify you about (CI, a deploy, a queue) on a cache-aware cadence, bounded by a deadline, and acts on the transition. Never polls work the harness already tracks.</p></div>
-      <div class="row2"><code class="nm">schedule-recurring-agent</code><p>Stands up a recurring cron routine for standing work (triage, CVE watch, audits): a self-contained idempotent brief, a cadence matched to the work, a per-run budget, and a teardown condition.</p></div>
-      <div class="row2 empty" aria-hidden="true"></div>
-    </div>
-
-    <div class="cat" style="margin-bottom:0">
-      <div class="cat-h"><b>Context &amp; learning</b><span>· the self-improving loop</span></div>
-      <div class="row2"><code class="nm">auto-map</code><p>Builds a disclosure-tiered context map: a lean root <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code>, path-scoped rules, and a per-folder <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code> that loads only when the agent works there. A code gate verifies every path, command, and claim against the real repo.</p></div>
-      <div class="row2"><code class="nm">auto-learn</code><p>Harvests each run's checkpoint into verified lessons and writes them where Claude Code auto-loads context: <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">CLAUDE.md</code>, path-scoped <code style="font-family:var(--mono);color:var(--accent);font-size:12.5px">.claude/rules</code>, or auto memory. The next run starts with them in context. Machine defects surface to you.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ── INSTALL ──────────────────────────────────────────────────────────── -->
-<section id="install">
-  <div class="wrap">
-    <div class="shead">
-      <p class="lab"><span class="mk">▸</span> install</p>
-      <h2>One command. Every agent.</h2>
-      <p>Universal via skills.sh (Claude Code, Codex, Cursor, and ~70 more), or as a Claude Code plugin with the enforcement hooks wired in.</p>
-    </div>
-    <div class="cmdrow"><code id="c1">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering</code><button class="cp" data-c="c1" aria-label="Copy command">copy</button></div>
-    <div class="cmdrow"><code id="c2">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-test</code><button class="cp" data-c="c2" aria-label="Copy command">copy</button></div>
-    <p class="lab" style="margin:22px 0 10px"><span class="mk">▸</span> claude code plugin (adds the guard hooks)</p>
-    <div class="cmdrow"><code id="c3">/plugin marketplace add ulpi-io/skills-autonomous-engineering</code><button class="cp" data-c="c3" aria-label="Copy command">copy</button></div>
-    <div class="cmdrow"><code id="c4">/plugin install autonomous-engineering@ulpi-autonomous-engineering</code><button class="cp" data-c="c4" aria-label="Copy command">copy</button></div>
-    <div class="cta" style="margin-top:28px">
-      <a class="btn" href="https://github.com/ulpi-io/skills-autonomous-engineering">Read the source &rarr;</a>
-    </div>
-  </div>
-</section>
-</main>
-
-<footer>
-  <div class="wrap">
-    <span>© ulpi.io · MIT · built with the frontend-design-ui-ux skill</span>
-    <span><a href="https://github.com/ulpi-io/skills-autonomous-engineering">github.com/ulpi-io/skills-autonomous-engineering</a></span>
-  </div>
-</footer>
-
-<script>
-(function(){
-  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* theme toggle: auto → light → dark → auto */
-  var root = document.documentElement, tb = document.getElementById('theme');
-  var order = ['auto','light','dark'];
-  try{ var saved = localStorage.getItem('ae-theme'); if(saved) root.setAttribute('data-theme', saved); }catch(e){}
-  function label(){ tb.textContent = '◐ ' + root.getAttribute('data-theme'); }
-  label();
-  tb.addEventListener('click', function(){
-    var i = order.indexOf(root.getAttribute('data-theme'));
-    var next = order[(i+1)%order.length];
-    root.setAttribute('data-theme', next); try{localStorage.setItem('ae-theme',next);}catch(e){} label();
-  });
-
-  /* copy buttons */
-  document.querySelectorAll('.cp').forEach(function(b){
-    b.addEventListener('click', function(){
-      var el = document.getElementById(b.getAttribute('data-c'));
-      var t = el.textContent;
-      navigator.clipboard && navigator.clipboard.writeText(t).then(function(){
-        var o=b.textContent; b.textContent='copied'; b.style.color='var(--verified)';
-        setTimeout(function(){b.textContent=o; b.style.color='';},1400);
-      });
-    });
-  });
-
-  /* reveal is pure ENHANCEMENT: content ships visible; JS adds .pre (hidden) then removes it on
-     scroll. A hard fail-safe timer removes .pre from everything so content can NEVER stay hidden
-     (full-page screenshots, no-scroll, slow devices, JS errors below this point). */
-  document.querySelectorAll('#main > section:not(.hero) .shead, #main > section:not(.hero) .fails, #main > section:not(.hero) .matrix, #main > section:not(.hero) .contract, #main > section:not(.hero) .layer, #main > section:not(.hero) .cmdrow').forEach(function(el){ el.classList.add('reveal'); });
-  var revEls = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
-  function revealAll(){ revEls.forEach(function(e){ e.classList.remove('pre'); }); }
-  if(!reduce && ('IntersectionObserver' in window)){
-    revEls.forEach(function(e){ e.classList.add('pre'); });
-    var io = new IntersectionObserver(function(es){
-      es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.remove('pre'); io.unobserve(en.target); } });
-    }, {threshold:.1, rootMargin:'0px 0px -5% 0px'});
-    revEls.forEach(function(e){ io.observe(e); });
-    setTimeout(revealAll, 1500);
-  }
-
-  /* hero terminal: type the transcript once (the single signature motion) */
-  var term = document.getElementById('term');
-  var lines = term ? Array.prototype.slice.call(document.querySelectorAll('#termbody .ln')) : [];
-  function showAllLines(){ lines.forEach(function(l){ l.style.opacity=1; }); }
-  if(reduce || !('IntersectionObserver' in window)){
-    if(term) term.classList.remove('type');   // fully visible, no typing
-  } else if(term) {
-    var i=0;
-    function step(){
-      if(i>=lines.length){ return; }
-      lines[i].style.opacity=1; i++;
-      var delay = (i>0 && lines[i-1] && lines[i-1].classList.contains('bad')) ? 520 : 150;
-      setTimeout(step, delay);
-    }
-    var seen=false;
-    var io3=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting && !seen){seen=true; term.classList.add('run'); setTimeout(step,250);}});},{threshold:.25});
-    io3.observe(term);
-    // fail-safe: if the panel was never scrolled into view (screenshot / no-scroll), show it all
-    setTimeout(function(){ if(!seen){ term.classList.add('run'); showAllLines(); } }, 2200);
-  }
-})();
-</script>
+  </footer>
 </body>
 </html>

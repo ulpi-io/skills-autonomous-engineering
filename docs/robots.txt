@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ulpi-io.github.io/skills-autonomous-engineering/sitemap.xml

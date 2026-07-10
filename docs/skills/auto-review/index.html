@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Review skill · Autonomous Engineering Skills</title>
+  <meta name="description" content="Fans a change across independent review lenses and reports only findings that survive adversarial refutation.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="Auto Review skill">
+  <meta property="og:description" content="Fans a change across independent review lenses and reports only findings that survive adversarial refutation.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-review/">
+  <link rel="canonical" href="https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-review/">
+  <link rel="icon" type="image/png" href="../../ulpi-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/site.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2JN5Y3QCSS"></script>
+  <script defer src="../../assets/site.js" data-ga-id="G-2JN5Y3QCSS"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Auto Review skill","description":"Fans a change across independent review lenses and reports only findings that survive adversarial refutation.","url":"https://ulpi-io.github.io/skills-autonomous-engineering/skills/auto-review/","version":"v0.1.0","isPartOf":{"@type":"WebSite","name":"Autonomous Engineering Skills","url":"https://ulpi-io.github.io/skills-autonomous-engineering/"}}</script>
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="../../" aria-label="Autonomous Engineering Skills, home">
+        <img src="../../ulpi-icon.png" alt="" width="26" height="26" class="logo">
+        <span>autonomous-engineering</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>menu</span></button>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="../../how-it-works/">How it works</a><a href="../../skills/" aria-current="page">Skills</a><a href="../../plugins/">Plugins</a>
+        <a class="gh" href="https://github.com/ulpi-io/skills-autonomous-engineering">GitHub ↗</a>
+        <button class="themebtn" type="button" id="theme" aria-label="Toggle color theme">◐ auto</button>
+      </nav>
+    </div>
+  </header>
+  <main id="main" data-skill="auto-review">
+
+  <nav class="breadcrumbs wrap" aria-label="Breadcrumb"><a href="../../">Home</a><span aria-hidden="true">/</span><a href="../../skills/">Skills</a><span aria-hidden="true">/</span><span aria-current="page">Auto Review</span></nav>
+  <section class="page-hero skill-hero"><div class="wrap page-hero-grid"><div><div class="hero-meta"><span class="lab"><span class="mk">▸</span> Lifecycle phases</span><span class="version">v0.1.0</span></div><h1><code>auto-review</code></h1><p class="lede">Fans a change across independent review lenses and reports only findings that survive adversarial refutation.</p><div class="hero-actions"><a class="btn" href="#install">Install this skill →</a><a class="btn ghost" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/auto-review/SKILL.md">Read SKILL.md ↗</a></div></div><div class="skill-instrument panel" data-visual="skeptic-matrix"><div class="instrument-top"><span>WORKFLOW / 05</span><span>/auto-review [scope — a diff/branch/PR, or path] (default: the current branch diff)</span></div><ol class="workflow-rail" aria-label="Auto Review workflow"><li class="rail-step"><span>01</span><p>Pin the scope, baseline, diff, and review budget.</p></li><li class="rail-step"><span>02</span><p>Fan out correctness, security, performance, maintainability, testing, and contract lenses.</p></li><li class="rail-step"><span>03</span><p>Deduplicate raw findings without erasing distinct failure scenarios.</p></li><li class="rail-step"><span>04</span><p>Put every finding through an independent majority-refute panel.</p></li><li class="rail-step"><span>05</span><p>Report survivors, open quorum gaps, and rejections; fix only when requested.</p></li></ol></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> operating envelope</p><h2>Use it deliberately.</h2><p>The shortest useful definition of where this skill helps—and where it should stay out of the way.</p></div><div class="use-grid"><div class="detail-block"><h3>Use when</h3><ul class="check-list"><li>A branch, pull request, diff, or module needs broad review before merge.</li><li>False positives need to be filtered before they consume engineering attention.</li><li>Confirmed blockers should optionally enter a bounded, scoped fix loop.</li></ul></div><div class="detail-block"><h3>Do not use when</h3><ul class="cross-list"><li>You need the feature implemented rather than reviewed.</li><li>You want behavior-neutral cleanup; use auto-simplify.</li><li>You have not explicitly asked for fixes and expect a read-only review.</li></ul></div></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> output contract</p><h2>What must be true when it stops.</h2></div><div class="output-grid"><div class="detail-block"><h3>Produces</h3><ul class="signal-list"><li>Verified findings grouped by Blocker, Concern, Nit, and FYI</li><li>Coverage report for every review dimension</li><li>Unverified quorum-gap ledger</li><li>Refuted-finding rejection ledger</li><li>Optional bounded fixes for confirmed issues</li></ul></div><div class="detail-block"><h3>Guarantees</h3><ul class="guarantee-list"><li>Only adversarially verified findings count or drive edits.</li><li>A review dimension that did not run is an explicit coverage gap.</li><li>Severity is calibrated to the actual failure scenario.</li><li>Fixes are opt-in, minimal, scoped, and re-verified.</li><li>A clean verdict is impossible while a dimension or verification quorum is missing.</li></ul></div><div class="detail-block"><h3>Honest failure states</h3><ul class="failure-list"><li>coverage_gap — one or more review dimensions did not return evidence</li><li>unverified — a finding panel died below quorum</li><li>blocked — verified blocker findings remain open</li><li>fix_exhausted — an opted-in repair loop did not converge</li></ul></div></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> enforcement</p><h2>Know which claims are executable.</h2><p>Scripts are linked when this skill owns deterministic machinery. The remaining rules are explicit operating contracts and must not be marketed as hooks.</p></div><div class="evidence-grid"><a class="evidence-card" href="https://github.com/ulpi-io/skills-autonomous-engineering/blob/main/auto-review/references/review-workflow.js"><span class="status-dot"></span><code>auto-review/references/review-workflow.js</code><span>source ↗</span></a></div></div></section>
+  <section id="install"><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> install and invoke</p><h2>One skill, three honest surfaces.</h2></div><div class="install-grid"><article class="install-card"><div class="install-card-head"><h3>skills.sh</h3><span class="status-badge status-available"><span aria-hidden="true"></span>Available</span></div><p>Universal skill installation, including Claude Code and Codex.</p><div class="cmdrow"><code id="install-auto-review">npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill auto-review</code><button class="cp" type="button" data-copy-target="install-auto-review" aria-label="Copy command">copy</button></div></article><article class="install-card"><div class="install-card-head"><h3>Claude Code plugin</h3><span class="status-badge status-available"><span aria-hidden="true"></span>Available</span></div><p>Install the full plugin, then invoke <code>/auto-review</code> or let routing select it from context.</p><a class="text-link" href="../../plugins/claude-code/">Claude installation →</a></article><article class="install-card"><div class="install-card-head"><h3>Codex</h3><span class="status-badge status-preview"><span aria-hidden="true"></span>Native plugin preview</span></div><p>The skills.sh version works today. Invoke the installed skill as <code>$auto-review</code>. The native plugin is not presented as shipped until its install smoke passes.</p><a class="text-link" href="../../plugins/codex/">Codex status →</a></article></div></div></section>
+  <section><div class="wrap"><div class="section-head reveal"><p class="lab"><span class="mk">▸</span> composes with</p><h2>Related machinery.</h2></div><div class="related-grid"><a class="related-card" href="../../skills/adversarial-verify/"><code>adversarial-verify</code><p>Makes independent skeptics try to disprove a claim and keeps it only when it survives a fail-closed vote.</p><span>Open →</span></a><a class="related-card" href="../../skills/fan-out-work/"><code>fan-out-work</code><p>Runs the same bounded pipeline over independent items in parallel without hiding failures or dropped coverage.</p><span>Open →</span></a><a class="related-card" href="../../skills/converge-loop/"><code>converge-loop</code><p>Runs a measurable until-green or until-dry loop with explicit caps, anti-thrash, and honest termination.</p><span>Open →</span></a><a class="related-card" href="../../skills/checkpoint-resume/"><code>checkpoint-resume</code><p>Persists long-run state to disk so a fresh session skips verified work already completed.</p><span>Open →</span></a></div></div></section>
+  <nav class="page-nav wrap" aria-label="Adjacent skills"><a href="../../skills/auto-test/"><span>← previous</span><b>auto-test</b></a><a href="../../skills/auto-performance/"><span>next →</span><b>auto-performance</b></a></nav>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div><span class="lab"><span class="mk">▸</span> autonomous engineering</span><p>Bounded. Fail-closed. Durable. Verified before acting.</p></div>
+      <div class="footer-links">
+        <a href="../../skills/">18 skills</a>
+        <a href="../../plugins/claude-code/">Claude Code plugin</a>
+        <a href="../../plugins/codex/">Codex plugin</a>
+        <a href="https://github.com/ulpi-io/skills-autonomous-engineering">Source ↗</a>
+      </div>
+      <span class="footer-meta">© ulpi.io · MIT</span>
+    </div>
+  </footer>
+</body>
+</html>
