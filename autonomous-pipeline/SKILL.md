@@ -86,6 +86,41 @@ optional phases run (simplify/performance/go-live can be skipped);
 build/test are not skippable. (This order follows spec→plan→build first; simplify runs against the
 build's test safety net, test then hardens coverage.)
 
+## Runtime backends — canonical deterministic coordinator vs. legacy Workflow
+
+The unattended stretch runs on ONE of two backends. They are NOT peers: one is the canonical runtime, the
+other a Claude-only compatibility shim.
+
+- **CANONICAL — the deterministic coordinator CLI (`scripts/pipeline.mjs`).** A zero-dependency Node
+  program: `node autonomous-pipeline/scripts/pipeline.mjs approve|start|resume|status|authorize`. This is
+  the runtime the **Codex adapter launches** and the one Claude should prefer for a real run. The decisive
+  property: **no model prompt owns Git, the checkpoint, the phase gates, or the convergence decision — the
+  coordinator library (`scripts/lib/`) does, deterministically.** Model agents (native or Codex) appear
+  ONLY as sandboxed, capability-free **per-task engineers**; Git integration (`git-integration.mjs`,
+  `git-workspaces.mjs`), the locked checkpoint store, the fail-closed phase engine, the budget ledger, the
+  capability-gated authorization, and the convergence conjunction (`pipeline-state.mjs`) are all machinery,
+  not prose an LLM can talk its way past. A **BLOCKED required gate HARD-STOPS downstream execution** here
+  (fail-closed): the run returns `status:blocked` / `converged:false` and no later phase runs.
+  - `approve --plan <canonical.json> --config <run-config.json>` — validates the base is approval-ready,
+    inits the durable run + immutable budget, enters the `prepared` window, and mints the ONE-USE,
+    hash-bound plan-approval capability. **This IS the recorded human approval.** A human MUST sit between
+    `approve` (mint) and `start` (consume) — the coordinator can never auto-chain the gate.
+  - `start --run <id>` — runs every preflight refusal (plan/base/config drift, wrong target, dirty tree)
+    and **consumes the one-use approval BEFORE a single executor spawns**, then drives build → post-build
+    phases and publishes ONLY as a fast-forward after the explicit convergence conjunction + a durable
+    finalize `done`. `resume --run <id>` continues from durable state (never erasing spend, never
+    re-consuming the approval); `status --run <id>` is a read-only snapshot; `authorize --run <id> --action
+    <ship|deploy|publish|remote-merge>` halts a converged run and mints a fresh, action-scoped capability
+    for one irreversible step (a plan approval never satisfies an action). See `references/cli-contract.md`
+    (grammar + exit codes), `references/budget-contract.md` (the immutable termination set), and
+    `references/authorization-contract.md` (capability-gated approval + irreversible actions).
+- **LEGACY (Claude-only) — `references/pipeline-workflow.js`.** A compatibility backend invoked via the
+  Claude Code `Workflow` tool. The **Codex adapter cannot select it** (a Workflow needs the Claude Code
+  runtime). Because a Workflow cannot ask the user or hard-pause mid-run, it does ONE FORWARD PASS
+  collecting findings rather than hard-stopping on a blocked gate — an honestly-different shape documented
+  in `references/pipeline-state.md`. Prefer the canonical CLI; reach for the Workflow only on a
+  Claude-only install where launching the CLI is not an option.
+
 ## Phase 0: Intake — request, config, budget, mode
 
 - Detect **new run** vs **resume** (`$request` = "resume" / a pipeline checkpoint id → resume; skip
@@ -112,8 +147,13 @@ open.
 
 ## Phase 1: Run the lifecycle (one approved pass)
 
-The skill owns the human-facing front half; the bundled **runnable Workflow template** owns the
-unattended stretch:
+The skill owns the human-facing front half (intake, spec, plan, and the single approval); a backend owns
+the unattended stretch. Pick the backend by install: **Codex (and any Claude run that prefers determinism)
+uses the canonical CLI** — after the approval is RECORDED (`pipeline.mjs approve`, which mints the one-use
+capability), a human confirms and the run is launched with `pipeline.mjs start --run <id>`; Git,
+checkpoints, gates and convergence are the coordinator's, never a prompt's (see **Runtime backends**
+above). The steps below describe the **legacy Claude `Workflow`** path (`references/pipeline-workflow.js`),
+which the Codex adapter cannot select:
 
 1. **spec → plan** run first, in-session, by FOLLOWING their contracts (they may ask questions, so they
    stay outside the Workflow). Compose them by CONTRACT, not by a programmatic `Skill()` call: `auto-spec`,
@@ -225,11 +265,23 @@ a dead gate or a red end-state is not "done".
 
 ## When To Load References
 
-- `references/pipeline-workflow.js` — the RUNNABLE Workflow for the unattended stretch (build →
-  simplify → test → review → performance → ship-prep, fail-closed, checkpointed). Launch it via the
-  Workflow tool with full args after the plan approval; edit + relaunch (same scriptPath) to iterate.
+- `scripts/pipeline.mjs` — the **canonical deterministic coordinator CLI** (the Codex runtime):
+  `approve|start|resume|status|authorize`. Run it (after a recorded `approve`) instead of the Workflow
+  whenever determinism is wanted or Codex is the host; its `scripts/lib/` modules own Git, the checkpoint,
+  the gates, and convergence. Read the three contracts below to drive it safely.
+- `references/cli-contract.md` — the CLI's five-verb grammar, flags, and pinned exit-code table (the
+  human-readable spec; `scripts/lib/cli-contract.mjs` is the enforced one). Load before scripting the CLI.
+- `references/budget-contract.md` — the immutable termination set (the whole-run budget/no-progress/
+  escalation bound the coordinator enforces). Load when setting or reasoning about a run's budget.
+- `references/authorization-contract.md` — the capability-gated plan approval + irreversible-action model
+  (`approve`/`authorize`). Load before wiring approval or any ship/deploy/publish/remote-merge step.
+- `references/pipeline-workflow.js` — the LEGACY Claude-only Workflow backend for the unattended stretch
+  (build → simplify → test → review → performance → ship-prep, forward-pass, checkpointed). The Codex
+  adapter cannot select it. Launch via the Workflow tool with full args after the plan approval; edit +
+  relaunch (same scriptPath) to iterate.
 - `references/pipeline-state.md` — the phase state machine, per-phase gate conditions, the phase-to-phase
-  handoff contract, and the pipeline checkpoint schema. Load when wiring or resuming a run.
+  handoff contract, the checkpoint v2 schema, and the canonical-hard-stop vs. legacy-forward-pass
+  divergence. Load when wiring or resuming a run.
 - The phase skills — `auto-spec`, `auto-plan`, `auto-build`, `auto-simplify`, `auto-test`, `auto-review`,
   `auto-performance`, `auto-ship` — each runs its own phase to its own bar.
 - `checkpoint-resume` (skill) — the durable pipeline + per-phase state.

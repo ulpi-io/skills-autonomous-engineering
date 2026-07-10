@@ -1,11 +1,23 @@
-// pipeline-workflow.js — the runnable Workflow behind `autonomous-pipeline`.
+// pipeline-workflow.js — the LEGACY, CLAUDE-ONLY compatibility backend for `autonomous-pipeline`.
+//
+// NOT the canonical runtime. This template runs ONLY under the Claude Code `Workflow` tool; the
+// Codex adapter CANNOT select it (a Workflow needs the Claude Code runtime, which Codex does not
+// provide). The CANONICAL, cross-host runtime is the deterministic zero-dep coordinator CLI —
+// `autonomous-pipeline/scripts/pipeline.mjs` (approve|start|resume|status|authorize) backed by
+// `scripts/lib/` — where Git, the checkpoint, the phase gates, and convergence are owned by the
+// library, not by any model prompt. Prefer that CLI; this Workflow exists only for Claude-only
+// installs where launching the CLI is not an option. (Note: the D14 per-role `delegate` option
+// below routes an individual AGENT BRIEF to a codex subagent — that is unrelated to the canonical
+// Codex RUNTIME and does not make this Workflow selectable by the Codex adapter.)
 //
 // The SKILL does everything human-facing BEFORE launching this: intake + config questions,
 // auto-spec, auto-plan, and THE SINGLE PLAN APPROVAL (a Workflow cannot ask the user mid-run).
 // This script executes the approved, unattended stretch — build → simplify → test → review →
 // performance → ship-prep — with FAIL-CLOSED gates between phases, a durable checkpoint the
 // skill created beforehand, and a verified findings register as the return value. ONE pass,
-// no autonomous recursion: if the register is non-empty the USER decides on a fix round.
+// no autonomous recursion: if the register is non-empty the USER decides on a fix round. Unlike
+// the canonical coordinator (which HARD-STOPS downstream on a blocked required gate), this legacy
+// backend does ONE FORWARD PASS collecting findings — see references/pipeline-state.md.
 //
 // Launch (from the skill):
 //   Workflow({ scriptPath: "<this file>", args: {
@@ -27,7 +39,7 @@
 
 export const meta = {
   name: 'autonomous-pipeline',
-  description: 'Approved-plan build → simplify → test → review → performance → ship-prep with fail-closed gates, durable checkpoint, verified findings register',
+  description: 'LEGACY Claude-only Workflow backend (NOT the canonical runtime; the Codex adapter cannot select it) — approved-plan build → simplify → test → review → performance → ship-prep as one forward pass with fail-closed gates, durable checkpoint, verified findings register',
   phases: [
     { title: 'Preflight', detail: 'validate plan DAG + clean baseline + checkpoint' },
     { title: 'Build', detail: 'DAG layers: worktree engineer → integrate → slice review → bounded fix' },

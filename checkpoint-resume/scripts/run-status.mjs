@@ -13,14 +13,22 @@
 //   node run-status.mjs <id>             # a specific run (id prefix is enough)
 //   node run-status.mjs --list           # every run under this project, one line each, newest first
 //   node run-status.mjs --json [id]      # machine-readable: the raw durable doc (or a list with --list)
-//   node run-status.mjs --resume [id]    # print the exact Workflow({scriptPath,args}) call to RESUME it
+//   node run-status.mjs --resume [id]    # print the shell-safe Codex resume command for this run
+//   node run-status.mjs --resume --json  # emit ONLY the typed resume descriptor (argv array, no shell)
 //   node run-status.mjs --dir <path>     # look in <path> instead of the auto-discovered .ulpi/runs
 //   node run-status.mjs --no-color       # plain text (also honors NO_COLOR)
+//
+// Resume recipe — Codex-native, argv-safe. A run whose persisted `launch` is the coordinator recipe
+// ({ scriptPath: …/pipeline.mjs, args:{ command:'resume', run } }) is RUNNABLE: `--resume` prints the
+// exact shell-safe command `node pipeline.mjs resume --run <id>` (the id is passed as a discrete argv
+// token — never string-interpolated into a shell — and defensively quoted if it isn't a bare token).
+// A LEGACY launch (a Claude Workflow() script such as pipeline-workflow.js), or an absent/malformed one,
+// is labeled MIGRATION-ONLY / non-runnable and is NEVER presented as a runnable Codex command.
 //
 // Exit codes: 0 ok (incl. "no runs found") · 1 usage error · 3 requested run id not found.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 
 const ARGV = process.argv.slice(2);
 const SELF = process.argv[1];
@@ -146,6 +154,16 @@ function render(r, dir) {
   console.log(`  ${dim('started ')}${started}   ${dim('·')} updated ${rel(d.updatedAt)}${took}`);
   console.log(`  ${dim('file    ')}${dim(r.file)}`);
 
+  // Integration branch (coordinator runs stamp it under `pipeline`) — where per-task work is serialized
+  // before it reaches the target ref. Shown short (the ref tail), with the publish target when present.
+  const meta = (d.pipeline && typeof d.pipeline === 'object') ? d.pipeline : {};
+  const intRef = meta.integrationRef, tgtRef = meta.targetRef;
+  if (intRef || tgtRef) {
+    const short = (ref) => String(ref).replace(/^refs\/heads\//, '');
+    const arrow = (intRef && tgtRef) ? `${cyn(short(intRef))} ${dim('→')} ${short(tgtRef)}` : short(intRef || tgtRef);
+    console.log(`  ${dim('branch  ')}${arrow}   ${dim(intRef && tgtRef ? '(integration → target)' : intRef ? '(integration)' : '(target)')}`);
+  }
+
   const phases = orderedPhases(d.phases);
   if (phases.length) {
     console.log();
@@ -174,16 +192,30 @@ function render(r, dir) {
     }
   }
 
-  const items = d.openItems || [];
-  if (items.length) {
+  // Findings register: the UNRESOLVED (open) findings that gate finalize, plus a one-line count of the
+  // durable RESOLVED audit trail (v2 `resolvedItems`) so a converged run still shows what was cleared.
+  const items = Array.isArray(d.openItems) ? d.openItems : [];
+  const resolved = Array.isArray(d.resolvedItems) ? d.resolvedItems : [];
+  if (items.length || resolved.length) {
     console.log();
-    console.log(`  ${dim('open')}    ${items.length} finding(s) in the register`);
+    console.log(`  ${dim('open')}    ${items.length ? `${items.length} unresolved finding(s) in the register` : grn('0 unresolved — register clear')}`);
     for (const it of items.slice(0, 10)) {
       const label = [it.phase, it.kind].filter(Boolean).join('/');
       const why = it.why || it.issue || it.summary || (it.task ? `task ${it.task}` : '') || JSON.stringify(it).slice(0, 90);
       console.log(`          ${ylw('•')} ${dim((label || '?').padEnd(18))} ${String(why).slice(0, 96)}`);
     }
     if (items.length > 10) console.log(dim(`          … +${items.length - 10} more`));
+    if (resolved.length) console.log(`  ${dim('resolved')} ${resolved.length} finding(s) cleared from the register (audit trail)`);
+  }
+
+  // Final validation — the run's terminal workspace verdict (green gates finalize done; red/absent is honest).
+  if (d.finalValidation && typeof d.finalValidation === 'object') {
+    const fv = d.finalValidation;
+    const green = fv.status === 'green';
+    const badge = green ? grn('✓ validation green') : red(`✗ validation ${fv.status || 'unknown'}`);
+    const note = fv.note ? dim(` — ${fv.note}`) : '';
+    console.log();
+    console.log(`  ${dim('final   ')}${badge}${note}`);
   }
 
   if (d.result != null) {
@@ -193,9 +225,24 @@ function render(r, dir) {
     console.log(`  ${dim('result')}  ${rs}${extra}`);
   }
 
+  // Honest terminal state + resume affordance. A done run says done; an aborted run says aborted and is
+  // NOT presented as resumable; a live/needs-attention run gets the real resume recipe — the Codex-native
+  // command when its launch is runnable, otherwise a migration-only pointer (never a fake command).
+  const hasOpen = isLive(d) || b.blocked.length || b.dep_blocked.length || b.pending.length || b.in_progress.length;
   console.log();
-  if (isLive(d) || b.blocked.length || b.dep_blocked.length || b.pending.length || b.in_progress.length) {
-    console.log(`  ${dim('resume')}  node ${SELF} --resume ${d.id || ''}`.trimEnd());
+  if (d.status === 'done') {
+    console.log(`  ${grn('●')} done — this run converged and finalized.`);
+  } else if (d.status === 'aborted') {
+    console.log(`  ${red('✗')} aborted — this run was terminated and is not resumable as-is; re-approve to start over.`);
+  } else if (hasOpen) {
+    const desc = resumeDescriptor(d);
+    if (desc.runnable) {
+      console.log(`  ${dim('resume')}  ${desc.shell}`);
+    } else if (desc.kind === 'legacy-workflow') {
+      console.log(`  ${dim('resume')}  ${ylw('migration-only')} — persisted launch is a Claude Workflow, not a Codex command. Details: node ${SELF} --resume ${d.id || ''}`.trimEnd());
+    } else {
+      console.log(`  ${dim('resume')}  ${ylw('non-runnable')} — no coordinator launch recipe. Details: node ${SELF} --resume ${d.id || ''}`.trimEnd());
+    }
   } else {
     console.log(`  ${grn('✓')} nothing pending — this run is complete.`);
   }
@@ -206,9 +253,11 @@ function render(r, dir) {
 function resumeSet(units) {
   const skip = [], eligible = [], depBlocked = {};
   const u = units || {};
+  // A malformed/foreign checkpoint can hold a null (or non-object) unit value and still parse as JSON —
+  // resumeSet is on the READ-ONLY render path (the footer) and must never crash on one.
   for (const [id, unit] of Object.entries(u)) {
-    if (unit.status === 'done') { skip.push(id); continue; }
-    const missing = (unit.dependsOn || []).filter((d) => u[d]?.status !== 'done');
+    if (unit?.status === 'done') { skip.push(id); continue; }
+    const missing = (unit?.dependsOn || []).filter((d) => u[d]?.status !== 'done');
     if (missing.length) {
       let root = missing[0]; const seen = new Set();
       while (!seen.has(root)) { seen.add(root); const next = (u[root]?.dependsOn || []).find((d) => u[d]?.status !== 'done'); if (!next) break; root = next; }
@@ -217,24 +266,91 @@ function resumeSet(units) {
   }
   return { skip, eligible, dep_blocked: depBlocked };
 }
-function renderResume(r) {
+// argv-safe shell quoting: a bare token is emitted verbatim; anything else is single-quoted (with the
+// POSIX '\'' escape) so the printed command is safe to paste even for an exotic run id. We NEVER build
+// the command by interpolating the id into a shell template — it is a discrete argv token that we quote.
+function shquote(s) {
+  const str = String(s);
+  return /^[A-Za-z0-9._/@:=+-]+$/.test(str) ? str : `'${str.replace(/'/g, `'\\''`)}'`;
+}
+
+// Classify a run's persisted launch descriptor into the resume recipe it authorizes.
+//   codex-cli      → RUNNABLE: launch is the coordinator recipe (…/pipeline.mjs, args.command==='resume').
+//   legacy-workflow→ non-runnable: a Claude Workflow() script (e.g. pipeline-workflow.js) — migration only.
+//   no-launch      → non-runnable: nothing persisted (a pre-coordinator / hand-rolled checkpoint).
+function classifyLaunch(doc) {
+  const launch = doc && doc.launch;
+  if (!launch || typeof launch !== 'object' || Array.isArray(launch) || typeof launch.scriptPath !== 'string' || launch.scriptPath.trim() === '') {
+    return { kind: 'no-launch' };
+  }
+  const args = (launch.args && typeof launch.args === 'object' && !Array.isArray(launch.args)) ? launch.args : {};
+  if (basename(launch.scriptPath) === 'pipeline.mjs' && args.command === 'resume'
+      && typeof args.run === 'string' && args.run.trim() !== '') {
+    return { kind: 'codex-cli', run: args.run };
+  }
+  return { kind: 'legacy-workflow', launch };
+}
+
+// The typed resume descriptor — the single object `--resume --json` emits. Purely a projection of the
+// durable doc (READ-ONLY). For a runnable run it carries the argv array AND a ready-to-paste shell string;
+// for a non-runnable one it is flagged { runnable:false, migrationOnly:true } with the reason.
+function resumeDescriptor(doc) {
+  const set = resumeSet(doc.units);
+  const cls = classifyLaunch(doc);
+  if (cls.kind === 'codex-cli') {
+    const argv = ['pipeline.mjs', 'resume', '--run', cls.run];
+    return {
+      runnable: true, kind: 'codex-cli', run: cls.run,
+      command: 'node', argv,
+      shell: `node ${argv.map(shquote).join(' ')}`,
+      resumeSet: set,
+    };
+  }
+  if (cls.kind === 'legacy-workflow') {
+    return {
+      runnable: false, kind: 'legacy-workflow', migrationOnly: true,
+      reason: 'persisted launch is a Claude Workflow() script, not a Codex CLI recipe — it is not runnable as a shell command',
+      legacyLaunch: cls.launch,
+      resumeSet: set,
+    };
+  }
+  return {
+    runnable: false, kind: 'no-launch', migrationOnly: true,
+    reason: 'no Codex-native launch recipe was persisted (pre-coordinator or hand-rolled run) — re-approve/relaunch via pipeline.mjs',
+    resumeSet: set,
+  };
+}
+
+function renderResume(r, asJson) {
   const d = r.doc;
-  if (!d) { console.log(red(`! ${r.name} is unreadable: ${r.err}`)); return; }
-  const rs = resumeSet(d.units);
-  if (d.launch && d.launch.scriptPath) {
-    // Ensure the relaunch reuses THIS status file so the workflow reads the checkpoint and skips done.
-    const args = { ...(d.launch.args || {}) };
+  if (!d) {
+    if (asJson) { console.log(JSON.stringify({ runnable: false, kind: 'unreadable', migrationOnly: true, reason: r.err, file: r.file }, null, 2)); return; }
+    console.log(red(`! ${r.name} is unreadable: ${r.err}`)); return;
+  }
+  const desc = resumeDescriptor(d);
+  if (asJson) { console.log(JSON.stringify(desc, null, 2)); return; } // ONLY the typed descriptor — nothing else
+
+  const set = desc.resumeSet;
+  const setLine = `// skip ${set.skip.length} done · re-run ${set.eligible.length} eligible · ${Object.keys(set.dep_blocked).length} dep-blocked`;
+  if (desc.runnable) {
+    console.log('// Resume with the Codex-native pipeline coordinator — reads the durable checkpoint, skips done units:');
+    console.log(desc.shell);
+    console.log(setLine);
+  } else if (desc.kind === 'legacy-workflow') {
+    // Keep the read-only migration inspection: echo the persisted descriptor with statusFile re-pinned to
+    // THIS run — but label it MIGRATION-ONLY. This is a Claude Workflow() launch, never a runnable command.
+    const args = { ...(desc.legacyLaunch.args || {}) };
     if (!args.statusFile) args.statusFile = r.file;
-    console.log('// Resume — paste into the Workflow tool. It reads the checkpoint and skips done units.');
-    console.log(`// skip ${rs.skip.length} done · re-run ${rs.eligible.length} eligible · ${Object.keys(rs.dep_blocked).length} dep-blocked`);
-    console.log(JSON.stringify({ scriptPath: d.launch.scriptPath, args }, null, 2));
+    console.log('// MIGRATION ONLY — this run\'s persisted launch is a Claude Workflow() script, NOT a runnable Codex command.');
+    console.log('// Do NOT run it as a shell command. To resume under the coordinator, re-approve/relaunch via pipeline.mjs.');
+    console.log('// The original Workflow launch (statusFile re-pinned to this run) for migration reference only:');
+    console.log(setLine);
+    console.log(JSON.stringify({ scriptPath: desc.legacyLaunch.scriptPath, args }, null, 2));
   } else {
-    console.log('// No launch recipe was persisted at init (run predates `checkpoint.mjs init --launch`).');
-    console.log('// Relaunch the pipeline Workflow with the SAME args you used originally, plus this exact');
-    console.log('// status file so it resumes in place:');
-    console.log(`//   statusFile: ${JSON.stringify(r.file)}`);
-    console.log(`// Resume set: skip ${rs.skip.length} done · re-run ${rs.eligible.length} eligible · ${Object.keys(rs.dep_blocked).length} dep-blocked`);
-    console.log(JSON.stringify(rs, null, 2));
+    console.log('// NON-RUNNABLE — no Codex-native launch recipe was persisted (pre-coordinator or hand-rolled run).');
+    console.log('// Relaunch via the coordinator: node pipeline.mjs approve … then node pipeline.mjs start --run <id>.');
+    console.log(setLine);
+    console.log(JSON.stringify(set, null, 2));
   }
 }
 
@@ -268,6 +384,6 @@ if (!runs.length) {
 const target = pick(idArg);
 if (!target) { console.error(red(`no run matches "${idArg}" under ${dir}`)); process.exit(3); }
 
-if (wantResume) renderResume(target);
+if (wantResume) renderResume(target, wantJson);
 else if (wantJson) console.log(JSON.stringify(target.doc ?? { file: target.file, error: target.err }, null, 2));
 else render(target, dir);

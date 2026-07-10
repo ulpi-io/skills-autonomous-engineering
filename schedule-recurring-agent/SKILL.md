@@ -1,6 +1,6 @@
 ---
 name: schedule-recurring-agent
-version: 0.1.0
+version: 0.2.0
 description: |
   Stand up a recurring scheduled agent for standing work (triage, monitoring, audits, digests): a self-contained IDEMPOTENT brief (each run wakes memory-less and must dedup prior work), a cadence matched to how often work actually arrives, a per-run BOUND, escalation rules, and a teardown condition. For durable unattended work that runs while you're offline, use claude.ai Routines (the /schedule skill / RemoteTrigger); an in-session CronCreate is the lighter, session-scoped alternative. Use for scheduled repeat work — not one-off waits (watch-and-act).
 allowed-tools:
@@ -114,6 +114,53 @@ There is NO native per-run token budget on either — the per-run bound is enfor
 **Success criteria:** created on the mechanism that matches its durability need, on a justified cadence;
 registration confirmed; the mechanism's constraints stated to the user.
 
+## The validated job schema (the gate)
+
+Both the brief (Phase 1) and the creation (Phase 2) are enforced deterministically by
+`scripts/validate-job.mjs` — the guardrails above are mechanically checkable, so they do NOT ship as
+prose only. A recurring job is a JSON object that MUST declare all nine fields; missing/empty any → the
+gate exits nonzero and names it:
+
+| Field | What it pins | Shape |
+|---|---|---|
+| `key` | a STABLE idempotency + registration key (dedup and the automation id are built from it) | `[A-Za-z0-9][A-Za-z0-9_-]*` |
+| `repo` | where it operates — no reliance on session context | string |
+| `cadence` | a TIMEZONE-anchored recurrence (a cron with no tz drifts) | `{ timezone, cron\|expression }` |
+| `prompt` | the self-contained brief a memory-less run executes | string (≥ 20 chars) |
+| `dedup` | the idempotency rule — marker/state/since-query so repeats don't re-file/re-spam | string or object |
+| `perRunCap` | a POSITIVE per-run bound so one run can't grind or fan out | `{ maxItems\|maxTokens\|maxMinutes\|maxActions }` or a positive number |
+| `reporting` | the channel each run reports through (incl. "nothing to do") | string or object |
+| `escalation` | the stop-and-ask rule for irreversible/ambiguous/high-volume work | string or object |
+| `teardown` | the off-switch (job done, N empty runs, a date, user cancel) | string or object |
+
+```
+node schedule-recurring-agent/scripts/validate-job.mjs validate <job.json>
+```
+
+## The capability ladder (honest creation — never a false registration)
+
+Creation runs through the same gate in `create` mode, and the ORDER is load-bearing:
+
+```
+node schedule-recurring-agent/scripts/validate-job.mjs create <job.json> \
+  [--capability RemoteTrigger|CronCreate] [--authorize] [--existing <registry.json>]
+```
+
+1. **Validate the schema.** Invalid → `created:false`, exit 2, nothing registered.
+2. **List + DEDUP FIRST.** Before any capability check, the job's `key` is looked up in the registry. A
+   match is a correct idempotent NO-OP (`created:false`, `reason:duplicate`, the existing id echoed, exit
+   0) — a re-run never stacks a second routine. This is why the key must be stable.
+3. **Capability + authorization.** A verifiable automation id (`<capability>:<key>`) is minted ONLY when
+   a SUPPORTED capability AND explicit `--authorize` are both present:
+   - `RemoteTrigger` — durable claude.ai Routine (the `/schedule` skill). **Claude Code only.**
+   - `CronCreate` — in-session cron. **Claude Code only.**
+   - **anything else (Codex, plain CLIs) → NO capability.** The gate returns `created:false`,
+     `registered:false`, exit 3, and a **ready brief** for manual/other-platform registration. It NEVER
+     claims a RemoteTrigger/CronCreate registration on a platform that has neither — it degrades and says
+     so. Missing `--authorize` on a supported platform degrades the same way.
+4. **On success** the id is appended to the `--existing` registry, so a later list/create sees it — the
+   id is VERIFIABLE, not invented.
+
 ## Phase 3: Manage the lifecycle
 
 - List/inspect existing routines before creating a near-duplicate — extend one rather than stacking
@@ -161,6 +208,8 @@ briefing the former correctly.
 
 ## When To Load References
 
+- `scripts/validate-job.mjs` — the deterministic job-schema + honest-creation gate (run it in `validate`
+  mode on the brief, in `create` mode to stand the routine up dedup-first with a verifiable id).
 - `budget-guard` (skill) — the per-run bound + escalation contract each invocation enforces.
 - `watch-and-act` (skill) — for a one-off in-session wait instead of a standing routine.
 - The phase/loop skills (`auto-*`, `converge-loop`, …) — the actual work a routine's brief invokes.

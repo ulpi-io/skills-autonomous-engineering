@@ -34,7 +34,23 @@ try:
     d = json.load(open(0))
 except Exception:
     sys.exit(0)
-c = d.get("tool_input", {}).get("command", "")
+def _cmd_str(v):
+    # Claude: tool_input.command is a STRING. Codex`s shell tool delivers an argv LIST (e.g.
+    # ["bash","-lc","git add -A"]); shlex.quote each token so element boundaries survive
+    # re-tokenization (the whole "git add -A" element stays one token for the nested-shell re-scan)
+    # instead of word-splitting into a broken parse. Any other type → "" (fail-open on malformed).
+    if isinstance(v, str):
+        return v
+    if isinstance(v, list):
+        return " ".join(shlex.quote(x) for x in v if isinstance(x, str))
+    return ""
+ti = d.get("tool_input", {})
+if not isinstance(ti, dict):
+    ti = {}
+# Extract from every payload shape so a Codex Bash call parses IDENTICALLY to Claude`s: the argv may sit
+# at tool_input.command (Codex list or Claude string) OR at the TOP LEVEL beside cwd/env (a Codex payload
+# shape on a different JSON path). First non-empty wins.
+c = _cmd_str(ti.get("command")) or _cmd_str(d.get("command"))
 def segments(cmd):
     for line in cmd.split("\n"):
         lex = shlex.shlex(line, posix=True, punctuation_chars=";|&()")

@@ -49,10 +49,17 @@ node "$RS" --json demo | python3 -c 'import sys,json; d=json.load(sys.stdin); as
 # prefix match works
 node "$RS" --json dem | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["id"]=="demo", d'; ok $? "id prefix match"
 
-# --resume reconstructs the recipe from persisted launch, forcing statusFile back to this run
+# --resume on a LEGACY Workflow launch keeps the read-only migration inspection green: it still echoes
+# the persisted scriptPath and re-pins statusFile to THIS run, but must LABEL it migration-only /
+# non-runnable (a Claude Workflow(), NEVER presented as a runnable Codex shell command).
 RES="$(node "$RS" --resume demo --no-color)"
 echo "$RES" | grep -q '"scriptPath": "/repo/autonomous-pipeline/references/pipeline-workflow.js"' ; ok $? "--resume emits persisted scriptPath"
 echo "$RES" | python3 -c 'import sys,json,re; t=sys.stdin.read(); j=t[t.index("{"):]; d=json.loads(j); assert d["args"]["statusFile"].endswith("demo.json"), d'; ok $? "--resume injects statusFile back into args"
+echo "$RES" | grep -qiE 'migration.only|not a runnable|non-runnable' ; ok $? "--resume labels a legacy Workflow launch migration-only"
+echo "$RES" | grep -q 'node pipeline.mjs resume' && echo "FAIL legacy launch shown as runnable codex command" && fails=$((fails+1)) || echo "PASS legacy launch not shown as a runnable codex command"
+
+# --resume --json on a legacy launch emits ONLY the typed descriptor (one JSON object), flagged non-runnable.
+node "$RS" --resume demo --json | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["runnable"] is False and d.get("migrationOnly") is True and d["kind"]=="legacy-workflow", d'; ok $? "--resume --json legacy: single non-runnable descriptor"
 
 # unknown id → exit 3
 node "$RS" nope-nope >/dev/null 2>&1; [ "$?" = "3" ] && echo "PASS unknown id exits 3" || { echo "FAIL unknown id exit code"; fails=$((fails+1)); }
@@ -70,6 +77,44 @@ cd "$TMP" && mkdir -p mal/.ulpi/runs
 printf '%s' '{"schemaVersion":1,"id":"mal","task":"m","status":"running","units":{"a":{"status":"done"},"b":null}}' > mal/.ulpi/runs/mal.json
 ( cd mal && node "$RS" --no-color >/dev/null 2>&1 ); ok $? "render tolerates a null unit value (no crash)"
 ( cd mal && node "$RS" --list --no-color >/dev/null 2>&1 ); ok $? "--list tolerates a null unit value (no crash)"
+
+# ── CODEX-NATIVE resume (its own project so the read-only snapshot above stays byte-clean) ────────────
+# launch is the pipeline.mjs resume recipe → --resume emits the shell-safe `node pipeline.mjs resume
+# --run <id>` (argv-safe, no interpolation); --resume --json emits ONLY the typed descriptor with argv.
+cd "$TMP" && mkdir -p cdxproj && cd cdxproj
+node "$CK" init .ulpi/runs/cdx.json --id cdx --task "codex run" --units "u1,u2" \
+  --launch '{"scriptPath":"autonomous-pipeline/scripts/pipeline.mjs","args":{"command":"resume","run":"cdx"}}' >/dev/null
+node "$CK" unit .ulpi/runs/cdx.json u1 done >/dev/null
+CRES="$(node "$RS" --resume cdx --no-color)"
+echo "$CRES" | grep -qF 'node pipeline.mjs resume --run cdx' ; ok $? "--resume codex run emits shell-safe coordinator command"
+echo "$CRES" | grep -qF 'pipeline-workflow.js' && { echo "FAIL codex resume leaked a Workflow script"; fails=$((fails+1)); } || echo "PASS codex resume is a clean coordinator command"
+node "$RS" --resume cdx --json | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["runnable"] is True and d["kind"]=="codex-cli" and d["run"]=="cdx" and d["command"]=="node" and d["argv"]==["pipeline.mjs","resume","--run","cdx"], d'; ok $? "--resume --json codex: typed descriptor with argv"
+# codex-native --resume is byte-for-byte read-only too
+CSNAP_B="$(cksum < .ulpi/runs/cdx.json)"; node "$RS" --resume cdx --no-color >/dev/null; node "$RS" --resume cdx --json >/dev/null
+CSNAP_A="$(cksum < .ulpi/runs/cdx.json)"; [ "$CSNAP_B" = "$CSNAP_A" ] && echo "PASS codex --resume never wrote" || { echo "FAIL codex --resume mutated the run"; fails=$((fails+1)); }
+
+# ── FULL COORDINATOR render: phases, integration branch, resolved+open findings, final validation ─────
+cd "$TMP" && mkdir -p fullproj && cd fullproj
+node "$CK" init .ulpi/runs/full.json --id full --task "full run" --units "t1" \
+  --launch '{"scriptPath":"autonomous-pipeline/scripts/pipeline.mjs","args":{"command":"resume","run":"full"}}' >/dev/null
+# stamp coordinator metadata (integration branch) under .pipeline the way `approve` does
+python3 - <<'PY'
+import json
+f=".ulpi/runs/full.json"
+d=json.load(open(f))
+d["pipeline"]={"run":"full","integrationRef":"refs/heads/ulpi-int-full","targetRef":"refs/heads/main"}
+json.dump(d,open(f,"w"),indent=2)
+PY
+node "$CK" phase .ulpi/runs/full.json build running >/dev/null
+node "$CK" item .ulpi/runs/full.json --json '{"id":"F-KEEP","phase":"review","kind":"finding","why":"open finding stays"}' >/dev/null
+node "$CK" item .ulpi/runs/full.json --json '{"id":"F-GONE","phase":"test","kind":"finding","why":"this one gets resolved"}' >/dev/null
+node "$CK" resolve .ulpi/runs/full.json --ids F-GONE >/dev/null
+node "$CK" validation .ulpi/runs/full.json green --note "all slices green" >/dev/null
+FULL="$(node "$RS" full --no-color)"
+echo "$FULL" | grep -qE 'ulpi-int-full' ; ok $? "render shows the integration branch"
+echo "$FULL" | grep -qi 'resolved' ; ok $? "render shows resolved findings"
+echo "$FULL" | grep -qiE 'validation.*green|green.*validation' ; ok $? "render shows final validation"
+echo "$FULL" | grep -qF 'open finding stays' ; ok $? "render shows unresolved finding"
 
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails run-status test(s) failed"; exit 1; fi

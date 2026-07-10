@@ -1,6 +1,6 @@
 ---
 name: checkpoint-resume
-version: 0.1.1
+version: 0.1.2
 description: |
   Make long autonomous work durable and resumable: a live .ulpi/runs/<id>.json status file (per-unit + per-phase state, atomic locked writes via the bundled scripts/checkpoint.mjs CLI) that a resume reads to SKIP everything already done — session-independent. Status writes are non-fatal observability. Use for any multi-unit run worth resuming after a stop or crash.
 allowed-tools:
@@ -23,9 +23,12 @@ The status file is the durable record — but it is OBSERVABILITY, never a gate.
 1. RESUME MEANS SKIP-DONE. On resume you MUST read the existing status file and rebuild only units NOT
    marked done. NEVER overwrite an existing run's status file with a fresh all-`pending` document — that
    erases the checkpoint and redoes everything.
-2. Durability is on DISK, not in a cache. Resume must work in a brand-new session with no runtime memory
-   of the prior run — drive it off the file, not off `resumeFromRunId`/agent caches (those are an
-   optimization on top, not the source of truth).
+2. Durability is on DISK — the status file is the SOLE authority. Resume must work in a brand-new session
+   with no runtime memory of the prior run. The portable, session-independent resume is the Codex-native
+   coordinator path: `node autonomous-pipeline/scripts/pipeline.mjs resume --run <id>` (surfaced by
+   `run-status.mjs --resume`), which reads THIS durable checkpoint and skips done units. Claude Code's
+   `Workflow(...resumeFromRunId)` is an agent-result CACHE optimization layered on top — never the source
+   of truth, and NOT a shell command; never present it as the executable Codex resume path.
 3. Status writes are NON-FATAL. A failed/racing write is logged and ignored — it MUST NOT block or fail
    the underlying work. Never gate delivery on a status write; never report a run failed solely because
    its status file is stale — reconstruct state from the actual artifacts instead.
@@ -83,8 +86,22 @@ contract-violating operations: re-`init` over a live checkpoint, demoting a `don
 **Everything is timestamped** (ISO-8601 UTC): the doc (`createdAt`/`updatedAt`/`finishedAt`), each unit
 (`createdAt`/`updatedAt` + `startedAt`/`finishedAt`), each phase (`startedAt`/`updatedAt`/`finishedAt`),
 and each register item (`at`) — so a reader can show real durations and "updated 3m ago", not guesses.
-Pass `init --launch '{"scriptPath":"…","args":{…}}'` to persist the exact relaunch recipe in the file,
-so the run can be resumed from the status file alone (session-independent).
+
+**The typed launch descriptor.** Pass `init --launch '<json>'` to persist the exact relaunch recipe in
+the file, so the run can be resumed from the status file alone (session-independent). It is a typed
+object `{ scriptPath, args? }` — `init` validates it before touching disk (`scriptPath` must be a
+non-empty string; `args`, when present, a JSON object) and refuses an array/string/missing-scriptPath
+descriptor. To make a run RUNNABLE under the Codex coordinator, persist the coordinator recipe — a
+`scriptPath` whose basename is `pipeline.mjs` and `args:{ command:"resume", run:"<id>" }`:
+
+```bash
+node <skill-dir>/scripts/checkpoint.mjs init <file> --task "…" --units "a,b,c" --id my-run \
+  --launch '{"scriptPath":"autonomous-pipeline/scripts/pipeline.mjs","args":{"command":"resume","run":"my-run"}}'
+```
+
+The pipeline coordinator's own `approve` stamps exactly this descriptor for you, so its runs are runnable
+out of the box. Any other descriptor (a Claude `Workflow()` script such as `pipeline-workflow.js`, or an
+absent/malformed one) is treated as MIGRATION-ONLY / non-runnable — see Step 0.6.
 
 ## Step 0.6: Query a run the easy way — `run-status.mjs` (READ-ONLY)
 
@@ -96,12 +113,27 @@ node <skill-dir>/scripts/run-status.mjs                 # newest run for this pr
 node <skill-dir>/scripts/run-status.mjs <id>            # a specific run (id prefix is enough)
 node <skill-dir>/scripts/run-status.mjs --list          # every run, one line each, newest first
 node <skill-dir>/scripts/run-status.mjs --json [id]     # the raw durable doc
-node <skill-dir>/scripts/run-status.mjs --resume [id]   # emit the exact Workflow({scriptPath,args}) to resume
+node <skill-dir>/scripts/run-status.mjs --resume [id]   # print the Codex resume command for this run
+node <skill-dir>/scripts/run-status.mjs --resume --json  # emit ONLY the typed resume descriptor (argv, no shell)
 ```
 
 It auto-discovers `.ulpi/runs/` by walking up from the cwd, renders phases + a per-task progress bar +
-the open findings register + a resume command, and `--resume` reconstructs the relaunch from the
-persisted `launch` recipe (falling back to the computed skip/eligible set when none was stored).
+the open findings register + a resume affordance, and `--resume` classifies the persisted `launch`
+descriptor into exactly one of three resume recipes (it never fabricates a command):
+
+- **Runnable (`codex-cli`)** — the persisted launch is the coordinator recipe (basename `pipeline.mjs`,
+  `args.command==="resume"`). `--resume` prints the shell-safe Codex command
+  `node pipeline.mjs resume --run <id>` (the id is a discrete, quoted argv token — never string-
+  interpolated into a shell); `--resume --json` adds the typed `{ runnable:true, kind:"codex-cli",
+  argv:[…], shell, resumeSet }` descriptor.
+- **Legacy Workflow (`legacy-workflow`)** — the launch is a Claude `Workflow()` script (e.g.
+  `pipeline-workflow.js`). It is labeled **MIGRATION-ONLY / non-runnable** and is NEVER printed as a
+  runnable shell command; the reader echoes the persisted `{scriptPath,args}` (with `statusFile`
+  re-pinned to this run) for migration reference only. `--resume --json` →
+  `{ runnable:false, migrationOnly:true, kind:"legacy-workflow" }`.
+- **No / malformed launch (`no-launch`)** — nothing runnable was persisted (pre-coordinator, hand-rolled,
+  or a malformed descriptor): non-runnable, with the computed skip/eligible `resumeSet` so a human can
+  relaunch via `pipeline.mjs approve` → `pipeline.mjs start --run <id>`.
 
 ## Step 1: Initialize the status file (new run only)
 
@@ -173,7 +205,37 @@ Then run only the eligible set through the same machinery as the original run, w
 file (same `id`/path). The durable skip-done makes this independent of any runtime cache — a template
 edit or a fresh session doesn't force a full rebuild.
 
-**Success criteria**: finished units are provably not redone; only the remaining/eligible set runs.
+For a coordinator-owned run you don't recompute this by hand — the Codex-native path drives it for you:
+
+```bash
+node autonomous-pipeline/scripts/pipeline.mjs resume --run <id>   # reads the checkpoint, skips done units
+```
+
+`run-status.mjs --resume <id>` prints exactly this command when the run's persisted launch is the
+coordinator recipe; the coordinator re-reads the durable checkpoint and re-runs only the eligible set.
+
+### Resume behavior — the five cases (make these explicit)
+
+| Situation | State in the file | What resume does |
+|---|---|---|
+| **Fresh session** — no runtime memory of the prior run | any live checkpoint on disk | Drive off the FILE, not a cache. `node pipeline.mjs resume --run <id>` (or read the file + compute the resume set) — the durable checkpoint is the sole authority; `Workflow(...resumeFromRunId)` is a Claude-only cache, never the resume you rely on. |
+| **Interrupted unit** — died mid-flight | a unit left `in_progress` | Re-run it. `in_progress` is NOT done — only `done` skips. The at-most-one in-flight unit is redone; everything `done` before it is skipped. |
+| **Dependency-blocked** | a unit whose `dependsOn` are not all `done` | Mark it `dep_blocked` pointing at the missing root and do NOT build it — never build on a partial base. When the prerequisite later lands, it becomes eligible again automatically. |
+| **Malformed / absent recipe** | `launch` missing, an array/string, or not the coordinator shape | `run-status.mjs` classifies it `no-launch` → **non-runnable**; it emits the computed `resumeSet` and points at `pipeline.mjs approve`/`start`. It NEVER fabricates a runnable command. |
+| **Legacy record** | a v1 doc, or a `launch` that is a Claude `Workflow()` script | A **v1 doc** loads, resumes and finalizes UNCHANGED (see below). A **Workflow launch** is classified `legacy-workflow` → **MIGRATION-ONLY / non-runnable**: echoed for reference, never printed as a runnable Codex command. |
+
+### v1 → v2 migration (add-only, non-breaking)
+
+New runs are written at `schemaVersion: 2` (stable-id findings + durable `resolvedItems` + the typed
+`launch`). A `schemaVersion: 1` run is fully supported: it loads, resumes and finalizes byte-for-byte
+unchanged on a READ. The ONLY change ever applied is on a mutating write, where the store does an
+idempotent, ADD-ONLY in-place upgrade — it adds the missing `resolvedItems: []` and bumps
+`schemaVersion` — and NEVER rewrites existing `units`/`phases`/`openItems`/`launch`. An in-flight v1
+run is therefore never broken by an upgrade; its finished units stay skipped and its open work stays
+open. A v1 run with no persisted `launch` simply resumes via the `no-launch` path above.
+
+**Success criteria**: finished units are provably not redone; only the remaining/eligible set runs; a
+legacy/v1 record resumes without loss and without being shown a fabricated command.
 
 ## Step 4: Finalize
 
@@ -203,7 +265,9 @@ units' own checks) rather than trusting a stale `running` — see `references/st
   timestamped mutations, and code-enforced refusals. Prefer it over hand-rolled file operations, always.
 - `scripts/run-status.mjs`
   The READ-ONLY legible reader (Step 0.6): renders the newest run (or `<id>`/`--list`/`--json`), and
-  `--resume` emits the exact Workflow relaunch call. Never writes — safe to run against a live run.
+  `--resume` classifies the persisted launch and prints the Codex-native coordinator resume command
+  (`node pipeline.mjs resume --run <id>`) for a runnable run, or a migration-only/non-runnable pointer
+  otherwise — never a fabricated command. Never writes — safe to run against a live run.
 - `references/status-schema.md`
   The full status-file schema (per-unit states, `dependsOn`, `openItems`, phase blocks), the three verbs
   (status / stop / resume), atomic-write recipes, and how to rebuild the file from artifacts after a

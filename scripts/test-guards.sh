@@ -51,6 +51,26 @@ t 2 "REGRESSION git add ./ blocked (trailing slash)" AUTO_GUARD_ALWAYS=1 -- '{"t
 t 2 "REGRESSION bash -c wrapper add -A blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git add -A\""}}' $G
 t 2 "REGRESSION sh -c wrapper add -A blocked"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"sh -c \"git add -A\""}}' $G
 t 0 "bash -c wrapper non-git allowed (no false +)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"npm test\""}}' $G
+echo "── guard-git-hygiene (CODEX Bash payloads: argv-list + alternate JSON path) ──"
+# DELTA AUDIT vs settled base: the base only read a STRING at tool_input.command (Claude's shape). Codex's
+# shell tool delivers the command as an argv LIST, and some Codex payload shapes place that argv at the
+# TOP LEVEL beside cwd/env — both silently bypassed the base guard. Fixtures below pin identical parsing.
+t 2 "CODEX: argv-list git add -A blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","add","-A"]}}' $G
+t 2 "CODEX: argv-list git add . blocked"             AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","add","."]}}' $G
+t 0 "CODEX: argv-list explicit paths allowed"        AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","add","src/a.ts"]}}' $G
+t 2 "CODEX: argv-list bash -lc wrapper add -A blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["bash","-lc","git add -A"]}}' $G
+t 2 "CODEX: argv-list env-prefixed git add -A blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["FOO=1","git","add","-A"]}}' $G
+t 2 "CODEX: argv-list reset --hard blocked"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","reset","--hard","HEAD~1"]}}' $G
+t 2 "CODEX: argv-list clean -fd blocked"             AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","clean","-fd"]}}' $G
+t 2 "CODEX: argv-list commit -am blocked"            AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","commit","-am","wip"]}}' $G
+t 2 "CODEX: argv-list bash -lc chained push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["bash","-lc","echo hi && git push --force origin main"]}}' $G
+t 0 "CODEX: argv-list npm test allowed (no false +)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["npm","test"]}}' $G
+# CODEX: alternate JSON path — argv at TOP LEVEL beside cwd/env (no tool_input wrapper).
+t 2 "CODEX: top-level command + cwd/env wrapper add -A blocked" AUTO_GUARD_ALWAYS=1 -- '{"command":["bash","-lc","git add -A"],"cwd":"/repo","env":{"FOO":"1"}}' $G
+t 0 "CODEX: top-level command explicit paths allowed" AUTO_GUARD_ALWAYS=1 -- '{"command":["git","add","src/a.ts"],"cwd":"/repo"}' $G
+t 2 "CODEX: top-level string command reset --hard blocked" AUTO_GUARD_ALWAYS=1 -- '{"command":"git reset --hard","cwd":"/repo"}' $G
+# CODEX: malformed command type fails OPEN outside a live run.
+t 0 "CODEX: malformed command type + no live run → allow" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":12345}}' $G
 echo "── guard-git-hygiene (plugin-scoped: live-run gating) ──"
 t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 mkdir -p .ulpi/runs && echo '{"status": "running"}' > .ulpi/runs/x.json
@@ -129,6 +149,24 @@ t 2 "MULTILINE: quoted line then force" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"
 t 2 "git -C dir push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -C /repo push --force"}}' $G
 t 2 "REGRESSION bash -c wrapper push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git push --force\""}}' $G
 t 0 "bash -c wrapper normal push allowed (no false +)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git push origin feat\""}}' $G
+echo "── guard-ship-irreversibles (CODEX Bash payloads: argv-list + alternate JSON path) ──"
+# DELTA AUDIT: the base read only a STRING at tool_input.command. Codex's argv-LIST shell payload and its
+# top-level command+cwd/env shape both bypassed the base; fixtures pin identical force/delete parsing.
+t 2 "CODEX: argv-list push --force blocked"          AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","--force"]}}' $G
+t 2 "CODEX: argv-list push -f cluster blocked"       AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","-f","origin","main"]}}' $G
+t 2 "CODEX: argv-list bash -lc push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["bash","-lc","git push --force"]}}' $G
+t 2 "CODEX: argv-list push --delete blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","origin","--delete","old"]}}' $G
+t 2 "CODEX: argv-list push +refspec force blocked"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","origin","+main"]}}' $G
+t 2 "CODEX: argv-list push :refspec delete blocked"  AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","origin",":old"]}}' $G
+t 2 "CODEX: argv-list push --mirror blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","--mirror","origin"]}}' $G
+t 0 "CODEX: argv-list normal push allowed"           AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","-u","origin","feat"]}}' $G
+t 0 "CODEX: argv-list lone force-with-lease allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","--force-with-lease"]}}' $G
+t 2 "CODEX: argv-list lease+force bypass blocked"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":["git","push","--force-with-lease","--force"]}}' $G
+# CODEX: alternate JSON path — argv at TOP LEVEL beside cwd/env (no tool_input wrapper).
+t 2 "CODEX: top-level command + cwd wrapper push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"command":["git","push","--force"],"cwd":"/repo"}' $G
+t 0 "CODEX: top-level command normal push allowed"   AUTO_GUARD_ALWAYS=1 -- '{"command":["git","push","-u","origin","feat"],"cwd":"/repo"}' $G
+# CODEX: malformed command type fails OPEN outside a live run.
+t 0 "CODEX: malformed command type + no live run → allow" AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":12345}}' $G
 
 echo "── large payloads (ARG_MAX regression: stdin piping, not env) ──"
 G=auto-test/scripts/guard-test-integrity.sh
