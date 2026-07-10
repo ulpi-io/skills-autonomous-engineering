@@ -42,6 +42,36 @@ lives at `.ulpi/runs/<id>.json`. It is BOTH the live progress view and the durab
 Minimum viable version: `schemaVersion`, `id`, `status`, `units{status,dependsOn}`, `updatedAt`. Add
 `phases`, timestamps, and `openItems` as the run warrants.
 
+### v2 additions (schemaVersion 2)
+
+A v2 run (the shape `checkpoint.mjs init` writes today, and what the pipeline coordinator's `approve`
+produces) carries four more durable facts. A v1 run keeps working unchanged; these are add-only.
+
+```json
+{
+  "schemaVersion": 2,
+  "resolvedItems": [                          // findings MOVED out of openItems, with resolvedAt — the audit trail
+    { "id": "f-ab12…", "phase": "test", "kind": "flake", "resolvedAt": "2026-07-06T08:40:10Z" }
+  ],
+  "finalValidation": { "status": "green", "at": "…", "note": "all slices green" },  // green|red — the terminal verdict
+  "launch": {                                 // the typed resume recipe (see below) — how to relaunch from this file alone
+    "scriptPath": "autonomous-pipeline/scripts/pipeline.mjs",
+    "args": { "command": "resume", "run": "add-oauth-…" }
+  },
+  "pipeline": {                               // coordinator metadata (stamped by `approve`)
+    "integrationRef": "refs/heads/ulpi-int-<run>",   // the serialized integration branch
+    "targetRef": "refs/heads/main"                   // the eventual publish target
+  }
+}
+```
+
+- **openItems vs resolvedItems** — `openItems` are the UNRESOLVED findings that gate `finalize done`;
+  `resolve` MOVES a finding into `resolvedItems` (stamped `resolvedAt`). Both are durable, so a converged
+  run still shows what was cleared.
+- **finalValidation** — the run's terminal workspace verdict. `finalize done` (with `requireValidation`)
+  refuses unless it is present and `green`. `red`/absent is reported honestly, never masked.
+- **integrationRef** — the branch per-task changes are serialized onto before they reach `targetRef`.
+
 ## Per-unit state machine
 
 ```
@@ -94,6 +124,51 @@ patch() {  # patch <file> <unit> <status> [note]
 ```
 
 The trailing `|| true` is load-bearing: a status-write failure must never take down the work.
+
+## The `run-status` reader: render + resume recipe
+
+`checkpoint-resume/scripts/run-status.mjs` is the READ-ONLY counterpart to `checkpoint.mjs`'s writes.
+Point it at nothing and it walks up to this project's `.ulpi/runs/`, picks the newest run, and renders
+it. It NEVER writes — running it can never disturb a run in flight (a contract test snapshots the runs
+dir with `cksum` before/after every read path and asserts byte-identity).
+
+**What the default render surfaces** — from the durable doc, in order:
+
+- **badge** — the honest terminal/live state (`◐ running`, `● done`, `▲ needs attention`, `✗ aborted`).
+- **branch** — `pipeline.integrationRef → pipeline.targetRef` when present (`integration → target`).
+- **phases** — each phase glyph in canonical order; the current phase bolded while `running`.
+- **build** — a `done/total` unit bar plus chips for in-progress / blocked / dep-blocked / pending, with a
+  detail line (note + duration) for anything not moving forward.
+- **open / resolved** — the count of UNRESOLVED findings (with up to ten one-liners) and a one-line count
+  of the durable `resolvedItems` audit trail.
+- **final** — the `finalValidation` verdict: `✓ validation green` or an honest `✗ validation red/…`.
+- **result** — the finalize result summary, when set.
+- **footer** — the honest close: `done` says done; `aborted` says aborted and is NOT offered as resumable;
+  a live run gets a real resume affordance (see below).
+
+**The resume recipe (`--resume`)** — Codex-native and **argv-safe**. The reader classifies the run's
+persisted `launch`:
+
+- **Runnable (`codex-cli`)** — `launch` is the coordinator recipe (`scriptPath` basename `pipeline.mjs`,
+  `args.command === "resume"`, string `args.run`). `--resume` prints the exact shell-safe command:
+
+  ```
+  node pipeline.mjs resume --run <id>
+  ```
+
+  The `<id>` is a discrete argv token — never string-interpolated into a shell — and is defensively
+  single-quoted if it is not a bare `[A-Za-z0-9._/@:=+-]` token. `--resume --json` emits ONLY the typed
+  descriptor: `{ runnable:true, kind:"codex-cli", run, command:"node", argv:[…], shell, resumeSet }`.
+- **Legacy Workflow (`legacy-workflow`)** — `launch` is a Claude `Workflow()` script (e.g.
+  `pipeline-workflow.js`). It is labeled **MIGRATION ONLY / non-runnable** and is NEVER printed as a
+  runnable shell command; the reader still echoes the persisted descriptor (with `statusFile` re-pinned to
+  this run) for migration reference. `--resume --json` → `{ runnable:false, migrationOnly:true,
+  kind:"legacy-workflow", reason, legacyLaunch, resumeSet }`.
+- **No launch (`no-launch`)** — nothing runnable was persisted (pre-coordinator or hand-rolled run):
+  non-runnable, with the computed `resumeSet` so a human can relaunch via `pipeline.mjs approve`/`start`.
+
+`resumeSet` is the skip-done contract computed READ-ONLY: `{ skip:[done], eligible:[re-runnable],
+dep_blocked:{unit→root} }`.
 
 ## Recovering a crashed run (no final write)
 
