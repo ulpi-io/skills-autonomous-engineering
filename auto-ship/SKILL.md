@@ -1,6 +1,6 @@
 ---
 name: auto-ship
-version: 0.1.0
+version: 0.1.1
 description: |
   Take verified work to shippable — autonomously, with fail-closed gates and a human sign-off on anything
   irreversible. It runs the pre-launch gate (final validate green, review clean, security/observability/

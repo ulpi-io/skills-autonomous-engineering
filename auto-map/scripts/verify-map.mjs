@@ -15,8 +15,12 @@
 //                       on them); nested maps exist for significant dirs passed via --expect-dirs.
 //
 // Usage:
-//   node verify-map.mjs <project-root> [--run-commands] [--expect-dirs "src/api,src/db"] [--json]
-// Exit: 0 = map verifies · 1 = violations (listed) · 2 = no map found
+//   node verify-map.mjs <project-root> [--platform claude|codex|dual] [--run-commands] [--expect-dirs "src/api,src/db"] [--json]
+// Platform (default claude): claude → CLAUDE.md tree + .claude/rules; codex → root + nested AGENTS.md
+//   ONLY (no .claude/rules — Codex has no path-scoped-rules tier); dual → BOTH trees, each verified
+//   independently, target NEVER mutated. Every anti-lie check (budgets, no launch-time @imports, paths
+//   exist, command markers, stamps, expected nested maps) applies identically to AGENTS.md as CLAUDE.md.
+// Exit: 0 = map verifies · 1 = violations (listed) · 2 = no map found / unsupported platform
 //
 // Dogfooding note: this is the same fail-closed philosophy as the guards — a map that cannot be
 // verified is reported broken, never assumed fine.
@@ -26,30 +30,48 @@ import { execFileSync } from 'node:child_process';
 import { join, dirname, relative } from 'node:path';
 
 const args = process.argv.slice(2);
-const ROOT = args.find(a => !a.startsWith('--'));
-if (!ROOT || !existsSync(ROOT)) { console.error('usage: verify-map.mjs <project-root> [--run-commands] [--expect-dirs a,b] [--json]'); process.exit(2); }
+// First non-flag arg is ROOT — but skip the VALUE of value-taking flags so `--platform codex` or
+// `--expect-dirs src/db` never gets mistaken for the project root.
+const VALUE_FLAGS = new Set(['--expect-dirs', '--platform']);
+let ROOT;
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a.startsWith('--')) { if (VALUE_FLAGS.has(a)) i++; continue; }
+  if (ROOT === undefined) { ROOT = a; }
+}
+const USAGE = 'usage: verify-map.mjs <project-root> [--platform claude|codex|dual] [--run-commands] [--expect-dirs a,b] [--json]';
+if (!ROOT || !existsSync(ROOT)) { console.error(USAGE); process.exit(2); }
 const RUN_CMDS = args.includes('--run-commands');
 const JSON_OUT = args.includes('--json');
 const expIdx = args.indexOf('--expect-dirs');
 const EXPECT_DIRS = expIdx >= 0 ? (args[expIdx + 1] || '').split(',').map(s => s.trim()).filter(Boolean) : [];
+const platIdx = args.indexOf('--platform');
+const PLATFORM = platIdx >= 0 ? (args[platIdx + 1] || '').trim() : 'claude';
+if (!['claude', 'codex', 'dual'].includes(PLATFORM)) {
+  console.error(`unsupported platform '${PLATFORM}' — expected claude|codex|dual; refusing to verify against a memory location the platform lacks`);
+  process.exit(2);
+}
 
 const problems = [];
 const p = (file, msg) => problems.push({ file: relative(ROOT, file) || file, issue: msg });
 
 // ── collect the map files ────────────────────────────────────────────────────────
 const SKIP = new Set(['node_modules', '.git', 'vendor', 'dist', 'build', 'target', '.next', 'examples', '.claude']);
-function* walk(dir, depth = 0) {
+function* walk(dir, mapName, depth = 0) {
   if (depth > 6) return;
   for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith('.')) yield* walk(join(dir, e.name), depth + 1);
-    else if (e.isFile() && e.name === 'CLAUDE.md') yield join(dir, e.name);
+    if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith('.')) yield* walk(join(dir, e.name), mapName, depth + 1);
+    else if (e.isFile() && e.name === mapName) yield join(dir, e.name);
   }
 }
-const rootMap = ['CLAUDE.md', '.claude/CLAUDE.md'].map(f => join(ROOT, f)).find(existsSync);
 const rulesDir = join(ROOT, '.claude', 'rules');
-const ruleFiles = existsSync(rulesDir) ? readdirSync(rulesDir).filter(f => f.endsWith('.md')).map(f => join(rulesDir, f)) : [];
-const nestedMaps = [...walk(ROOT)].filter(f => f !== rootMap);
-if (!rootMap) { console.error('no root CLAUDE.md — no map to verify'); process.exit(2); }
+// A "surface" = one platform tree to verify. claude → CLAUDE.md tree + .claude/rules; codex → root +
+// nested AGENTS.md ONLY (no rules tier); dual → both, each verified independently against the SAME anti-lie
+// checks. This is strictly READ-ONLY on every surface — the verifier never mutates the target.
+const SURFACES = PLATFORM === 'claude' ? [{ mapName: 'CLAUDE.md', rootCandidates: ['CLAUDE.md', '.claude/CLAUDE.md'], includeRules: true }]
+              : PLATFORM === 'codex'  ? [{ mapName: 'AGENTS.md', rootCandidates: ['AGENTS.md'], includeRules: false }]
+              : [ { mapName: 'CLAUDE.md', rootCandidates: ['CLAUDE.md', '.claude/CLAUDE.md'], includeRules: true },
+                  { mapName: 'AGENTS.md', rootCandidates: ['AGENTS.md'], includeRules: false } ];
 
 // ── helpers ──────────────────────────────────────────────────────────────────────
 const stripForBudget = (text) => text
@@ -107,21 +129,35 @@ const checkFile = (file, kind) => {
   return text;
 };
 
-checkFile(rootMap, 'root');
-for (const f of ruleFiles) {
-  const text = checkFile(f, 'rule');
-  if (!/^---\n[\s\S]*?paths:/m.test(text)) p(f, `rules file has no 'paths:' frontmatter — it loads EVERY session instead of on demand (belongs in root or needs scoping)`);
-}
-for (const f of nestedMaps) checkFile(f, 'nested');
+// ── verify each surface independently ────────────────────────────────────────────
+const surfaces = [];
+for (const { mapName, rootCandidates, includeRules } of SURFACES) {
+  const rootMap = rootCandidates.map(f => join(ROOT, f)).find(existsSync);
+  if (!rootMap) { console.error(`no root ${mapName} — no map to verify (platform: ${PLATFORM})`); process.exit(2); }
+  const ruleFiles = includeRules && existsSync(rulesDir)
+    ? readdirSync(rulesDir).filter(f => f.endsWith('.md')).map(f => join(rulesDir, f)) : [];
+  const nestedMaps = [...walk(ROOT, mapName)].filter(f => f !== rootMap);
 
-// ── 5b: expected significant directories are actually mapped ─────────────────────
-for (const d of EXPECT_DIRS) {
-  if (!existsSync(join(ROOT, d, 'CLAUDE.md'))) p(join(ROOT, d), `significant directory has no nested CLAUDE.md — Claude works there blind`);
+  checkFile(rootMap, 'root');
+  for (const f of ruleFiles) {
+    const text = checkFile(f, 'rule');
+    if (!/^---\n[\s\S]*?paths:/m.test(text)) p(f, `rules file has no 'paths:' frontmatter — it loads EVERY session instead of on demand (belongs in root or needs scoping)`);
+  }
+  for (const f of nestedMaps) checkFile(f, 'nested');
+
+  // ── 5b: expected significant directories are actually mapped (on THIS surface) ──
+  for (const d of EXPECT_DIRS) {
+    if (!existsSync(join(ROOT, d, mapName))) p(join(ROOT, d), `significant directory has no nested ${mapName} — the agent works there blind`);
+  }
+
+  surfaces.push({ mapName, rootMap: relative(ROOT, rootMap), rules: ruleFiles.length, nested: nestedMaps.length });
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────
-const summary = { rootMap: relative(ROOT, rootMap), rules: ruleFiles.length, nested: nestedMaps.length, violations: problems.length, problems };
+const totalRules = surfaces.reduce((n, s) => n + s.rules, 0);
+const totalNested = surfaces.reduce((n, s) => n + s.nested, 0);
+const summary = { platform: PLATFORM, surfaces, rules: totalRules, nested: totalNested, violations: problems.length, problems };
 if (JSON_OUT) console.log(JSON.stringify(summary, null, 2));
-else if (problems.length) console.error(`✗ map verification: ${problems.length} violation(s)\n` + problems.map(x => `  - ${x.file}: ${x.issue}`).join('\n'));
-else console.log(`✓ map verifies: root + ${ruleFiles.length} rule file(s) + ${nestedMaps.length} nested map(s) — budgets ok, no launch-time imports, all claimed paths exist`);
+else if (problems.length) console.error(`✗ map verification (${PLATFORM}): ${problems.length} violation(s)\n` + problems.map(x => `  - ${x.file}: ${x.issue}`).join('\n'));
+else console.log(`✓ map verifies (${PLATFORM}): ${surfaces.map(s => s.mapName).join(' + ')} — ${totalRules} rule file(s) + ${totalNested} nested map(s), budgets ok, no launch-time imports, all claimed paths exist`);
 process.exit(problems.length ? 1 : 0);

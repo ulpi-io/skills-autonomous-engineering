@@ -47,6 +47,10 @@ t 0 "MULTILINE: add path then ls ." AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comm
 t 2 "MULTILINE: echo then add -A"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"starting\"\ngit add -A"}}' $G
 t 2 "MULTILINE: ./run.sh then add -A" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"./run.sh\ngit add -A"}}' $G
 t 0 "QUOTED: separator+git in -m msg" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git commit -m \"see; git add -A for details\""}}' $G
+t 2 "REGRESSION git add ./ blocked (trailing slash)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git add ./"}}' $G
+t 2 "REGRESSION bash -c wrapper add -A blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git add -A\""}}' $G
+t 2 "REGRESSION sh -c wrapper add -A blocked"   AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"sh -c \"git add -A\""}}' $G
+t 0 "bash -c wrapper non-git allowed (no false +)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"npm test\""}}' $G
 echo "── guard-git-hygiene (plugin-scoped: live-run gating) ──"
 t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"command":"git add -A"}}' $G
 mkdir -p .ulpi/runs && echo '{"status": "running"}' > .ulpi/runs/x.json
@@ -88,6 +92,25 @@ t 2 "expired flag blocks again"     AUTO_GUARD_ALWAYS=1 CLAUDE_PROJECT_DIR=. -- 
 rm -rf .ulpi
 t 0 "no live run → allow"          AUTO_GUARD_ALWAYS=0 -- '{"tool_input":{"file_path":"a.test.ts","new_string":"it.only(\"x\")"}}' $G
 
+echo "── guard-test-integrity (Codex apply_patch payloads) ──"
+# ADDED weakening token in a TEST file → BLOCK, across Add / Update / Move sections.
+t 2 "apply_patch Add test file + it.skip blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: a.test.ts\n+it.skip(\"x\", ()=>{})\n*** End Patch"}}' $G
+t 2 "apply_patch Update test file + describe.only blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: tests/b.spec.js\n@@\n+describe.only(\"y\", ()=>{})\n*** End Patch"}}' $G
+t 2 "apply_patch Add + xit blocked"               AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: __tests__/c.js\n+xit(\"z\")\n*** End Patch"}}' $G
+t 2 "apply_patch pytest skip in test file blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: test_x.py\n+@pytest.mark.skip\n*** End Patch"}}' $G
+t 2 "apply_patch @ts-ignore in test file blocked"  AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: a.test.ts\n@@\n+// @ts-ignore\n*** End Patch"}}' $G
+t 2 "apply_patch Move into test path + skip blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: a.test.ts\n@@\n+xdescribe(\"z\", ()=>{})\n*** End Patch"}}' $G
+# ALLOWED: same token in a PRODUCTION file, on a DELETED line, or on a CONTEXT line.
+t 0 "apply_patch it.skip added in PRODUCTION file allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: src/prod.ts\n@@\n+it.skip(\"x\")\n*** End Patch"}}' $G
+t 0 "apply_patch DELETED it.skip in test file allowed (un-skip)" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: a.test.ts\n@@\n-it.skip(\"x\")\n+it(\"x\", ()=>{})\n*** End Patch"}}' $G
+t 0 "apply_patch CONTEXT it.skip in test file allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: a.test.ts\n@@\n it.skip(\"x\")\n+expect(1).toBe(1)\n*** End Patch"}}' $G
+t 0 "apply_patch normal test add allowed"          AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: a.test.ts\n+expect(add(1,2)).toBe(3)\n*** End Patch"}}' $G
+# MULTI-FILE: a weakening test edit must NOT hide behind a safe non-test edit in the same patch.
+t 2 "apply_patch multi-file hides test .only behind prod edit → blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: src/prod.ts\n@@\n+const x = 1\n*** Update File: a.test.ts\n@@\n+test.only(\"y\", ()=>{})\n*** End Patch"}}' $G
+t 0 "apply_patch multi-file prod edit + normal test edit allowed" AUTO_GUARD_ALWAYS=1 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: src/prod.ts\n@@\n+const x = 1\n*** Update File: a.test.ts\n@@\n+expect(x).toBe(1)\n*** End Patch"}}' $G
+# Scoping: apply_patch weakening is only guarded on a live run (plugin-scoped) / always-on (skill-scoped).
+t 0 "apply_patch weakening, no live run → allow"   AUTO_GUARD_ALWAYS=0 -- '{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: a.test.ts\n+it.skip(\"x\")\n*** End Patch"}}' $G
+
 G=auto-ship/scripts/guard-ship-irreversibles.sh
 echo "── guard-ship-irreversibles ──"
 t 2 "push --force blocked"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push --force"}}' $G
@@ -104,6 +127,8 @@ t 0 "gh pr create allowed"         AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"comma
 t 0 "MULTILINE: push then rm -f"    AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git push origin main\nrm -f tmp.txt"}}' $G
 t 2 "MULTILINE: quoted line then force" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"echo \"done\"\ngit push --force"}}' $G
 t 2 "git -C dir push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"git -C /repo push --force"}}' $G
+t 2 "REGRESSION bash -c wrapper push --force blocked" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git push --force\""}}' $G
+t 0 "bash -c wrapper normal push allowed (no false +)" AUTO_GUARD_ALWAYS=1 -- '{"tool_input":{"command":"bash -c \"git push origin feat\""}}' $G
 
 echo "── large payloads (ARG_MAX regression: stdin piping, not env) ──"
 G=auto-test/scripts/guard-test-integrity.sh

@@ -1,6 +1,6 @@
 ---
 name: auto-test
-version: 0.1.0
+version: 0.1.1
 disable-model-invocation: true
 user-invocable: true
 description: |
@@ -202,8 +202,9 @@ Finalize the checkpoint and report honestly (see Output Contract). Include the b
 While this skill is active, a skill-scoped PreToolUse hook runs `scripts/guard-test-integrity.sh` on
 every Edit/Write: adding a `.only`/`.skip`/`xit`/`xdescribe`/`.todo`/`@pytest.mark.skip`/`@unittest.skip`/
 `#[ignore]` marker or a `@ts-ignore`/`@ts-expect-error`/`eslint-disable`/`# type: ignore` suppression to a
-test file is BLOCKED at the tool layer. That makes the skip/only/ignore/suppression class of gaming
-mechanically impossible. The OTHER cheat vectors this skill forbids (deleting a test, a vacuous
+test file is BLOCKED at the tool layer. That stops the skip/only/ignore/suppression class of gaming at
+the Edit/Write layer (a raw-Bash write of the same marker sidesteps this Edit/Write-scoped hook — caught,
+like the vectors below, by mutation-check discipline). The OTHER cheat vectors this skill forbids (deleting a test, a vacuous
 `expect(true)`, weakening an assertion, masking a flake with sleeps) are not statically detectable at the
 edit layer — they stay enforced by the mutation-check discipline and the fail-closed contract above, not
 by this hook. Genuine, user-approved weakening goes through the explicit escape hatch —

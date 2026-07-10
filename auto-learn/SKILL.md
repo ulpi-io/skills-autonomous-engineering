@@ -108,8 +108,43 @@ in the one that will actually reach the next run:
 | A lesson that only applies to one area (an API rule, a DB/migration gotcha, a test-suite quirk) | **`.claude/rules/<area>.md`** with `paths:` frontmatter — loads when the agent touches those files | create or append the rule; scope its `paths:` glob |
 | An environment or tooling quirk the run discovered (build flake, slow suite, a service dependency, a CI oddity) | **auto memory** (`~/.claude/projects/<project>/memory/`) — MEMORY.md loaded every session | a topic file plus one MEMORY.md index line |
 | A defect in the machine itself (a skill gap, a guard bypass, a template bug) | **the user** — reported, never self-patched | surface it in the Output Contract |
+| A cross-agent lesson both Codex AND Claude Code must load (the shared native context file) | **the nearest `AGENTS.md`** — read by Codex and Claude Code alike | route it through `scripts/route-learnings.mjs` (below) — DRY-RUN first, then `--apply` |
 
-Dedupe on write: if an existing entry covers it, strengthen that entry (add the new evidence ref)
+### The AGENTS.md router (DRY-RUN-FIRST, fail-closed) — Codex + Claude Code
+
+`AGENTS.md` is the ONE native memory file both Codex and Claude Code read, so a lesson that must reach
+either agent belongs there. Because that file is shared, auto-loaded, and cross-agent, writing to it by
+hand is how a bad lesson silently poisons every future run. Route it through code instead:
+
+```bash
+# DEFAULT is a dry run: emits a JSON patch manifest, writes NOTHING.
+node <skill-dir>/scripts/route-learnings.mjs learnings.json --root <project-root>
+# Only after you've read the manifest, actually apply it:
+node <skill-dir>/scripts/route-learnings.mjs learnings.json --root <project-root> --apply
+```
+
+Each learning in the input (`{"learnings":[…]}` or a bare array) MUST carry five fields — `id` (stable),
+`rule` (actionable), `evidence` (a real artifact ref), `verification` (an affirmative marker), and
+`scope` (a repo directory the lesson applies to). The router's fail-closed contract:
+
+- **Dry run is the default.** No `--apply`, no writes — you get a patch manifest (per-target before/after
+  SHAs, the survivors, and every rejection with its reason) to inspect first.
+- **`--apply` edits ONLY the stamped, auto-learn-owned block** of the target `AGENTS.md`
+  (`<!-- BEGIN auto-learn:learnings … -->` … `<!-- END … -->`). Every other byte of that file is
+  preserved; prior generated learnings are merged forward (dup ids merge evidence), never dropped.
+- **It targets the nearest `AGENTS.md`** at or above the learning's `scope`, falling back to the root
+  `AGENTS.md`. It writes ONLY files named `AGENTS.md` inside the project root — it NEVER edits `CLAUDE.md`
+  or private Codex memory.
+- **≤5 survivors per run; duplicate ids merge evidence.** More than five distinct additions ⇒ the whole
+  run refuses to mutate anything (`refused: "too_many_additions"`).
+- **No mutation on any of:** missing/blank required field, placeholder/absent evidence, a non-affirmative
+  (`unverified`/…) verification, a secret-shaped value anywhere in the record, a `scope` that path-
+  traverses (`..`/absolute/escapes root), a nonexistent `scope` directory, or a **machine/environment
+  defect** (`kind:"machine_defect"`, or defect-shaped rule/evidence text). Defects are reported for the
+  user, never self-patched into shared memory.
+
+Use this router for `AGENTS.md`; use `auto-map` for `CLAUDE.md`/`.claude/rules` and auto-memory for the
+Claude-only layers. Dedupe on write: if an existing entry covers it, strengthen that entry (add the new evidence ref)
 instead of appending a twin; prune superseded/disproved entries while you are there. Keep CLAUDE.md and
 each rules file within budget — they load into every session, so bloat taxes all future work.
 
@@ -166,6 +201,10 @@ file nothing reads.
 
 - `scripts/harvest-run.mjs` — mechanical candidate extraction from a checkpoint (Phase 0). CI-tested by
   `scripts/test-harvest.sh` (every signal class extracted with evidence citations; unreadable → exit 2).
+- `scripts/route-learnings.mjs` — the DRY-RUN-FIRST, fail-closed router that writes verified learnings to
+  the shared cross-agent `AGENTS.md` (Phase 2, Codex + Claude Code). CI-tested by
+  `scripts/test-learn-route.sh` (dry-run default, `--apply` byte-preservation, the ≤5 cap + dup-merge,
+  and every no-mutation refusal). Use it for `AGENTS.md`; use `auto-map` for `CLAUDE.md`/`.claude/rules`.
 - `adversarial-verify` (skill) — the TRUE/GENERAL/ACTIONABLE gate (Phase 1).
 - `auto-map` (skill) — the routing target for repo-fact learnings (Phase 2).
 - `checkpoint-resume` (skill) — the artifact format this skill harvests.

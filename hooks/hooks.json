@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start-announce.sh\" || true"
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/hooks/session-start-announce.sh\" || true"
           }
         ]
       }
@@ -16,20 +16,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-build/scripts/guard-git-hygiene.sh\""
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/auto-build/scripts/guard-git-hygiene.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-ship/scripts/guard-ship-irreversibles.sh\""
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/auto-ship/scripts/guard-ship-irreversibles.sh\""
           }
         ]
       },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|apply_patch",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-test/scripts/guard-test-integrity.sh\""
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/auto-test/scripts/guard-test-integrity.sh\""
           }
         ]
       }
@@ -39,17 +39,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/honest-stop.sh\" || true"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/hooks/honest-stop.sh\" || true"
+          },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-end-gc.sh\" || true"
+            "command": "bash \"${CODEX_PLUGIN_ROOT}/hooks/session-end-gc.sh\" || true"
           }
         ]
       }

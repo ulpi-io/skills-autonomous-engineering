@@ -1,12 +1,12 @@
 ---
 name: autonomous-pipeline
-version: 0.1.0
+version: 0.1.1
 description: |
   Run the whole engineering lifecycle end-to-end from one request — spec → plan → build → simplify → test
   → review → performance → ship — as a single autonomous pass with ONE human approval (the plan) and
   hard-gated escalation for anything irreversible. It chains the auto-* phase skills, carries a durable
   pipeline checkpoint so a stop/crash resumes at the exact phase and task it left off, watches the signal
-  between phases (a phase's gate must be green before the next starts — fail closed), and returns a
+  between phases (a phase that misses its gate is recorded blocked and surfaces in the register — fail closed, no false-green downstream), and returns a
   verified findings register at the end. It does NOT loop on its own: after one pass it reports what
   shipped and what's open, and the user decides on any fix round. This is the top-level "maximise
   autonomous agents" entry point. Composes every auto-* phase plus checkpoint-resume, budget-guard,
@@ -43,10 +43,13 @@ every phase's guardrails and adds pipeline-level ones. Non-negotiable:
 2. ONE PASS, NO AUTONOMOUS RECURSION. The pipeline runs each phase once, returns a verified findings
    register, and STOPS. It never silently loops the whole lifecycle — an autonomous fix-loop is what turns
    a run into a multi-hour grind. A fix round is a deliberate user choice (re-invoke with the findings).
-3. PHASE GATES FAIL CLOSED. Each phase must reach its own success bar before the next starts. A phase that
-   didn't converge (build blocked, red validate, unverified review) does NOT hand a false-green to the
-   next phase — it surfaces and the pipeline pauses or escalates. Never fabricate a phase's clean verdict
-   to keep the pipeline moving.
+3. PHASE GATES FAIL CLOSED. A phase that doesn't reach its bar (build blocked, red validate, unverified
+   review, a died agent) is recorded `blocked` — never `done` — its items go to the register and
+   `converged` is false, so a resume re-enters it and no phase ever hands a FALSE-GREEN forward. The run
+   is ONE forward pass: rather than hard-stop mid-run (a Workflow can't ask the user), downstream phases
+   still execute over whatever integrated and collect their findings (except auto-simplify, which needs a
+   stable base and is skipped when the build is incomplete). The user reads the register and decides the
+   fix round. Never fabricate a phase's clean verdict to keep the pipeline moving.
 4. DURABLE, RESUMABLE. A pipeline checkpoint records the current phase + each phase's state; a stop/crash
    resumes at the exact phase/task, skipping completed work — never restarting from spec.
 5. BUDGET THE WHOLE RUN. Declare a pipeline-level budget/escalation contract (`budget-guard`) on top of
@@ -75,8 +78,11 @@ stepping between phases, not the verification each phase enforces.
              covers spec           tests green   cleanups       coverage     (no false +)  regression        human sign-off
 ```
 
-Each arrow is a fail-closed gate: the downstream phase starts only when the upstream phase met its success
-bar. The user may configure which optional phases run (simplify/performance/go-live can be skipped);
+Each arrow is a fail-closed gate: a phase that misses its bar is recorded `blocked` (never `done`) and its
+items surface in the register so `converged` is false and a resume re-enters it — no phase hands a
+false-green downstream. (The pass runs forward and collects findings rather than halting mid-run; the
+register, not a mid-run stop, is what carries an unmet gate to the user.) The user may configure which
+optional phases run (simplify/performance/go-live can be skipped);
 build/test are not skippable. (This order follows spec→plan→build first; simplify runs against the
 build's test safety net, test then hardens coverage.)
 

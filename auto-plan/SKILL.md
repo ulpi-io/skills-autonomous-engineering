@@ -145,6 +145,38 @@ non-blocking WARNING — it is the vitest footgun but ALSO canonical for Jest, a
 runner, so it advises an explicit runner rather than blocking a correct plan. Exit 1 = fix the graph and
 re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
 
+### Executable plans (coordinator-run) get HARDENED checks
+
+A plan is **executable** when a coordinator will actually construct a git worktree/branch from each
+task's `id` and *execute* its validate — i.e. `auto-build`'s per-task contract
+(`git worktree add <path> -b task/<id> <workingBranch>`) or the Codex-native pipeline coordinator. The
+gate treats a plan as executable when it opts in EITHER explicitly (`"executable": true`, or `"mode"` one
+of `executable`/`expansion`/`codex`) OR implicitly by any task carrying a nonempty **`validateCommand`**
+(the execution-native, provider-neutral command field). A purely descriptive Claude-Code plan (tasks
+carry only the legacy `validate`, never reach git/exec) is NOT executable and these extra checks skip it.
+
+For an executable plan, the gate additionally enforces (each failure carries task-specific evidence):
+
+- **Safe task ids (path/shell-inert).** An executable `id` is constructed into
+  `git worktree add -b task/<id>` and a worktree filesystem path, so it must match the safe charset
+  **`^[A-Za-z0-9][A-Za-z0-9_-]*$`** — only `[A-Za-z0-9_-]`, and it MUST start with an alphanumeric.
+  Canonical form: **`TASK-<n>`** (e.g. `TASK-001`). This bars path traversal (`../`), shell
+  metacharacters (spaces, `;`, `$`, backticks), and a leading `-` (which git would read as a flag) from
+  ever reaching worktree/branch construction. An unsafe id is a BLOCKING violation — rename the task.
+- **Provider-neutral validate (normalized).** Both the execution-native `validateCommand` and the legacy
+  `validate` are accepted and normalized to ONE trimmed nonempty slice command (`validateCommand`
+  preferred). A task with neither fails; the end-state/footgun form-checks judge the normalized command,
+  so an executable plan need only supply `validateCommand` (no legacy `validate` required).
+- **Required execution fields present.** Every executable task must carry the fields the coordinator
+  needs to run it: a nonempty **`writeScope[]`**, **≥2 acceptance criteria**
+  (`acceptance`/`acceptanceCriteria`), and one nonempty **slice validate command**. A missing field is a
+  BLOCKING violation.
+- **End-state-only validate is refused.** Beyond the bare-e2e block above, an executable task's validate
+  that is a bare whole-suite runner with NO task slice (e.g. `pnpm -w test`, `npm test`, `jest`,
+  `vitest run`, `go test ./...`, `pytest`) only greens at end-state, so the slice always looks red
+  mid-build — BLOCKING. A compound command that references a slice file/path (e.g.
+  `node scripts/validate-skills.mjs && bash scripts/test-plan-validate.sh`) is correctly NOT flagged.
+
 ## Phase 3: Adversarial self-review (converge until clean)
 
 Run `converge-loop` with `adversarial-verify` critics attacking the plan each round:

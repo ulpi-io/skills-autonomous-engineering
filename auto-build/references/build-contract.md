@@ -38,6 +38,9 @@ Inside the worktree, work test-first:
    the test must fail).
 2. **GREEN** — the minimum code to make the test pass. Don't over-build beyond the task's criteria.
 3. **REFACTOR** — clean up with tests green; run the slice validate after each refactor.
+4. **COMMIT** — commit the work on `task/<id>` by explicit paths (`git add <files>` — never `-A` — then
+   `git commit`). Step 2 merges this branch, so **uncommitted work merges nothing**: the commit is what
+   makes the task real, and `validatePassed` must reflect the slice validate's true result at this point.
 
 Stay strictly inside the task's write scope. If you find you must edit outside it, that's a PLAN defect
 (a missing dependency or a mis-drawn scope) — stop and flag it, don't silently widen scope.
@@ -83,20 +86,21 @@ else:
 Only act on findings inside the task's write scope — the engineer can't fix what it can't touch. Escalate
 (don't loop) if a fix needs a decision outside the task.
 
-## Step 5 — Commit + checkpoint (the task-exit gate)
+## Step 5 — Exit gate + checkpoint
 
-A task is `done` only when ALL hold:
+The task's commits already landed (Step 1's commit on `task/<id>`, merged in Step 2; any Step 4 fixes
+committed on the working branch). Step 5 is the GATE that decides `done` vs `blocked` — a task is `done`
+only when ALL hold:
 
 - [ ] its acceptance criteria are met, verified test-first (failing-then-passing test exists);
 - [ ] its slice-scoped validate is GREEN on the integrated working branch;
 - [ ] the review (if enabled) found no in-scope blocker, or the fix loop cleared them;
-- [ ] only this task's files (+ its status update) are staged — never `git add -A`.
+- [ ] only this task's files were ever staged — never `git add -A`.
 
-Then commit and mark the checkpoint unit `done`:
+Then mark the checkpoint unit `done` (the commits are already in history):
 
 ```
-git -C <root> add <task's files>              # explicit paths only
-git -C <root> commit -m "<type>(<scope>): <task title>"
+node checkpoint.mjs unit <status-file> <id> done
 ```
 
 If the exit gate isn't met within budget → `blocked` (with the reason). Never mark `done` on a red

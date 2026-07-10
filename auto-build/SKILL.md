@@ -1,6 +1,6 @@
 ---
 name: auto-build
-version: 0.1.0
+version: 0.1.1
 description: |
   Implement a whole DAG plan autonomously — one approved pass, one clean rollback point per task, never
   building on a broken base. It requires an approved plan (specced upstream) and a clean git baseline, takes a SINGLE human

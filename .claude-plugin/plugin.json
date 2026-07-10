@@ -9,5 +9,5 @@
   "repository": "https://github.com/ulpi-io/skills-autonomous-engineering",
   "license": "MIT",
   "skills": "./",
-  "hooks": "./hooks/hooks.json"
+  "hooks": "./hooks/hooks.claude.json"
 }

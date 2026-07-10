@@ -1,6 +1,6 @@
 # @ulpi/skills-autonomous-engineering
 
-**Spec to ship, unattended. Then it learns.**
+**Spec to a shippable PR, unattended. Then it learns.**
 
 Eight autonomous engineering phases behind one approval — then the machine harvests what it learned and
 improves itself for the next run. **18 skills · Claude Code + Codex · [skills.sh](https://skills.sh).**
@@ -8,8 +8,11 @@ improves itself for the next run. **18 skills · Claude Code + Codex · [skills.
 Every AI agent can loop. The failure modes are what kill you: it "fixes" the suite by skipping the red
 test, grinds for three hours past the point of progress, `git add -A`s unrelated work into a commit it
 later force-pushes, and reports "done" for gates that never ran. This collection makes those failure
-modes **mechanically impossible** — bounded loops, fail-closed gates, and PreToolUse hooks that block the
-tool call — then feeds every run's lessons forward so the next run starts smarter.
+modes **fail closed** — bounded loops, fail-closed gates, and PreToolUse hooks that block the tool call.
+The deterministic hooks stop the common spellings at the tool layer (including the wrapper-shell and
+trailing-slash variants); the cheats that can't be caught statically — deleting a test, a vacuous
+assertion — stay covered by mutation-check discipline. Then every run's lessons feed forward so the next
+run starts smarter.
 
 ## The self-improving pipeline
 
@@ -120,7 +123,7 @@ live-run guards, a `Stop` honest-termination backstop, and a `SessionEnd` checkp
 Prompt contracts bend under pressure; these don't. While the owning skill is active, its PreToolUse
 hook **blocks the tool call** (reason shown to the model):
 
-| Guard | Cardinal sin it makes impossible |
+| Guard | Cardinal sin it blocks at the tool layer |
 |---|---|
 | `auto-test/scripts/guard-test-integrity.sh` | Gaming the suite green — `.only`/`.skip`/`xit`/suppressions in test files (incl. at a line start) |
 | `auto-build/scripts/guard-git-hygiene.sh` | Breaking per-task rollback — `git add`/`stage -A/.`, whole-repo pathspecs, `commit -a`, plain `push --force`, `reset --hard`, `clean -f` |

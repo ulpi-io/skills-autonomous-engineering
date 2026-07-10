@@ -64,19 +64,41 @@ def git_args(seg, sub):
 def block(msg):
     print(PREFIX + msg, file=sys.stderr); sys.exit(2)
 PREFIX = "guard-ship-irreversibles: "
-for seg in segments(c):
-    t = git_args(seg, "push")
-    if t is None: continue
-    positionals = [x for x in t if not x.startswith("-")]
-    forced_refspec = any(x.startswith("+") for x in positionals)   # `+main` / `+refs/...` force a rewrite WITHOUT --force
-    # A forced push in ANY form is irreversible, INCLUDING when combined with --force-with-lease (git
-    # gives --force precedence, silently disabling the lease). Only a LONE --force-with-lease is allowed.
-    forces = ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)
-              or forced_refspec or "--mirror" in t)
-    if forces:
-        block("a forced push (--force, a -f cluster, a +refspec like `+main`, or --mirror - even alongside --force-with-lease) rewrites shared history, an irreversible step. Use a LONE --force-with-lease, or stop and get explicit user sign-off.")
-    delete_refspec = any(x.startswith(":") for x in positionals)   # `:main` (empty source) deletes the remote ref
-    if "--delete" in t or "-d" in t or delete_refspec or "--prune" in t or "--mirror" in t:
-        block("removing a remote ref (git push --delete/-d, a `:refspec`, --prune, or --mirror) is irreversible for consumers. Get explicit user sign-off first.")
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash"}
+def shell_payloads(seg):
+    # A nested `bash -c "git push --force"` hides the push from the top-level parse; yield each -c
+    # payload so the same rules re-scan it (closes the wrapper-shell bypass).
+    i = 0
+    while i < len(seg) and re.fullmatch(r"[A-Za-z0-9_]+=.*", seg[i]):
+        i += 1
+    if i >= len(seg) or seg[i].rsplit("/", 1)[-1] not in SHELLS:
+        return
+    i += 1
+    while i < len(seg):
+        if seg[i] == "-c" or re.fullmatch(r"-[a-z]*c", seg[i]):
+            if i + 1 < len(seg):
+                yield seg[i + 1]
+            i += 2
+        else:
+            i += 1
+def check_cmd(cmd, depth=0):
+    for seg in segments(cmd):
+        t = git_args(seg, "push")
+        if t is not None:
+            positionals = [x for x in t if not x.startswith("-")]
+            forced_refspec = any(x.startswith("+") for x in positionals)   # `+main` / `+refs/...` force a rewrite WITHOUT --force
+            # A forced push in ANY form is irreversible, INCLUDING when combined with --force-with-lease (git
+            # gives --force precedence, silently disabling the lease). Only a LONE --force-with-lease is allowed.
+            forces = ("--force" in t or any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", x) for x in t)
+                      or forced_refspec or "--mirror" in t)
+            if forces:
+                block("a forced push (--force, a -f cluster, a +refspec like `+main`, or --mirror - even alongside --force-with-lease) rewrites shared history, an irreversible step. Use a LONE --force-with-lease, or stop and get explicit user sign-off.")
+            delete_refspec = any(x.startswith(":") for x in positionals)   # `:main` (empty source) deletes the remote ref
+            if "--delete" in t or "-d" in t or delete_refspec or "--prune" in t or "--mirror" in t:
+                block("removing a remote ref (git push --delete/-d, a `:refspec`, --prune, or --mirror) is irreversible for consumers. Get explicit user sign-off first.")
+        if depth < 4:
+            for payload in shell_payloads(seg):
+                check_cmd(payload, depth + 1)
+check_cmd(c)
 '
 exit $?

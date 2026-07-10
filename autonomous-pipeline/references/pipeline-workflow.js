@@ -152,9 +152,13 @@ function makeGate(limit) {
 const buildGate = makeGate(MAX_BUILD_PARALLEL)   // heavy worktree engineers
 const agentGate = makeGate(MAX_PARALLEL)         // read-only reviewers/verifiers
 
-// ── merge lock — a promise-chain mutex. Builds run in parallel, but every task's integrate
-//    merges the SAME working branch; concurrent merges race the git index. Serialize merges
-//    one-at-a-time while builds/reviews stay parallel. ─────────────────────────────
+// ── ROOT write lock — a promise-chain mutex serializing EVERY operation that mutates the shared
+//    working tree: each task's integrate (merges the SAME branch — concurrent merges race the git
+//    index) AND each task's post-merge fix-loop commit. Without this second use, two same-layer
+//    tasks past their (serialized) merges could run their fix loops — editing + committing in the
+//    shared ROOT — at once, violating auto-build rule 7 ("never two agents writing the working tree
+//    at once") and racing .git/index.lock. Builds (isolated worktrees) + read-only reviews stay
+//    parallel; only ROOT mutations funnel through here. ─────────────────────────────
 function makeLock() {
   let tail = Promise.resolve()
   return (fn) => {
@@ -163,7 +167,7 @@ function makeLock() {
     return run
   }
 }
-const mergeLock = makeLock()
+const rootLock = makeLock()
 
 async function mapAll(items, fn) {           // full-parallel map (per-item caps come from the gates)
   return Promise.all(items.map((it, i) => fn(it, i)))
@@ -248,21 +252,23 @@ for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
        You are the engineer for ONE task of an approved plan. Repo: ${ROOT}, base branch: ${BRANCH}.
        TASK ${id}: ${t.title}. Acceptance: ${JSON.stringify(t.acceptance || t.acceptanceCriteria || [])}.
        WRITE SCOPE (only these paths): ${JSON.stringify(t.writeScope || [])}. Slice validate: ${t.validate}.
-       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.${skillBrief(t, engType)}${codexBrief('build')}
-       Return JSON: { built: bool, validatePassed: bool, files: [paths], notes: string, escalate?: string } (include escalate ONLY when a user decision is needed; set built=false then — omit it otherwise).`,
+       Method (non-negotiable): create worktree+branch task/${id}; write a FAILING test for the behavior first (RED), implement minimally (GREEN), refactor with tests green; stay inside the write scope; run the slice validate; THEN COMMIT your work on task/${id} by explicit paths (git add <files> ; git commit) — integrate merges this branch, so uncommitted work merges NOTHING. NEVER git add -A (explicit paths only), never skip/weaken a test to pass.${skillBrief(t, engType)}${codexBrief('build')}
+       Return JSON: { built: bool, validatePassed: bool, files: [paths], notes: string, escalate?: string } — set built=true ONLY after you committed; report validatePassed HONESTLY (the SLICE validate's real result — a red slice validate means built may be true but validatePassed=false, and integration will hold the task rather than merge broken code). Include escalate ONLY when a user decision is needed (set built=false then; omit it otherwise).`,
       { label: `eng:${id}`, phase: 'Build', isolation: 'worktree', agentType: engType,
         schema: { type: 'object', required: ['built', 'validatePassed'], properties: {
           built: { type: 'boolean' }, validatePassed: { type: 'boolean' },
           files: { type: 'array', items: { type: 'string' } }, notes: { type: 'string' },
           escalate: { type: 'string' } } } }), `eng:${id}`)
-    if (!eng?.built || eng?.escalate) {
-      const why = eng?.escalate || eng?.notes || 'engineer failed (or died after retries)'
+    if (!eng?.built || eng?.validatePassed === false || eng?.escalate) {
+      const why = eng?.escalate
+        || (eng?.built && eng?.validatePassed === false ? `slice validate RED — not integrating broken code: ${(eng?.notes || 'no detail').slice(0, 90)}` : eng?.notes)
+        || 'engineer failed (or died after retries)'
       if (CK) await agent(`Run: ${ck(`unit ${STATUS} ${id} blocked --note "${why.slice(0, 120).replace(/"/g, '')}"`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
       return { id, status: 'blocked', why }
     }
-    // integrate — SERIALIZED by the merge lock: many tasks build in parallel but all merge the same
+    // integrate — SERIALIZED by the root lock: many tasks build in parallel but all merge the same
     // branch; concurrent merges race the git index. Merge-only, prune the worktree as it lands.
-    const integ = await mergeLock(() => rAgent(
+    const integ = await rootLock(() => rAgent(
       `Integrate task ${id}: in ${ROOT}, git merge --no-ff task/${id} onto ${BRANCH}; then remove the task worktree (git worktree list → remove the task/${id} one) and delete branch task/${id}. Merge-only: do NOT run the whole-workspace validate. Return JSON {merged: bool, conflict?: string} (include conflict only on failure).`,
       { label: `integrate:${id}`, phase: 'Build',
         schema: { type: 'object', required: ['merged'], properties: { merged: { type: 'boolean' }, conflict: { type: 'string' } } } }))
@@ -281,9 +287,12 @@ for (const [li, layer] of (buildDone ? [] : PLAN.layers || []).entries()) {
       if (verdict?.pass || attempt === MAX_FIX) break
       const inScope = (verdict?.findings || []).filter(f => f.inScope !== false)
       if (!inScope.length) break
-      await buildGate(() => spawnSpecialist(
-        `Fix loop for task ${id} (attempt ${attempt + 1}/${MAX_FIX}): apply the MINIMAL fixes for these in-scope findings on ${BRANCH} in ${ROOT}, staying inside ${JSON.stringify(t.writeScope || [])}, then re-run ${t.validate}. Findings: ${JSON.stringify(inScope).slice(0, 2000)}. Commit only this task's files.${skillBrief(t, engType)}`,
-        { label: `fix:${id}`, phase: 'Build', agentType: engType }), `fix:${id}`)
+      // ROOT-mutating: serialize through rootLock so two same-layer fix loops never write/commit the
+      // shared tree at once (auto-build rule 7). withRetry keeps the transient-failure resilience the
+      // gates gave; spawnSpecialist keeps the specialist→general fallback.
+      await rootLock(() => withRetry(() => spawnSpecialist(
+        `Fix loop for task ${id} (attempt ${attempt + 1}/${MAX_FIX}): apply the MINIMAL fixes for these in-scope findings on ${BRANCH} in ${ROOT}, staying inside ${JSON.stringify(t.writeScope || [])}, then re-run ${t.validate}. Findings: ${JSON.stringify(inScope).slice(0, 2000)}. Commit only this task's files (explicit paths, never git add -A).${skillBrief(t, engType)}`,
+        { label: `fix:${id}`, phase: 'Build', agentType: engType }), `fix:${id}`))
     }
     const done = verdict?.pass === true
     if (CK) await agent(`Run: ${ck(`unit ${STATUS} ${id} ${done ? 'done' : 'blocked'}${done ? '' : ' --note "review blocked after fix loop"'}`)}`, { label: `status:${id}`, phase: 'Build' }).catch(() => null)
@@ -325,9 +334,10 @@ const RES_SCHEMA = { type: 'object', required: ['ok'], properties: { ok: { type:
 
 const simp = await phaseAgent('Simplify', OPT.simplify && !blocked.length,
   `Run the auto-simplify contract over the diff of ${BRANCH} vs its base in ${ROOT}: find duplication/dead code/over-abstraction in the CHANGED code only; apply the smallest clarifying edits ONE at a time; after each, prove behavior preserved (relevant tests green + no observable semantic change) or REVERT it. Never remove code whose purpose you haven't established. Return { ok, summary, findings: [reverted-or-flagged items] }.`, RES_SCHEMA)
+if (simp && !simp.skipped && !simp.skippedDone && !simp.died && !simp.ok) gateFail('simplify', simp?.summary || 'simplify pass did not complete cleanly (ok:false)')  // !died: phaseAgent already recorded a died gate — don't double-count
 const simpItems = (simp?.findings || []).map(f => ({ phase: 'simplify', ...f }))
 register.push(...simpItems)
-if (!simp?.skippedDone && !simp?.skipped) await persistPhase('simplify', simpItems, 'Simplify', simp?.died ? 'blocked' : 'done')
+if (!simp?.skippedDone && !simp?.skipped) await persistPhase('simplify', simpItems, 'Simplify', simp?.died || (simp && !simp.skipped && !simp.ok) ? 'blocked' : 'done')
 
 const test = await phaseAgent('Test', true,
   `Run the auto-test contract over the diff of ${BRANCH} in ${ROOT}: find untested behaviors in the changed code; write ONE meaningful test per behavior (state-based, spec-named); MUTATION-CHECK each (break the target — the test must fail; restore — must pass; reject tautologies); loop until the scoped suite is green, max 6 iterations, never skipping/weakening a test. Return { ok: suiteGreen && allMutationChecked, summary, findings: [gaps left, blocked units] }.`, RES_SCHEMA)
@@ -379,9 +389,10 @@ if (!reviewDone) { log(`review: ${dedup.length} raw → ${confirmed.length} conf
 
 const perf = await phaseAgent('Performance', OPT.performance,
   `Run the auto-performance contract on the changed hot paths of ${BRANCH} in ${ROOT}: establish a reproducible baseline benchmark FIRST, profile to real hotspots, optimize one at a time, keep a change ONLY if re-benchmark shows a real (beyond-variance) win AND the tests stay green — otherwise revert. Return { ok, summary, findings: [unproven/reverted claims] }.`, RES_SCHEMA)
+if (perf && !perf.skipped && !perf.skippedDone && !perf.died && !perf.ok) gateFail('performance', perf?.summary || 'performance pass did not complete cleanly (ok:false)')  // !died: phaseAgent already recorded a died gate — don't double-count
 const perfItems = (perf?.findings || []).map(f => ({ phase: 'performance', ...f }))
 register.push(...perfItems)
-if (!perf?.skippedDone && !perf?.skipped) await persistPhase('performance', perfItems, 'Performance', perf?.died ? 'blocked' : 'done')
+if (!perf?.skippedDone && !perf?.skipped) await persistPhase('performance', perfItems, 'Performance', perf?.died || (perf && !perf.skipped && !perf.ok) ? 'blocked' : 'done')
 
 const reviewBlockers = register.filter(r => r.phase === 'review' && r.severity === 'blocker').length
 const ship = await phaseAgent('Ship prep', OPT.shipPrep && reviewBlockers === 0,

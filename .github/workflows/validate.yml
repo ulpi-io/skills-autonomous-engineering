@@ -27,5 +27,7 @@ jobs:
         run: bash scripts/test-plan-validate.sh
       - name: Harvest contract (auto-learn extracts every learning-signal class with evidence)
         run: bash scripts/test-harvest.sh
+      - name: Pipeline workflow transitions (fail-closed gates under a mock runtime — no live agents)
+        run: node scripts/test-pipeline-workflow.mjs
       - name: Static site routes, links, metadata, analytics, and generated-output drift
         run: node --test scripts/test-site.mjs

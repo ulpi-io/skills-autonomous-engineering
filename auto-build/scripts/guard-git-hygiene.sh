@@ -74,34 +74,61 @@ def is_bulk_add(x):
     # and short clusters carrying A or u (e.g. -au, -uA).
     if x in ("-A", "--all", "-u", "--update", ".", "*", ":/", ":(top)"):
         return True
+    if x.rstrip("/") == ".":            # `.` `./` `.//` — whole-cwd staging in any trailing-slash spelling
+        return True
     if x.startswith(":/") or x.startswith(":(top)"):
         return True
     if re.fullmatch(r"-[A-Za-z]+", x) and any(c in x[1:] for c in ("A", "u")):
         return True
     return False
-for seg in segments(c):
-    for _sub in ("add", "stage"):
-        t = git_args(seg, _sub)
-        if t is not None and any(is_bulk_add(x) for x in t):
-            block("bulk staging (git add/stage -A/-u/./*/--all or a whole-repo pathspec) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
-    t = git_args(seg, "commit")
-    if t is not None and any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
-        block("git commit -a/--all stages everything implicitly - add the task files explicitly, then commit.")
-    t = git_args(seg, "push")
-    if t is not None:
-        # A forced push in ANY form is blocked, even alongside --force-with-lease (git gives --force
-        # precedence, so `push --force-with-lease --force` silently disables the lease check). Only a
-        # LONE --force-with-lease (no --force/-f cluster/--mirror/+refspec) is allowed.
-        forced = ("--force" in t or "--mirror" in t
-                  or any(re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", x) for x in t)
-                  or any(x.startswith("+") and len(x) > 1 and not x.startswith("--") for x in t))
-        if forced:
-            block("forced push (git push --force / -f / --mirror / +refspec) rewrites shared history - use a LONE --force-with-lease, or stop and ask the user (irreversible-step escalation).")
-    t = git_args(seg, "reset")
-    if t is not None and "--hard" in t:
-        block("git reset --hard destroys in-flight task work - checkpoint or escalate instead.")
-    t = git_args(seg, "clean")
-    if t is not None and any(x == "--force" or (re.fullmatch(r"-[a-zA-Z]+", x) and "f" in x[1:]) for x in t):
-        block("git clean -f destroys in-flight task work - checkpoint or escalate instead.")
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash"}
+def shell_payloads(seg):
+    # A nested "bash -c <cmd>" / "sh -c <cmd>" hides its git op from the top-level parse (the outer
+    # segment starts with the shell name, not "git"). Yield each -c payload so the SAME rules re-scan it,
+    # closing the "bash -c git add -A" wrapper bypass. A payload that merely MENTIONS git inside a quoted
+    # string still parses inertly (the token is not "git"), so this adds no false positives.
+    i = 0
+    while i < len(seg) and re.fullmatch(r"[A-Za-z0-9_]+=.*", seg[i]):
+        i += 1
+    if i >= len(seg) or seg[i].rsplit("/", 1)[-1] not in SHELLS:
+        return
+    i += 1
+    while i < len(seg):
+        if seg[i] == "-c" or re.fullmatch(r"-[a-z]*c", seg[i]):
+            if i + 1 < len(seg):
+                yield seg[i + 1]
+            i += 2
+        else:
+            i += 1
+def check_cmd(cmd, depth=0):
+    for seg in segments(cmd):
+        for _sub in ("add", "stage"):
+            t = git_args(seg, _sub)
+            if t is not None and any(is_bulk_add(x) for x in t):
+                block("bulk staging (git add/stage -A/-u/./*/--all or a whole-repo pathspec) is banned during an autonomous run - stage ONLY the current task files by explicit path (per-task clean-rollback contract).")
+        t = git_args(seg, "commit")
+        if t is not None and any(x == "--all" or (re.fullmatch(r"-[a-zA-Z]+", x) and "a" in x[1:]) for x in t):
+            block("git commit -a/--all stages everything implicitly - add the task files explicitly, then commit.")
+        t = git_args(seg, "push")
+        if t is not None:
+            # A forced push in ANY form is blocked, even alongside --force-with-lease (git gives --force
+            # precedence, so `push --force-with-lease --force` silently disables the lease check). Only a
+            # LONE --force-with-lease (no --force/-f cluster/--mirror/+refspec) is allowed.
+            forced = ("--force" in t or "--mirror" in t
+                      or any(re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", x) for x in t)
+                      or any(x.startswith("+") and len(x) > 1 and not x.startswith("--") for x in t))
+            if forced:
+                block("forced push (git push --force / -f / --mirror / +refspec) rewrites shared history - use a LONE --force-with-lease, or stop and ask the user (irreversible-step escalation).")
+        t = git_args(seg, "reset")
+        if t is not None and "--hard" in t:
+            block("git reset --hard destroys in-flight task work - checkpoint or escalate instead.")
+        t = git_args(seg, "clean")
+        if t is not None and any(x == "--force" or (re.fullmatch(r"-[a-zA-Z]+", x) and "f" in x[1:]) for x in t):
+            block("git clean -f destroys in-flight task work - checkpoint or escalate instead.")
+        # Recurse into nested shell payloads (bounded depth) so a wrapper shell cannot smuggle a banned op.
+        if depth < 4:
+            for payload in shell_payloads(seg):
+                check_cmd(payload, depth + 1)
+check_cmd(c)
 '
 exit $?

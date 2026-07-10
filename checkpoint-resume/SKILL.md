@@ -1,6 +1,6 @@
 ---
 name: checkpoint-resume
-version: 0.1.0
+version: 0.1.1
 description: |
   Make long autonomous work durable and resumable: a live .ulpi/runs/<id>.json status file (per-unit + per-phase state, atomic locked writes via the bundled scripts/checkpoint.mjs CLI) that a resume reads to SKIP everything already done — session-independent. Status writes are non-fatal observability. Use for any multi-unit run worth resuming after a stop or crash.
 allowed-tools:
