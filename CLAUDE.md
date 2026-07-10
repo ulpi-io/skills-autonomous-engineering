@@ -1,71 +1,92 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## Project Overview
+**Read `AGENTS.md` first.** It is the shared, provider-neutral contributor guide and the single source of
+truth for the repository architecture: the deterministic coordinator
+(`autonomous-pipeline/scripts/pipeline.mjs` + `scripts/lib/`), the dual Claude + Codex provider adapters
+(`codex-skills/` + `catalog.json`; the Claude root skill dirs), the Codex packager
+(`scripts/package-codex-plugin.mjs`), and the **full validation command list** (skill/hook validation,
+the `node --test` suites, the shell suites, the Codex packager test, and the `--live` smoke). This file
+does NOT duplicate that — it adds only what is specific to running and authoring the collection **on
+Claude Code**.
 
-**@ulpi/skills-autonomous-engineering** — A collection of AI coding agent skills that turn the software
-delivery lifecycle into a set of **autonomous, loop- and workflow-driven** phases. Distributed via
-[skills.sh](https://skills.sh).
+## The collection in one line
 
-Install all skills: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering`
-Install one skill: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill <name>`
+**@ulpi/skills-autonomous-engineering** turns the software delivery lifecycle into **autonomous, loop- and
+workflow-driven** phases (`auto-spec → auto-ship`) on top of durable loop / adversarial-verify /
+checkpoint / fan-out / budget-guard primitives. It ships to **both Claude Code and Codex** from one source
+and is distributed via [skills.sh](https://skills.sh).
 
-This collection is **Claude-Code-first**: it leans on Claude Code's real autonomy primitives — the
-`Agent` tool (background + worktree isolation + fork), the `Workflow` tool (deterministic multi-agent
-JS orchestration), `ScheduleWakeup`/`/loop` (self-paced loops), the `/schedule` skill + `RemoteTrigger`
-(durable recurring cloud Routines) and `CronCreate` (session-only, in-process cron). The skills degrade to
-descriptive guidance on other agents but are built to exploit these.
+Install all: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering`
+Install one: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill <name>`
 
-## Architecture — four layers
+## Core contracts (hold on every platform)
 
-A flat monorepo of independent skills — one self-contained directory per skill at the repo root.
-Every artifact belongs to exactly one layer (a guardrail that is mechanically checkable must NOT ship
-as prose-only):
+These are non-negotiable here, whichever agent runs — the difference between "autonomous" and "runaway":
 
-1. **Knowledge** — the 18 `SKILL.md` contracts (termination sets, fail-closed gates, slice-scoped
-   builds, rationalization tables). Skill families:
-   - Phases: `auto-spec` → `auto-plan` → `auto-build` → `auto-simplify` → `auto-test` → `auto-review`
-     → `auto-performance` → `auto-ship`
-   - Primitives: `converge-loop`, `adversarial-verify`, `checkpoint-resume`, `fan-out-work`,
-     `budget-guard`
-   - Autonomy: `autonomous-pipeline`, `watch-and-act`, `schedule-recurring-agent`
-   - Context & learning: `auto-map` (disclosure-tiered, verified context architecture), `auto-learn`
-     (verified, routed learnings harvested from every run — the self-improvement loop)
-2. **Enforcement** — deterministic guards for rules a model can't self-police under pressure:
-   `<skill>/scripts/guard-*.sh` wired as SKILL-SCOPED frontmatter hooks (a thin resolver line finds the
-   script across all five install layouts and `exec`s it; fail-OPEN if absent — guards must never brick
-   a session) + the plugin's `hooks/hooks.json` (same PreToolUse guards, self-scoped to live `.ulpi/runs/*`
-   runs) + a **Stop** hook (`hooks/honest-stop.sh` — surfaces a run left `status:running` at stop time so
-   the turn reconciles the checkpoint with reality; NO-OP outside a live run, non-blocking reminder by
-   default, `ULPI_STOP_STRICT=1` hard-blocks) + a **SessionEnd** hook (`hooks/session-end-gc.sh` — archives
-   terminal runs via `checkpoint.mjs gc`) + a **SessionStart** hook (`hooks/session-start-announce.sh` —
-   enforces the durable-resume guarantee by injecting any resumable run into the session's opening context,
-   so a fresh session never blindly re-inits or redoes integrated work; read-only, bounded output) +
-   `checkpoint.mjs`'s exit-2 refusals. Each wired event enforces a specific guarantee (test-integrity,
-   git-hygiene, ship-irreversibility, honest-stop, resume-safety, gc); the rest of Claude Code's hook
-   events are deliberately unused (a hook enforces a guarantee, it doesn't exist for coverage).
-3. **Execution** — runnable machinery: `checkpoint-resume/scripts/checkpoint.mjs` (locked, atomic state
-   CLI), `autonomous-pipeline/references/pipeline-workflow.js` and
-   `auto-review/references/review-workflow.js` (Workflow-tool templates), and the termination-set →
-   native `/goal`+`/loop` compilation (`converge-loop/references/native-goal-loop.md`).
-4. **Distribution** — skills.sh (universal, incl. Codex), the Claude Code plugin
-   (`.claude-plugin/plugin.json` + `marketplace.json`, `skills: "./"`), `AGENTS.md`, and CI
-   (`scripts/validate-skills.mjs` + `scripts/test-guards.sh` + `scripts/test-checkpoint.sh`).
+- **Bounded, never infinite.** Every loop declares a **termination set** — a done-condition, a
+  max-iteration cap, a token budget, a no-progress/anti-thrash stop, plus escalation triggers. When any
+  fires the loop STOPS and reports; it never spins. See `converge-loop`, `budget-guard`.
+- **Fail-closed gates.** A gate that did not run is NEVER reported clean; exhausted ≠ converged. A loop
+  that spent its budget without converging returns the open items — no fabricated green.
+- **Verify before acting.** Findings/claims that drive mutations are adversarially refuted (N skeptics,
+  majority-refute) before they are acted on. See `adversarial-verify`.
+- **Durable + resumable.** Long runs checkpoint to `.ulpi/runs/<id>.json`; resume skips done units and
+  never restarts integrated work — session-independent, not cache-dependent. See `checkpoint-resume`.
+- **Escalate, don't guess.** Irreversible or ambiguous decisions that are the human's stop and surface.
+- **Measure, don't assume.** `auto-performance` accepts an optimization only when a benchmark proves it
+  faster with no correctness regression.
 
-Platform priority: **Claude Code is the MUST; Codex is phase 2** (structural compatibility already in
-place). The local decision log lives at `docs/DECISIONS.md` (gitignored — working notes, not published).
+## Claude-Code-first: the autonomy primitives this collection targets
 
-### Skill Directory Structure
+The skills degrade to descriptive guidance on other agents, but they are built to **exploit Claude Code's
+real autonomy primitives** — this is why the collection is Claude-first:
 
-```
-<skill-name>/
-├── SKILL.md              # Frontmatter (name, version, description, allowed-tools, hooks?, …) + phased guide
-├── references/           # Optional: patterns/contracts/workflow templates loaded on demand
-└── scripts/              # Optional: EXECUTABLE helpers + guards (bash -n / node --check clean, chmod +x)
-```
+- the **`Agent`** tool (background execution + worktree isolation + fork),
+- the **`Workflow`** tool (deterministic multi-agent JS orchestration),
+- **`ScheduleWakeup`** / **`/loop`** (self-paced loops),
+- the **`/schedule`** skill + **`RemoteTrigger`** (durable recurring cloud Routines),
+- **`CronCreate`** (session-only, in-process cron).
 
-### SKILL.md Format
+On a native goal loop, compile a skill's termination set into **`/goal` + `/loop`** — see
+`converge-loop/references/native-goal-loop.md`. (Codex offers `/goal`; the provider-neutral path is the
+deterministic coordinator in `AGENTS.md`.)
+
+## Workflow-tool backend compatibility (Claude-specific)
+
+- `autonomous-pipeline/references/pipeline-workflow.js` and `auto-review/references/review-workflow.js`
+  are **Workflow-tool templates** and must stay inside the Workflow JS sandbox: **no**
+  `Date.now` / `Math.random` / arg-less `new Date` / `require` / ESM `import`.
+  `scripts/validate-skills.mjs` enforces these banned constructs.
+- `review-workflow.js` is **legacy and Claude-only** — the Codex artifact deliberately excludes it
+  (asserted by `scripts/test-review-workflow-claude-only.sh`). The provider-neutral review path is the
+  coordinator's `review-panel.mjs`.
+
+## Claude plugin + hook wiring (Claude-specific)
+
+- `.claude-plugin/plugin.json` (`skills: "./"`, `hooks: "./hooks/hooks.claude.json"`) + `marketplace.json`.
+- **`hooks/hooks.claude.json`** wires the Claude hook events, each enforcing ONE guarantee (a hook exists
+  for a guarantee, not for coverage — the rest of Claude Code's events stay deliberately unused):
+  - **PreToolUse** guards — test-integrity, git-hygiene, ship-irreversibility (same guards as the
+    SKILL-scoped `<skill>/scripts/guard-*.sh` frontmatter hooks; the plugin manifest self-scopes them to
+    live `.ulpi/runs/*`).
+  - **Stop** → `hooks/honest-stop.sh` — surfaces a run left `status:running` so the turn reconciles the
+    checkpoint with reality (NO-OP outside a live run; non-blocking reminder, `ULPI_STOP_STRICT=1`
+    hard-blocks).
+  - **SessionStart** → `hooks/session-start-announce.sh` — injects any resumable run into the opening
+    context so a fresh session never blindly re-inits or redoes integrated work (read-only, bounded).
+  - **SessionEnd** → `hooks/session-end-gc.sh` — archives terminal runs via `checkpoint.mjs gc`.
+    **SessionEnd is Claude-only** (unsupported on Codex); `validate-skills.mjs --hooks` enforces the
+    provider split between `hooks.claude.json` and the Codex `hooks/hooks.json`.
+- Guards are real scripts owned by their skill; the SKILL.md hook frontmatter carries only the thin
+  resolver line (finds the script across install layouts, fail-OPEN if absent — a guard must never brick
+  a session).
+
+## Authoring a skill (house format)
+
+A skill is a self-contained directory: `SKILL.md` (contract) + optional `references/` (loaded on demand)
++ optional `scripts/` (executable helpers/guards — `bash -n` / `node --check` clean, `chmod +x`).
 
 ```yaml
 ---
@@ -73,60 +94,28 @@ name: skill-name
 version: X.Y.Z
 description: |
   What the skill does and precisely when to invoke it (trigger-rich — the model routes on this).
-allowed-tools:
-  - Agent
-  - Workflow
-  - Bash
-  - Read
-  - Write
+allowed-tools: [Agent, Workflow, Bash, Read, Write]   # declare the MINIMUM; add Write/Edit only if it mutates files
 effort: high            # optional
 argument-hint: "<...>"  # optional
-when_to_use: |          # optional but recommended
-  Explicit "use when / do NOT use when" guidance.
+when_to_use: |          # optional but recommended: explicit use-when / do-NOT-use-when
 ---
 ```
 
-The markdown body follows the house structure:
-- `<EXTREMELY-IMPORTANT>` block — non-negotiable guardrails (termination, budget, honesty).
-- Numbered **phases** with explicit **success criteria** between them.
-- `## Guardrails` — the "never" rules.
-- `## When To Load References` — which reference file to load and when.
-- `## Output Contract` — exactly what the skill reports back.
+Body follows the house structure: an `<EXTREMELY-IMPORTANT>` guardrail block (termination, budget,
+honesty) → numbered **phases** with explicit **success criteria** → `## Guardrails` (the "never" rules) →
+`## When To Load References` → `## Output Contract`.
 
-## Autonomy conventions (the reason this collection exists)
+Conventions:
 
-Every autonomous skill here MUST honor these — they are what separate "autonomous" from "runaway":
+- **Versioning**: semver in frontmatter. Commit: `<Skill Name> v<X.Y.Z> — <changelog summary>`.
+- **Self-contained and best-in-class**: every skill is complete and superior ON ITS OWN; it never depends
+  on another skill pack for core value and our docs never point a reader at an external pack. It MAY
+  orchestrate other installed skills/agents/tools when present, but its quality never hinges on them.
+- **State under `.ulpi/`**: specs in `.ulpi/spec/`, plans in `.ulpi/plans/`, run status in
+  `.ulpi/runs/<id>.json`.
+- When editing a skill, read the full `SKILL.md` first — the `<EXTREMELY-IMPORTANT>` block and phase
+  success criteria define its contract. Compose the primitives instead of re-deriving
+  loop/verify/checkpoint logic.
 
-- **Bounded, never infinite.** Every loop declares a termination set: a done-condition, a max-iteration
-  cap, a token budget, and a no-progress/anti-thrash stop. When any fires, the loop STOPS and reports —
-  it never spins. See `converge-loop` and `budget-guard`.
-- **Honest termination — fail closed.** A gate that did not actually run is NEVER reported clean. A
-  loop that exhausted its budget without converging says so and returns the open items. Never fabricate
-  a green verdict to exit. See `adversarial-verify`.
-- **Verify before acting.** Findings/claims that drive mutations are adversarially verified (N skeptics,
-  majority-refute) before they are acted on. See `adversarial-verify`.
-- **Durable + resumable.** Long-running work writes a live status file and skips already-done units on
-  resume — session-independent, not cache-dependent. See `checkpoint-resume`.
-- **Escalate, don't guess.** When blocked on a decision that is the user's to make, stop and surface it
-  rather than looping or picking silently.
-- **Measure, don't assume.** `auto-performance` accepts an optimization only when a benchmark proves it
-  faster with no correctness regression.
-
-## Conventions
-
-- **Versioning**: semver in frontmatter. Commit messages: `<Skill Name> v<X.Y.Z> — <changelog summary>`.
-- **allowed-tools**: declare the minimum. Autonomy skills typically need `Agent`, `Workflow`, `Bash`,
-  `Read`; add `Write`/`Edit` only when the skill mutates files.
-- **Self-contained and best-in-class**: every skill is complete and superior ON ITS OWN — it carries its
-  own quality bar (its own reference material) and never depends on another skill pack for core value. We
-  write our own content, better and autonomous-first; we do not copy from or reference other collections.
-  A skill MAY orchestrate other installed skills/agents/tools as building blocks when present, but its
-  quality never hinges on them, and our docs never point a reader at an external pack.
-- **State lives under `.ulpi/`**: specs in `.ulpi/spec/`, plans in `.ulpi/plans/`, run status in
-  `.ulpi/runs/<id>.json` (mirrors ship-playbook's `.ulpi/workflows/`).
-
-## Working with Skills
-
-When editing a skill, read the full `SKILL.md` first — the `<EXTREMELY-IMPORTANT>` block and phase
-success criteria define its contract. When creating one, follow the frontmatter format and the
-autonomy conventions above; compose the primitives instead of re-deriving loop/verify/checkpoint logic.
+Every change must pass the validation in `AGENTS.md` (run `node scripts/validate-skills.mjs --surface all
+--hooks` at minimum); CI runs the full suite on pushes to main and every pull request.

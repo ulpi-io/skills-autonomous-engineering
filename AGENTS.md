@@ -1,8 +1,10 @@
 # AGENTS.md — Autonomous Engineering Skills
 
 This repository is a collection of **agent skills for autonomous software delivery**: the lifecycle as
-bounded, self-correcting, checkpoint-resumable phases with deterministic enforcement. If you are an AI
-agent working in or with this repo, this file orients you.
+bounded, self-correcting, checkpoint-resumable phases with deterministic enforcement. It ships to **both
+Claude Code and Codex** from one source of truth. This is the **shared contributor guide** — read it
+first no matter which agent you run; it is provider-neutral and self-sufficient. Claude-specific routing
+and Workflow-backend notes live in `CLAUDE.md`, and nothing here depends on reading that file.
 
 ## What lives here
 
@@ -12,42 +14,145 @@ agent working in or with this repo, this file orients you.
   (majority-refute skeptic panels), `checkpoint-resume` (durable skip-done state), `fan-out-work`
   (capped parallel map), `budget-guard` (the five stop conditions every unattended run declares).
 - **Autonomy layer** — `autonomous-pipeline` (chains the phases; single human approval; runnable
-  Workflow template), `watch-and-act` (bounded external polling), `schedule-recurring-agent`
-  (idempotent cron routines), `auto-map` (verified disclosure-tiered context maps), `auto-learn`
+  deterministic coordinator), `watch-and-act` (bounded external polling), `schedule-recurring-agent`
+  (idempotent recurring routines), `auto-map` (verified disclosure-tiered context maps), `auto-learn`
   (harvests every run's artifacts into verified, routed learnings — the self-improvement loop).
 - **Enforcement** — `<skill>/scripts/guard-*.sh` hooks that mechanically block the cardinal sins
-  (gaming tests green, bulk git staging, unauthorized force-push) while a skill is active.
-- **Runnable machinery** — `checkpoint-resume/scripts/checkpoint.mjs` (state CLI with fail-closed
-  refusals), `autonomous-pipeline/references/pipeline-workflow.js` and
-  `auto-review/references/review-workflow.js` (Workflow-tool templates).
+  (gaming tests green, bulk git staging, unauthorized force-push) while a skill is active, plus the
+  lifecycle hooks under `hooks/` (honest-stop, session-start resume announce, session-end gc).
+
+## The deterministic coordinator
+
+The autonomy is not prose — `autonomous-pipeline` is backed by a real, testable coordinator:
+
+- **`autonomous-pipeline/scripts/pipeline.mjs`** — the public CLI entrypoint. It owns only the grammar
+  + pinned exit-code table, one-JSON-object-on-stdout in `--json` mode, and run-file location
+  (`<runsDir>/<id>.json`, `ULPI_RUNS_DIR` or `<cwd>/.ulpi/runs`). Node 22+, zero external deps.
+- **`autonomous-pipeline/scripts/lib/`** — the engine, split by responsibility and unit-tested in
+  isolation: `cli-contract.mjs` (argv/flags/exit codes), `pipeline-engine.mjs` + `pipeline-state.mjs`
+  (the state machine and legal/illegal transitions), `phase-engine.mjs` (fail-closed phase gates),
+  `build-engine.mjs` (slice-scoped build DAG), `review-panel.mjs` (adversarial verify / majority-refute),
+  `budget-ledger.mjs` (token/iteration accounting + caps), `authorization.mjs` (permission boundaries),
+  `git-workspaces.mjs` + `git-integration.mjs` (worktree isolation + merge safety), `codex-executor.mjs`
+  + `process-runner.mjs` (the agent executor seam). Heavyweight execution is injected as `seams` so the
+  coordinator runs hermetically under tests with a fake runtime.
+
+## Provider adapters (dual Claude + Codex)
+
+The 18 canonical skills have exactly one authoring source and two discovery surfaces:
+
+- **Claude surface** — the **root skill dirs** (`auto-spec/`, `converge-loop/`, …). Each is a directory
+  with a `SKILL.md` (frontmatter `name` + `description` for routing; the body is the operating
+  procedure) plus optional `references/` (loaded on demand) and `scripts/` (executable helpers — run
+  them rather than re-implementing their logic). The Claude plugin manifest (`.claude-plugin/plugin.json`,
+  `skills: "./"`) discovers these.
+- **Codex surface** — `codex-skills/` holds one thin **adapter** per skill (`SKILL.md` +
+  `agents/openai.yaml` that `delegate`s to the canonical root skill), plus `.shared/` (Codex runtime +
+  layout guides) and **`codex-skills/catalog.json`** — the sealed inventory. The catalog pins, for each
+  of the 18 skills, its adapter dir, its `canonicalSource` root dir, the `delegate`, and the
+  `invocationPolicy` (implicit-invocation flag). `.codex-plugin/plugin.json` (`skills: "./codex-skills/"`)
+  discovers these. Validation asserts both surfaces resolve the **same 18** with no cross-surface leak.
+
+## Packaging
+
+- **`scripts/package-codex-plugin.mjs`** — builds a **reproducible** Codex marketplace artifact under
+  `--out <dir>` (writes only there; never mutates the source). It emits the marketplace source
+  (`.agents/plugins/marketplace.json`) and the plugin tree whose topology mirrors source exactly: the
+  manifest, the 18 `codex-skills/` adapters (+ `.shared/` + `catalog.json`), and the canonical root
+  delegate dirs (shipped so delegates resolve, but kept OUTSIDE `codex-skills/` so they are not
+  Codex-discovered). Deterministic byte copies, stable `digest=sha256:<hex>`; it fails nonzero on any
+  sealed hazard (default `skills/` root, missing delegate, escaping path, stale catalog, invalid
+  marketplace source, topology drift).
 
 ## The contract every skill honors
 
-1. **Bounded** — no loop without a declared termination set (done-condition, cap, budget, no-progress
-   rule, escalation triggers).
-2. **Fail-closed** — a gate that did not run is never reported clean; exhausted ≠ converged.
-3. **Verify before acting** — findings are adversarially refuted before they drive edits.
-4. **Durable** — long runs checkpoint to `.ulpi/runs/<id>.json`; resume skips done units, never
-   restarts.
-5. **Escalate, don't guess** — irreversible or ambiguous decisions go to the human.
+Stated plainly, provider-independent — these are what separate "autonomous" from "runaway":
+
+1. **Bounded — never infinite.** No loop without a declared **termination set**: a done-condition, a
+   max-iteration cap, a token budget, and a no-progress/anti-thrash stop, plus escalation triggers. When
+   any fires the loop STOPS and reports — it never spins. See `converge-loop` and `budget-guard`.
+2. **Fail-closed gates.** A gate that did not run is NEVER reported clean; exhausted ≠ converged. A loop
+   that spent its budget without converging says so and returns the open items — no fabricated green.
+3. **Verify before acting.** Findings/claims that drive mutations are adversarially refuted (N skeptics,
+   majority-refute) before they are acted on. See `adversarial-verify`.
+4. **Durable + resumable.** Long runs checkpoint to `.ulpi/runs/<id>.json`; resume skips done units and
+   never restarts integrated work — session-independent, not cache-dependent. See `checkpoint-resume`.
+5. **Escalate, don't guess.** Irreversible or ambiguous decisions that are the human's to make stop and
+   surface rather than looping or picking silently.
 
 ## Using the skills (any agent)
 
-Each skill is a directory with a `SKILL.md` (frontmatter `name` + `description` for routing; the body
-is the operating procedure) plus optional `references/` (loaded on demand) and `scripts/` (executable
-helpers — run them rather than re-implementing their logic). Install via
-`npx skills add https://github.com/ulpi-io/skills-autonomous-engineering` or, on Claude Code, as a
-plugin from the marketplace manifest in `.claude-plugin/`.
-
-On platforms with a native goal loop (Claude Code `/goal` + `/loop`; Codex `/goal`), compile the
-skill's termination set into it — see `converge-loop/references/native-goal-loop.md`. Codex-focused
-routing is phase 2 of this collection; the structural compatibility (name+description routing,
-`scripts/` anatomy) is already in place.
+Install via `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering`, or as a native
+plugin: Claude Code from the marketplace manifest in `.claude-plugin/`; Codex from the artifact built by
+`scripts/package-codex-plugin.mjs`. On platforms with a native goal loop (Claude Code `/goal` + `/loop`;
+Codex `/goal`), compile the skill's termination set into it — see
+`converge-loop/references/native-goal-loop.md`.
 
 ## Working ON this repo
 
-- Read `CLAUDE.md` for conventions and the architecture rationale.
-- Every change must pass `node scripts/validate-skills.mjs` (frontmatter shape, 1536-char routing
-  budget, reference/script integrity, self-containment). CI runs it on pushes to main and on every pull request.
-- Skills are self-contained: never reference other skill packs or the local `examples/` folder.
+- Skills are **self-contained**: never reference other skill packs or the local `site/` fixtures.
 - Guards are real scripts owned by their skill; hook frontmatter carries only the resolver line.
+- **State** lives under `.ulpi/`: specs in `.ulpi/spec/`, plans in `.ulpi/plans/`, run status in
+  `.ulpi/runs/<id>.json`.
+
+### Validation (run before every change — this is exactly what CI runs)
+
+**Cross-surface skill / manifest / hook validation**
+
+```
+node scripts/validate-skills.mjs --surface all --hooks
+```
+
+Validates both surfaces: frontmatter shape, the routing-budget cap, reference/script integrity,
+self-containment, the sealed `codex-skills/catalog.json` inventory, the doc-honesty guard (no banned
+over-claims in README.md / any SKILL.md), and — with `--hooks` — the provider-split hook manifests.
+
+**Shell suites (guards + gate contracts)**
+
+```
+bash scripts/test-guards.sh                 # guard block/allow/escape-hatch contract
+bash scripts/test-checkpoint.sh             # checkpoint store lifecycle + fail-closed refusals
+bash scripts/test-run-status.sh             # read-only run-status render/list/json/resume
+bash scripts/test-map-verify.sh             # auto-map anti-lie gate
+bash scripts/test-plan-validate.sh          # plan DAG structural judge
+bash scripts/test-harvest.sh                # auto-learn harvest evidence
+bash scripts/test-validate-skills.sh        # dual-surface flags + doc-honesty behavior
+bash scripts/test-watch-state.sh            # durable cross-turn watch bounds
+bash scripts/test-scheduled-job.sh          # scheduled-job schema/dedup/capability/teardown
+bash scripts/test-codex-hooks.sh            # dual Claude+Codex lifecycle hooks
+bash scripts/test-codex-package.sh          # Codex packager topology + 18 adapters + version parity
+bash scripts/test-review-workflow-claude-only.sh   # review workflow is Claude-only (Codex excludes it)
+```
+
+**Node unit / E2E suites (`node:test`, mock/fake runtimes — no live agents, no network)**
+
+```
+node --test scripts/test-pipeline-state.mjs        # state machine transitions + convergence
+node --test scripts/test-cli-contract.mjs          # argv/flag parsing + fail-closed refusals
+node --test scripts/test-git-workspaces.mjs        # worktree isolation lifecycle
+node --test scripts/test-git-integration.mjs       # merge/integration safety
+node --test scripts/test-codex-executor.mjs        # buildCodexArgv + schema-output gate + runner
+node --test scripts/test-budget-ledger.mjs         # token/iteration accounting + caps
+node --test scripts/test-authorization.mjs         # permission/authority boundaries
+node --test scripts/test-review-panel.mjs          # adversarial verify + majority-refute
+node --test scripts/test-build-engine.mjs          # slice-scoped build DAG
+node --test scripts/test-phase-engine.mjs          # fail-closed phase gates
+node --test scripts/test-pipeline-cli.mjs          # coordinator command surface
+node --test scripts/test-pipeline-e2e.mjs          # zero-network coordinator over temp repos + fake codex
+node --test scripts/test-pipeline-security.mjs     # isolation + redaction under adversarial input
+node --test scripts/test-dual-plugin-discovery.mjs # both surfaces resolve the same inventory
+node --test scripts/test-codex-smoke.mjs           # Codex smoke in DEFAULT fake mode (no login/network)
+node --test scripts/test-ci-workflow.mjs           # every CI suite is a named, unmaskable, hermetic gate
+node --test scripts/test-site.mjs                  # static-site routes/links/metadata/drift
+node scripts/test-pipeline-workflow.mjs            # legacy workflow transitions under a mock runtime
+```
+
+**Live Codex smoke (opt-in, gated)**
+
+```
+node scripts/smoke-codex-plugin.mjs --live
+```
+
+Exercises the real `codex` CLI end-to-end. Preflight requires the pinned Codex version and an operable
+CLI; if either is absent it returns a nonzero **`gateNotRun`** (an honest refusal — never a fabricated
+clean). CI runs the smoke only in its default fake mode; `--live` is for local verification.

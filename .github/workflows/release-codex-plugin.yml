@@ -1,0 +1,139 @@
+name: release-codex-plugin
+
+# Triggered ONLY by a protected version tag. NO branch push, NO pull_request, NO workflow_dispatch,
+# NO schedule — a release is a signed, immutable `vX.Y.Z` tag event and nothing else. Everything
+# below is proven, not asserted: the deterministic validation+package matrix runs first, the just-built
+# artifact is bound to the real Codex `--live` smoke by a matching sha256 digest, and ONLY that matched
+# evidence unlocks the publish step. A missing secret, a skipped gate, a stale digest, a
+# gateNotRun/red smoke, or a tag/manifest/catalog/artifact drift all fail closed — none can reach upload.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Least privilege at the top: the default GITHUB_TOKEN carries read-only scope for every job. The
+# publish step uses the Actions artifact runtime token (not GITHUB_TOKEN write), so no write grant is
+# needed anywhere. There is no `write` / `write-all` in this file — packaging drift can't smuggle one in.
+permissions:
+  contents: read
+
+# One release per tag; never cancel a release mid-flight (a half-published artifact is worse than a wait).
+concurrency:
+  group: release-codex-plugin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Fresh authorization on EVERY run: the protected `release` environment requires a reviewer to
+    # approve THIS specific run before any step executes. Approval never persists across runs, so a
+    # re-run of an old/edited tag cannot inherit a prior approval.
+    environment: release
+    steps:
+      # Immutable action pins everywhere (full 40-hex commit SHAs, never a mutable tag/branch). The
+      # `# vX.Y.Z` trailing comment is documentation only — the resolver uses the SHA.
+      - name: Checkout the tagged tree (no persisted git credentials)
+        id: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up the pinned Node toolchain
+        id: setup-node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+
+      # ---- tag == manifest parity (packaging drift fails closed, BEFORE anything is built) ----
+      - name: Resolve tag/manifest version parity
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST="$(node -p "require('./.codex-plugin/plugin.json').version")"
+          echo "tag=$TAG manifest=$MANIFEST"
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::release tag ($TAG) does not match source manifest version ($MANIFEST)"
+            exit 1
+          fi
+          printf 'version=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+
+      # ---- full deterministic validation matrix (hermetic; fake-mode smoke only) ----
+      - name: Deterministic validation matrix (skills, packager, discovery, fake smoke, release contract)
+        id: matrix
+        run: |
+          node scripts/validate-skills.mjs --surface all --hooks
+          node --test scripts/test-dual-plugin-discovery.mjs
+          node --test scripts/test-codex-smoke.mjs
+          bash scripts/test-codex-package.sh
+          node --test scripts/test-release-workflow.mjs
+
+      # ---- static hardening self-audit of THIS workflow (proves it is still fail-closed) ----
+      - name: Static hardening self-audit of this release workflow
+        id: selfaudit
+        run: node scripts/verify-codex-release.mjs --workflow .github/workflows/release-codex-plugin.yml
+
+      # ---- package the reproducible artifact into a temp OUT OUTSIDE the checkout ----
+      - name: Package the reproducible Codex marketplace artifact (temp OUT, outside the checkout)
+        id: package
+        run: |
+          OUT="$RUNNER_TEMP/codex-artifact"
+          node scripts/package-codex-plugin.mjs --root . --out "$OUT" | tee "$RUNNER_TEMP/package.log"
+          DIGEST="$(grep -oE 'digest=sha256:[0-9a-f]{64}' "$RUNNER_TEMP/package.log" | head -n1 | cut -d= -f2)"
+          if [ -z "$DIGEST" ]; then
+            echo "::error::packager emitted no sha256 digest"
+            exit 1
+          fi
+          printf 'out=%s\n' "$OUT" >> "$GITHUB_OUTPUT"
+          printf 'digest=%s\n' "$DIGEST" >> "$GITHUB_OUTPUT"
+
+      # ---- verify artifact version parity (tag == manifest == catalog == artifact) + hash present ----
+      - name: Verify artifact version parity and provenance hash
+        id: verify
+        run: |
+          node scripts/verify-codex-release.mjs \
+            --artifact "${{ steps.package.outputs.out }}" \
+            --tag "${{ steps.version.outputs.version }}" \
+            --digest "${{ steps.package.outputs.digest }}"
+
+      # ---- the real Codex `--live` smoke against the JUST-BUILT artifact. This is the ONLY step that
+      #      carries Codex credentials; packaging, verification and upload never see them. An
+      #      unavailable CLI / bad auth / wrong version fails the step (gateNotRun -> nonzero). ----
+      - name: Live Codex smoke against the just-built artifact (only credentialed step)
+        id: smoke
+        env:
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          node scripts/smoke-codex-plugin.mjs --live --repo . > "$RUNNER_TEMP/smoke.json"
+          cat "$RUNNER_TEMP/smoke.json"
+
+      # ---- DIGEST-MATCHED release evidence: bind the live smoke to the built digest and record the
+      #      commit + version + sha256 + provenance. This gate sets outputs.matched=true ONLY when the
+      #      smoke is status:ok AND its artifactSha256 equals the packaged digest AND versions align. ----
+      - name: DIGEST-MATCHED release evidence (bind live smoke to built digest, record provenance)
+        id: evidence
+        run: |
+          node scripts/verify-codex-release.mjs \
+            --artifact "${{ steps.package.outputs.out }}" \
+            --tag "${{ steps.version.outputs.version }}" \
+            --digest "${{ steps.package.outputs.digest }}" \
+            --smoke-report "$RUNNER_TEMP/smoke.json" \
+            --provenance-out "$RUNNER_TEMP/provenance.json"
+          printf 'matched=true\n' >> "$GITHUB_OUTPUT"
+
+      # ---- publish to the curated marketplace. Gated on matched live evidence: if the evidence gate
+      #      did not set matched=true (or any prior step failed), this step is unreachable. Carries NO
+      #      Codex credentials, and NEVER touches ~/.agents/plugins/marketplace.json — it ships ONLY the
+      #      self-contained artifact (whose own .agents/plugins/marketplace.json is the curated source). ----
+      - name: Publish the curated marketplace artifact (gated on matched live evidence; no Codex creds)
+        id: upload
+        if: steps.evidence.outputs.matched == 'true'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: codex-plugin-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.package.outputs.out }}
+            ${{ runner.temp }}/provenance.json
+          if-no-files-found: error
+          retention-days: 90
