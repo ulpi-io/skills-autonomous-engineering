@@ -45,7 +45,11 @@
         <p class="lab reveal"><span class="mk">▸</span> 18 skills · Claude Code + Codex · skills.sh</p>
         <h1 class="reveal d1">Spec to ship, unattended.<br>Then it <span class="hl">learns.</span></h1>
         <p class="sub reveal d2">Eight autonomous phases behind one approval, bounded by deterministic evidence. Every run returns what it learned to the next one.</p>
-        <div class="hero-actions reveal d3"><a class="btn" href="skills/">Explore all skills →</a><a class="btn ghost" href="plugins/">Choose a plugin</a></div>
+        <div class="runner-block runner-block-home reveal d3" data-runner="autonomous-pipeline">
+    <div class="runner-block-head"><p class="lab"><span class="mk">▶</span> run the whole lifecycle</p><p>One invocation. One plan approval. One bounded pass.</p></div>
+    <div class="runner-command-grid"><article class="runner-command-card" data-runner-platform="claude"><div class="runner-platform"><span>C</span><b>Claude Code</b></div><div class="cmdrow"><code id="home-pipeline-claude">/autonomous-pipeline &quot;&lt;feature&gt;&quot;</code><button class="cp" type="button" data-copy-target="home-pipeline-claude" aria-label="Copy Claude Code pipeline command">copy</button></div><p>Run after installing the marketplace plugin. The plan is the one broad approval; surprises still stop.</p></article><article class="runner-command-card" data-runner-platform="codex"><div class="runner-platform"><span>X</span><b>Codex via skills.sh</b></div><div class="cmdrow"><code id="home-pipeline-codex">$autonomous-pipeline &quot;&lt;feature&gt;&quot;</code><button class="cp" type="button" data-copy-target="home-pipeline-codex" aria-label="Copy Codex via skills.sh pipeline command">copy</button></div><p>Run the skills.sh version today. The native Codex plugin remains explicitly preview.</p></article></div>
+  </div>
+        <div class="hero-actions reveal d3"><a class="btn" href="skills/autonomous-pipeline/">How the full run works →</a><a class="btn ghost" href="plugins/">Install for your platform</a></div>
       </div>
       <div class="panel loopwrap reveal d3" aria-label="Self-improving lifecycle diagram">
     <div class="looptop lab"><span class="mk">↻</span>&nbsp; the self-improving pipeline</div>

@@ -3501,3 +3501,112 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
   .brand span,
   .site-brand span { max-width: 175px; }
 }
+
+/* --- Full-pipeline handoff ----------------------------------------------
+ * Installation is incomplete until the user can see what to invoke next.
+ * This stays inside the original ruled-panel vocabulary.
+ */
+.runner-block {
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: color-mix(in oklab, var(--ground) 82%, transparent);
+}
+
+.runner-block-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--ground-2);
+}
+
+.runner-block-head > p:last-child {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.runner-command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runner-block-home .runner-command-grid,
+.runner-block-single .runner-command-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.runner-command-card {
+  min-width: 0;
+  padding: 15px 16px 16px;
+  border-right: 1px solid var(--rule);
+}
+
+.runner-command-card:last-child { border-right: 0; }
+
+.runner-platform {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.runner-platform > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--rule);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.runner-platform > b { font-weight: 600; }
+
+.runner-command-card .cmdrow {
+  margin: 11px 0 9px;
+}
+
+.runner-command-card .cmdrow code {
+  font-size: 12.5px;
+}
+
+.runner-command-card > p {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.runner-block-home {
+  max-width: 620px;
+  margin-top: 28px;
+}
+
+.runner-block-home + .hero-actions { margin-top: 16px; }
+
+.runner-block-after-install { margin-top: 22px; }
+
+.runner-block-after-install + .chip-grid { margin-top: 24px; }
+
+@media (max-width: 760px) {
+  .runner-command-grid { grid-template-columns: 1fr; }
+
+  .runner-command-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .runner-command-card:last-child { border-bottom: 0; }
+}
+
+@media (max-width: 420px) {
+  .runner-block-head { display: block; }
+  .runner-block-head > p:last-child { margin-top: 5px; }
+  .runner-command-card { padding-inline: 13px; }
+  .runner-command-card .cmdrow code { font-size: 11.5px; }
+}

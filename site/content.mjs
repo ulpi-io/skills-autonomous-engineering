@@ -121,3 +121,5 @@ export const codexRoadmap = [
 
 export const universalInstall = 'npx skills add https://github.com/ulpi-io/skills-autonomous-engineering';
 export const singleSkillInstall = (slug) => `${universalInstall} --skill ${slug}`;
+export const claudePipelineRun = '/autonomous-pipeline "<feature>"';
+export const codexPipelineRun = '$autonomous-pipeline "<feature>"';

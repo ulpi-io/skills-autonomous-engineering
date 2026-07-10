@@ -377,6 +377,62 @@ test('global navigation and the home/plugin hubs expose both platforms', () => {
   }
 });
 
+test('the full-pipeline command is prominent on the homepage and every install flow', () => {
+  const claudeRun = '/autonomous-pipeline "<feature>"';
+  const codexRun = '$autonomous-pipeline "<feature>"';
+  const runnerPlatforms = (html) => [...html.matchAll(
+    /\bdata-runner-platform\s*=\s*(?:"([^"]+)"|'([^']+)')/gi,
+  )].map((match) => decodeHtml(match[1] ?? match[2]));
+
+  const homeHtml = readFileSync(routeFile(''), 'utf8');
+  const homeHero = homeHtml.match(/<section\b[^>]*class="[^"]*\bhero-first\b[^"]*"[^>]*>([\s\S]*?)<\/section>/i);
+  assert.ok(homeHero, 'homepage is missing its primary hero');
+  assert.deepEqual(
+    runnerPlatforms(homeHero[1]).sort(),
+    ['claude', 'codex'],
+    'homepage hero must expose both full-pipeline runner commands',
+  );
+  assert.match(visibleText(homeHero[1]), new RegExp(claudeRun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(visibleText(homeHero[1]), new RegExp(codexRun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(
+    visibleText(homeHero[1]),
+    /One invocation\. One plan approval\. One bounded pass\./,
+    'homepage runner must preserve the approval gate and bounded one-pass contract',
+  );
+
+  const hubHtml = readFileSync(routeFile('plugins'), 'utf8');
+  assert.deepEqual(
+    runnerPlatforms(hubHtml).sort(),
+    ['claude', 'codex'],
+    'plugin hub must show what to invoke after installation on both platforms',
+  );
+
+  const claudeHtml = readFileSync(routeFile('plugins/claude-code'), 'utf8');
+  const claudeText = visibleText(claudeHtml);
+  assert.deepEqual(runnerPlatforms(claudeHtml), ['claude']);
+  assert.ok(
+    claudeText.indexOf('/plugin install autonomous-engineering@ulpi-autonomous-engineering')
+      < claudeText.indexOf(claudeRun),
+    'Claude installation must lead from plugin install to the full-pipeline invocation',
+  );
+
+  const codexHtml = readFileSync(routeFile('plugins/codex'), 'utf8');
+  const codexText = visibleText(codexHtml);
+  assert.deepEqual(runnerPlatforms(codexHtml), ['codex']);
+  assert.ok(
+    codexText.indexOf('npx skills add https://github.com/ulpi-io/skills-autonomous-engineering')
+      < codexText.indexOf(codexRun),
+    'Codex skills.sh installation must lead to the full-pipeline invocation',
+  );
+
+  const pipelineHtml = readFileSync(routeFile('skills/autonomous-pipeline'), 'utf8');
+  assert.deepEqual(
+    runnerPlatforms(pipelineHtml).sort(),
+    ['claude', 'codex'],
+    'the autonomous-pipeline skill page must expose both invocation forms in its install section',
+  );
+});
+
 test('plugin pages make truthful, platform-specific availability claims', () => {
   const claudeHtml = readFileSync(routeFile('plugins/claude-code'), 'utf8');
   const claudeText = visibleText(claudeHtml);
