@@ -15,9 +15,13 @@
 //     7. plugin manifest (if present) points at real paths
 //   Codex surface (codex-skills/ adapter tree — validated separately, absence is fine):
 //     C1. codex-skills/manifest.json (if present) is valid JSON with an 'adapters' array
-//     C2. every adapter dir has openai.yaml with required fields: name (== dir), description, delegate
+//     C2. every adapter dir has agents/openai.yaml with required fields: name (== dir), description, delegate
 //     C3. delegate names a real Claude skill (<delegate>/SKILL.md) — else a broken delegate
 //     C4. any adapter hooks.json only wires Codex-SUPPORTED hook events
+//     C5. codex-skills/catalog.json seals the inventory: both surfaces resolve the same set (exactly 18
+//         on the real repo) with no cross-surface entrypoint leak, and the catalog lists each skill
+//         EXACTLY ONCE with a live adapter, real canonical source, un-stale delegate, and a real policy —
+//         fail on missing / duplicate / cross-surface / unexpected / stale-delegate / policy-less entries
 //   DOC-HONESTY (README.md + every SKILL.md): fail if a banned over-claim is reintroduced
 //     ("mechanically impossible", an unattended "spec to ship") or the fail-closed / common-spellings
 //     caveat is dropped from README. The legitimate "Spec to a shippable PR" wording stays allowed.
@@ -302,16 +306,16 @@ if (doCodex && existsSync(codexRoot)) {
   for (const a of codexTargets) {
     const adir = join(codexRoot, a);
     // C2. openai.yaml present with required fields
-    const ymlPath = join(adir, 'openai.yaml');
-    if (!existsSync(ymlPath)) { p(`codex-skills/${a}: missing openai.yaml (the Codex adapter manifest)`); continue; }
+    const ymlPath = join(adir, 'agents', 'openai.yaml');   // Codex reads the adapter manifest at agents/openai.yaml
+    if (!existsSync(ymlPath)) { p(`codex-skills/${a}: missing agents/openai.yaml (the Codex adapter manifest)`); continue; }
     const y = yamlFlat(readFileSync(ymlPath, 'utf8'));
     for (const field of ['name', 'description', 'delegate']) {
-      if (!y[field]) p(`codex-skills/${a}/openai.yaml: missing required field '${field}'`);
+      if (!y[field]) p(`codex-skills/${a}/agents/openai.yaml: missing required field '${field}'`);
     }
-    if (y.name && y.name !== a) p(`codex-skills/${a}/openai.yaml: name '${y.name}' != adapter directory name`);
+    if (y.name && y.name !== a) p(`codex-skills/${a}/agents/openai.yaml: name '${y.name}' != adapter directory name`);
     // C3. delegate resolves to a real Claude skill
     if (y.delegate && !existsSync(join(ROOT, y.delegate, 'SKILL.md'))) {
-      p(`codex-skills/${a}/openai.yaml: broken delegate '${y.delegate}' (no Claude skill ${y.delegate}/SKILL.md)`);
+      p(`codex-skills/${a}/agents/openai.yaml: broken delegate '${y.delegate}' (no Claude skill ${y.delegate}/SKILL.md)`);
     }
     // C4. adapter hooks.json only wires Codex-supported events
     const hooksPath = join(adir, 'hooks.json');
@@ -324,6 +328,99 @@ if (doCodex && existsSync(codexRoot)) {
           }
         }
       } catch (e) { p(`codex-skills/${a}/hooks.json: invalid JSON (${e.message})`); }
+    }
+  }
+}
+
+// ---- CATALOG: the sealed Codex skill inventory (codex-skills/catalog.json) ----
+// A whole-inventory seal, so it runs on the codex/all surface for the full tree (skipped for a --skill
+// slice). It asserts BOTH discovery surfaces resolve the same inventory with no cross-surface leak, then
+// validates that catalog.json mirrors that inventory EXACTLY ONCE per skill with a live adapter, a real
+// canonical source, an un-stale delegate, and a real invocation policy. On the real repo the inventory is
+// pinned to the canonical 18; under an alternate --root (fixtures) the discovered codex adapters are the
+// expected set, so the failure classes can be exercised without the 18 real skills present.
+const EXPECTED_SKILLS = [
+  'auto-spec', 'auto-plan', 'auto-build', 'auto-simplify', 'auto-test', 'auto-review',
+  'auto-performance', 'auto-ship', 'converge-loop', 'adversarial-verify', 'checkpoint-resume',
+  'fan-out-work', 'budget-guard', 'autonomous-pipeline', 'watch-and-act', 'schedule-recurring-agent',
+  'auto-map', 'auto-learn',
+];
+if (doCodex && existsSync(codexRoot) && !skillFilter) {
+  // Resolve both surfaces independently of --surface gating: cross-surface checks need both entrypoints.
+  const claudeDiscovered = subdirs(ROOT, CLAUDE_SKIP);            // Claude entrypoint = <name>/SKILL.md
+  const codexDiscovered = subdirs(codexRoot, null);              // Codex entrypoint = codex-skills/<name>/agents/openai.yaml
+  const isReal = !customRoot;
+  const expectedList = isReal ? EXPECTED_SKILLS : codexDiscovered;
+  const expected = new Set(expectedList);
+
+  // Cross-surface + count: neither surface may resolve the other's entrypoint, and on the real repo each
+  // side must resolve EXACTLY the canonical 18 (no more, no fewer, no stray dir leaking in).
+  if (claudeDiscovered.includes('codex-skills')) p(`catalog: Claude root discovery leaked the codex-skills adapter tree as a skill (cross-surface)`);
+  for (const s of codexDiscovered) {
+    if (!existsSync(join(codexRoot, s, 'agents', 'openai.yaml'))) p(`catalog: codex adapter '${s}' has no agents/openai.yaml entrypoint`);
+  }
+  if (isReal) {
+    if (claudeDiscovered.length !== 18) p(`catalog: Claude root discovery resolved ${claudeDiscovered.length} skills, expected exactly 18`);
+    if (codexDiscovered.length !== 18) p(`catalog: codex adapter discovery resolved ${codexDiscovered.length} adapters, expected exactly 18`);
+    const cd = new Set(codexDiscovered), cl = new Set(claudeDiscovered);
+    for (const s of EXPECTED_SKILLS) {
+      if (!cl.has(s)) p(`catalog: Claude surface does not resolve expected skill '${s}'`);
+      if (!cd.has(s)) p(`catalog: codex surface does not resolve expected skill '${s}'`);
+    }
+    for (const s of claudeDiscovered) if (!expected.has(s)) p(`catalog: Claude surface resolves unexpected entrypoint '${s}' (not in the canonical inventory)`);
+    for (const s of codexDiscovered) if (!expected.has(s)) p(`catalog: codex surface resolves unexpected entrypoint '${s}' (not in the canonical inventory)`);
+  }
+
+  // The catalog file itself.
+  const catalogPath = join(codexRoot, 'catalog.json');
+  if (!existsSync(catalogPath)) {
+    p(`codex-skills/catalog.json: missing (the sealed Codex skill inventory)`);
+  } else {
+    let cat = null;
+    try { cat = JSON.parse(readFileSync(catalogPath, 'utf8')); }
+    catch (e) { p(`codex-skills/catalog.json: invalid JSON (${e.message})`); }
+    if (cat) {
+      const entries = Array.isArray(cat.skills) ? cat.skills : null;
+      if (!entries) {
+        p(`codex-skills/catalog.json: must be a JSON object with a 'skills' array`);
+      } else {
+        const counts = new Map();
+        for (const [idx, e] of entries.entries()) {
+          const name = (e && (e.name ?? e.skill)) || null;
+          if (!name) { p(`codex-skills/catalog.json: entry #${idx} has no 'name'/'skill'`); continue; }
+          counts.set(name, (counts.get(name) || 0) + 1);
+          // unexpected: an entry naming something outside the resolved inventory
+          if (!expected.has(name)) { p(`codex-skills/catalog.json: unexpected skill '${name}' — not in the resolved inventory`); continue; }
+          // adapter: must be the codex-side path and actually exist (no cross-surface, no dangling)
+          if (e.adapter !== `codex-skills/${name}`) {
+            p(`codex-skills/catalog.json: '${name}' adapter '${e.adapter}' must be 'codex-skills/${name}' (cross-surface or malformed)`);
+          }
+          const admYaml = join(ROOT, `codex-skills/${name}`, 'agents', 'openai.yaml');
+          if (!existsSync(admYaml)) p(`codex-skills/catalog.json: '${name}' adapter dir has no agents/openai.yaml (dangling adapter)`);
+          // canonicalSource: must be a real Claude root skill and must NOT cross into codex-skills
+          const cs = e.canonicalSource;
+          if (!cs) p(`codex-skills/catalog.json: '${name}' missing canonicalSource`);
+          else if (String(cs).startsWith('codex-skills')) p(`codex-skills/catalog.json: '${name}' canonicalSource '${cs}' points into the codex tree (cross-surface — must be a root Claude skill)`);
+          else if (!existsSync(join(ROOT, cs, 'SKILL.md'))) p(`codex-skills/catalog.json: '${name}' canonicalSource '${cs}' is not a real Claude skill (no ${cs}/SKILL.md)`);
+          // delegate + policy: reconcile against the adapter's own openai.yaml (source of truth)
+          const adm = existsSync(admYaml) ? yamlFlat(readFileSync(admYaml, 'utf8')) : {};
+          if (!e.delegate) p(`codex-skills/catalog.json: '${name}' missing delegate`);
+          else if (adm.delegate !== undefined && e.delegate !== adm.delegate) p(`codex-skills/catalog.json: '${name}' delegate '${e.delegate}' is stale — adapter delegates to '${adm.delegate}'`);
+          else if (!existsSync(join(ROOT, e.delegate, 'SKILL.md'))) p(`codex-skills/catalog.json: '${name}' delegate '${e.delegate}' does not resolve to a Claude skill (no ${e.delegate}/SKILL.md)`);
+          // invocationPolicy: must be PRESENT (policy-less fails) and mirror allow_implicit_invocation
+          if (e.invocationPolicy === undefined || e.invocationPolicy === null) {
+            p(`codex-skills/catalog.json: '${name}' has no invocationPolicy (policy-less entry)`);
+          } else if (adm.allow_implicit_invocation !== undefined && String(e.invocationPolicy) !== String(adm.allow_implicit_invocation)) {
+            p(`codex-skills/catalog.json: '${name}' invocationPolicy '${e.invocationPolicy}' != adapter allow_implicit_invocation '${adm.allow_implicit_invocation}'`);
+          }
+        }
+        // missing / duplicate: every expected skill listed exactly once
+        for (const s of expectedList) {
+          const n = counts.get(s) || 0;
+          if (n === 0) p(`codex-skills/catalog.json: missing skill '${s}' (expected exactly once)`);
+          else if (n > 1) p(`codex-skills/catalog.json: duplicate skill '${s}' (listed ${n} times, expected exactly once)`);
+        }
+      }
     }
   }
 }

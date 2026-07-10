@@ -1,0 +1,7 @@
+name: auto-review
+description: REVIEW phase — multi-dimension review of a diff whose findings survive an adversarial refute check, returned severity-labeled and actionable; fails closed on any dimension that did not run.
+delegate: auto-review
+display_name: Auto Review
+short_description: Verified multi-axis code review that keeps only findings surviving an adversarial check.
+default_prompt: Invoke the $auto-review skill to review the current branch diff across all dimensions, keep only adversarially-verified findings, and report them severity-labeled with file:line and a suggested fix.
+allow_implicit_invocation: false

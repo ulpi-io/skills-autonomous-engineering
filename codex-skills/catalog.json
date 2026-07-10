@@ -1,0 +1,25 @@
+{
+  "$comment": "Sealed Codex skill inventory. Each of the 18 canonical skills appears EXACTLY ONCE. 'adapter' is the Codex adapter dir (holds agents/openai.yaml), 'canonicalSource' is the root Claude skill dir (holds SKILL.md), 'delegate' must equal the adapter's openai.yaml delegate, and 'invocationPolicy' mirrors that adapter's allow_implicit_invocation. Validated by scripts/validate-skills.mjs on the codex surface; the check fails on any missing / duplicate / cross-surface / unexpected / stale-delegate / policy-less entry.",
+  "version": 1,
+  "count": 18,
+  "skills": [
+    { "name": "auto-spec", "adapter": "codex-skills/auto-spec", "canonicalSource": "auto-spec", "delegate": "auto-spec", "invocationPolicy": false },
+    { "name": "auto-plan", "adapter": "codex-skills/auto-plan", "canonicalSource": "auto-plan", "delegate": "auto-plan", "invocationPolicy": false },
+    { "name": "auto-build", "adapter": "codex-skills/auto-build", "canonicalSource": "auto-build", "delegate": "auto-build", "invocationPolicy": false },
+    { "name": "auto-simplify", "adapter": "codex-skills/auto-simplify", "canonicalSource": "auto-simplify", "delegate": "auto-simplify", "invocationPolicy": false },
+    { "name": "auto-test", "adapter": "codex-skills/auto-test", "canonicalSource": "auto-test", "delegate": "auto-test", "invocationPolicy": false },
+    { "name": "auto-review", "adapter": "codex-skills/auto-review", "canonicalSource": "auto-review", "delegate": "auto-review", "invocationPolicy": false },
+    { "name": "auto-performance", "adapter": "codex-skills/auto-performance", "canonicalSource": "auto-performance", "delegate": "auto-performance", "invocationPolicy": false },
+    { "name": "auto-ship", "adapter": "codex-skills/auto-ship", "canonicalSource": "auto-ship", "delegate": "auto-ship", "invocationPolicy": false },
+    { "name": "converge-loop", "adapter": "codex-skills/converge-loop", "canonicalSource": "converge-loop", "delegate": "converge-loop", "invocationPolicy": false },
+    { "name": "adversarial-verify", "adapter": "codex-skills/adversarial-verify", "canonicalSource": "adversarial-verify", "delegate": "adversarial-verify", "invocationPolicy": true },
+    { "name": "checkpoint-resume", "adapter": "codex-skills/checkpoint-resume", "canonicalSource": "checkpoint-resume", "delegate": "checkpoint-resume", "invocationPolicy": true },
+    { "name": "fan-out-work", "adapter": "codex-skills/fan-out-work", "canonicalSource": "fan-out-work", "delegate": "fan-out-work", "invocationPolicy": false },
+    { "name": "budget-guard", "adapter": "codex-skills/budget-guard", "canonicalSource": "budget-guard", "delegate": "budget-guard", "invocationPolicy": true },
+    { "name": "autonomous-pipeline", "adapter": "codex-skills/autonomous-pipeline", "canonicalSource": "autonomous-pipeline", "delegate": "autonomous-pipeline", "invocationPolicy": false },
+    { "name": "watch-and-act", "adapter": "codex-skills/watch-and-act", "canonicalSource": "watch-and-act", "delegate": "watch-and-act", "invocationPolicy": true },
+    { "name": "schedule-recurring-agent", "adapter": "codex-skills/schedule-recurring-agent", "canonicalSource": "schedule-recurring-agent", "delegate": "schedule-recurring-agent", "invocationPolicy": false },
+    { "name": "auto-map", "adapter": "codex-skills/auto-map", "canonicalSource": "auto-map", "delegate": "auto-map", "invocationPolicy": false },
+    { "name": "auto-learn", "adapter": "codex-skills/auto-learn", "canonicalSource": "auto-learn", "delegate": "auto-learn", "invocationPolicy": false }
+  ]
+}

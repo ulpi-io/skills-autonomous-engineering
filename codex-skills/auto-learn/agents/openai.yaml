@@ -1,0 +1,7 @@
+name: auto-learn
+description: Close an autonomous run with a verified learning pass — harvest structured run artifacts, verify each lesson adversarially, dedupe, then route durable learnings into the next-session memory (AGENTS.md tree on Codex); mutates durable memory, so it is user-invoked.
+delegate: auto-learn
+display_name: Auto Learn
+short_description: Verified, deduped learnings harvested from a run into durable memory.
+default_prompt: Invoke the $auto-learn skill to harvest, verify, and record durable learnings from the latest autonomous run.
+allow_implicit_invocation: false

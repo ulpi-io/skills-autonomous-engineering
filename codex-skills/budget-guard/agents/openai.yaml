@@ -1,0 +1,7 @@
+name: budget-guard
+description: Before any unattended run declare the five stop conditions (done-condition, hard cap, budget, no-progress rule, escalation triggers) and hold the run to them, failing closed to an honest partial; delegates to the canonical budget-guard methodology.
+delegate: budget-guard
+display_name: Budget Guard
+short_description: Declare-and-enforce the five stop conditions for any unattended run.
+default_prompt: Use the $budget-guard skill to declare and enforce the five stop conditions before this unattended run starts, and stop the instant one fires.
+allow_implicit_invocation: true

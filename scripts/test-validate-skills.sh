@@ -52,15 +52,28 @@ allowed-tools:
 Body of the skill.
 MD
   done
-  mkdir -p "$d/codex-skills/adapter-a"
+  mkdir -p "$d/codex-skills/adapter-a/agents"
   printf '{"adapters":["adapter-a"]}\n' > "$d/codex-skills/manifest.json"
-  cat > "$d/codex-skills/adapter-a/openai.yaml" <<'YML'
+  cat > "$d/codex-skills/adapter-a/agents/openai.yaml" <<'YML'
 name: adapter-a
 description: Codex adapter that delegates to the someskill Claude skill.
 delegate: someskill
+allow_implicit_invocation: false
 YML
+  # sealed inventory: the one codex adapter, listed exactly once, delegating to a real Claude skill
+  cat > "$d/codex-skills/catalog.json" <<'JSON'
+{
+  "skills": [
+    { "name": "adapter-a", "adapter": "codex-skills/adapter-a", "canonicalSource": "someskill", "delegate": "someskill", "invocationPolicy": false }
+  ]
+}
+JSON
 }
 mk_clean "$C"
+
+# rewrite the clean catalog's skills array for a case: setcat <dir> <json-array-body>
+setcat() { printf '{ "skills": [ %s ] }\n' "$2" > "$1/codex-skills/catalog.json"; }
+ENTRY_A='{ "name": "adapter-a", "adapter": "codex-skills/adapter-a", "canonicalSource": "someskill", "delegate": "someskill", "invocationPolicy": false }'
 
 # fresh mutable copy of the clean fixture
 newcase() { local d="$TMP/$1"; rm -rf "$d"; cp -R "$C" "$d"; printf '%s' "$d"; }
@@ -84,7 +97,7 @@ d=$(newcase invalid_manifest); printf 'this is not json {{\n' > "$d/codex-skills
 expect_nz "invalid Codex manifest"                    --root "$d"
 
 d=$(newcase broken_delegate)
-cat > "$d/codex-skills/adapter-a/openai.yaml" <<'YML'
+cat > "$d/codex-skills/adapter-a/agents/openai.yaml" <<'YML'
 name: adapter-a
 description: Codex adapter whose delegate points at nothing.
 delegate: ghost-skill
@@ -93,7 +106,7 @@ expect_nz "broken delegate"                           --root "$d"
 expect_nz "broken delegate under --surface codex"     --root "$d" --surface codex
 
 d=$(newcase missing_field)
-cat > "$d/codex-skills/adapter-a/openai.yaml" <<'YML'
+cat > "$d/codex-skills/adapter-a/agents/openai.yaml" <<'YML'
 name: adapter-a
 description: Codex adapter missing its required delegate field.
 YML
@@ -125,6 +138,39 @@ expect_nz "dropped common-spellings caveat in README"              --root "$d"
 
 d=$(newcase doc_skill_banned); printf '\nThis path is mechanically impossible to reach.\n' >> "$d/someskill/SKILL.md"
 expect_nz "over-claim reintroduced in a SKILL.md"                  --root "$d"
+
+# ---- 5. CATALOG (sealed Codex inventory) — each failure class fails nonzero; clean passes ----
+# clean catalog already exercised by the "clean tree" cases above; re-assert it explicitly on codex+all
+expect 0  "clean catalog passes (surface all)"                     --root "$C"
+expect 0  "clean catalog passes (surface codex)"                   --root "$C" --surface codex
+
+d=$(newcase cat_missing_file); rm -f "$d/codex-skills/catalog.json"
+expect_nz "catalog.json absent fails"                              --root "$d"
+expect_nz "catalog.json absent fails (surface codex)"             --root "$d" --surface codex
+
+d=$(newcase cat_bad_json); printf 'not json {{\n' > "$d/codex-skills/catalog.json"
+expect_nz "catalog.json invalid JSON fails"                       --root "$d"
+
+d=$(newcase cat_missing_entry); setcat "$d" ''
+expect_nz "missing skill (adapter present, uncatalogued) fails"   --root "$d"
+
+d=$(newcase cat_duplicate); setcat "$d" "$ENTRY_A, $ENTRY_A"
+expect_nz "duplicate skill entry fails"                           --root "$d"
+
+d=$(newcase cat_unexpected); setcat "$d" "$ENTRY_A, { \"name\": \"ghost\", \"adapter\": \"codex-skills/ghost\", \"canonicalSource\": \"ghost\", \"delegate\": \"ghost\", \"invocationPolicy\": false }"
+expect_nz "unexpected skill (not in inventory) fails"             --root "$d"
+
+d=$(newcase cat_cross_adapter); setcat "$d" '{ "name": "adapter-a", "adapter": "someskill", "canonicalSource": "someskill", "delegate": "someskill", "invocationPolicy": false }'
+expect_nz "cross-surface adapter path fails"                     --root "$d"
+
+d=$(newcase cat_cross_source); setcat "$d" '{ "name": "adapter-a", "adapter": "codex-skills/adapter-a", "canonicalSource": "codex-skills/adapter-a", "delegate": "someskill", "invocationPolicy": false }'
+expect_nz "cross-surface canonicalSource (into codex tree) fails" --root "$d"
+
+d=$(newcase cat_stale_delegate); setcat "$d" '{ "name": "adapter-a", "adapter": "codex-skills/adapter-a", "canonicalSource": "someskill", "delegate": "otherskill", "invocationPolicy": false }'
+expect_nz "stale delegate (mismatch with adapter) fails"         --root "$d"
+
+d=$(newcase cat_policyless); setcat "$d" '{ "name": "adapter-a", "adapter": "codex-skills/adapter-a", "canonicalSource": "someskill", "delegate": "someskill" }'
+expect_nz "policy-less entry (no invocationPolicy) fails"        --root "$d"
 
 echo ""
 if [ "$fails" -gt 0 ]; then echo "✗ $fails validate-skills contract test(s) failed"; exit 1; fi

@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Deterministic, hermetic CI: NO Codex login, NO external network, NO user-global config, and NO
+# writable path outside the checkout / $RUNNER_TEMP. The Codex smoke runs in its DEFAULT fake mode
+# (never --live). Every suite is its own visible, named, fail-fast step: a red gate fails the job
+# (no continue-on-error, no shell masking) and GitHub stops before any later step can mask it.
 jobs:
   validate-skills:
     runs-on: ubuntu-latest
@@ -13,11 +17,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Validate skills (frontmatter, routing budget, refs, scripts, hooks, manifests, self-containment)
-        run: node scripts/validate-skills.mjs
+
+      # --- Cross-surface skill/manifest/hook validation ---
+      - name: Validate skills (both surfaces, hooks) — frontmatter, routing budget, refs, scripts, manifests, self-containment
+        run: node scripts/validate-skills.mjs --surface all --hooks
+
+      # --- Shell suites (guards + gate contracts) ---
       - name: Guard scripts behave (block/allow/escape-hatch contract)
         run: bash scripts/test-guards.sh
-      - name: Checkpoint CLI contract (lifecycle + fail-closed refusals + timestamps + launch)
+      - name: Checkpoint store contract (lifecycle + fail-closed refusals + timestamps + launch)
         run: bash scripts/test-checkpoint.sh
       - name: Run-status reader contract (read-only render/list/json/resume)
         run: bash scripts/test-run-status.sh
@@ -27,7 +35,57 @@ jobs:
         run: bash scripts/test-plan-validate.sh
       - name: Harvest contract (auto-learn extracts every learning-signal class with evidence)
         run: bash scripts/test-harvest.sh
-      - name: Pipeline workflow transitions (fail-closed gates under a mock runtime — no live agents)
+      - name: Validate-skills behavior contract (dual-surface flags + doc-honesty guard)
+        run: bash scripts/test-validate-skills.sh
+      - name: Watch-state contract (durable cross-turn watch bounds + fail-closed refusals)
+        run: bash scripts/test-watch-state.sh
+      - name: Scheduled-job gate contract (schema, dedup-first, capability, teardown)
+        run: bash scripts/test-scheduled-job.sh
+      - name: Codex lifecycle hooks contract (dual Claude+Codex resume/honest-termination)
+        run: bash scripts/test-codex-hooks.sh
+      - name: Codex marketplace packager contract (topology + 18 adapters + version parity)
+        run: bash scripts/test-codex-package.sh
+      - name: Review workflow is legacy Claude-only (Codex artifact excludes it)
+        run: bash scripts/test-review-workflow-claude-only.sh
+
+      # --- Node unit / E2E suites (node:test, mock/fake runtimes — no live agents, no network) ---
+      - name: Pipeline state machine (legal/illegal transitions + convergence conjunction)
+        run: node --test scripts/test-pipeline-state.mjs
+      - name: CLI contract (argv/flag parsing + fail-closed refusals)
+        run: node --test scripts/test-cli-contract.mjs
+      - name: Git workspaces (worktree isolation lifecycle)
+        run: node --test scripts/test-git-workspaces.mjs
+      - name: Git integration (merge/integration safety)
+        run: node --test scripts/test-git-integration.mjs
+      - name: Codex executor (buildCodexArgv + schema-output gate + process runner)
+        run: node --test scripts/test-codex-executor.mjs
+      - name: Budget ledger (token/iteration accounting + fail-closed caps)
+        run: node --test scripts/test-budget-ledger.mjs
+      - name: Authorization (permission/authority boundaries)
+        run: node --test scripts/test-authorization.mjs
+      - name: Review panel (adversarial verify + majority-refute)
+        run: node --test scripts/test-review-panel.mjs
+      - name: Build engine (slice-scoped build DAG)
+        run: node --test scripts/test-build-engine.mjs
+      - name: Phase engine (fail-closed phase gates)
+        run: node --test scripts/test-phase-engine.mjs
+      - name: Pipeline CLI (coordinator command surface)
+        run: node --test scripts/test-pipeline-cli.mjs
+      - name: Pipeline E2E (zero-network real coordinator over temp repos + fake codex)
+        run: node --test scripts/test-pipeline-e2e.mjs
+      - name: Pipeline security (isolation + redaction + fail-closed under adversarial input)
+        run: node --test scripts/test-pipeline-security.mjs
+      - name: Dual plugin discovery (Claude + Codex surfaces resolve the same inventory)
+        run: node --test scripts/test-dual-plugin-discovery.mjs
+      - name: Codex smoke (DEFAULT fake mode — no login, no network, isolated CODEX_HOME/HOME)
+        run: node --test scripts/test-codex-smoke.mjs
+      - name: CI workflow contract (every suite is a named, unmaskable, hermetic gate)
+        run: node --test scripts/test-ci-workflow.mjs
+
+      # --- Legacy compatibility suite ---
+      - name: Pipeline workflow transitions (legacy fail-closed gates under a mock runtime — no live agents)
         run: node scripts/test-pipeline-workflow.mjs
+
+      # --- Static site (owned by the site slice — do not remove) ---
       - name: Static site routes, links, metadata, analytics, and generated-output drift
         run: node --test scripts/test-site.mjs

@@ -1,0 +1,7 @@
+name: auto-test
+description: Codex adapter for the TEST phase — raise test health to a green, meaningful, mutation-checked suite that fails closed and never games itself green, delegating to the canonical auto-test methodology.
+delegate: auto-test
+display_name: Auto Test
+short_description: Drive to a green, meaningful, mutation-checked suite — fails closed, never gamed green.
+default_prompt: Invoke the $auto-test skill to raise test health on the target — find untested behaviors, write mutation-checked tests, and loop until the suite is genuinely green.
+allow_implicit_invocation: false

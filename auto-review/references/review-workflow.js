@@ -1,11 +1,20 @@
-// review-workflow.js — the runnable Workflow behind `auto-review`.
+// review-workflow.js — the LEGACY, CLAUDE-ONLY compatibility backend for `auto-review`.
 //
-// Fan out one reviewer per dimension over a diff → dedup across dimensions (a genuine barrier:
-// dedup needs the full set) → adversarially verify each finding with a skeptic panel → return
-// ONLY the survivors, severity-ranked, plus the rejection ledger and the coverage record.
-// FAIL-CLOSED: a dimension whose reviewer died is reported as a COVERAGE GAP, never as "clean".
+// NOT a cross-host runtime. This template runs ONLY under the Claude Code `Workflow` tool; the
+// Codex adapter CANNOT select it (a Workflow needs the Claude Code runtime, which Codex does not
+// provide) and it is deliberately NOT shipped in the Codex marketplace artifact. On Codex the
+// auto-review skill's own contract drives the review directly — this file is never reached by a
+// per-role Codex hand-off. And no single reviewer or skeptic prompt decides the outcome: coverage,
+// the dedup barrier, quorum, and the fail-closed verdict are all decided by this Workflow's own
+// control flow below, not by any model prompt. This backend exists only for Claude-only installs.
 //
-// Launch (from the skill):
+// What it does (Claude runtime): fan out one reviewer per dimension over a diff → dedup across
+// dimensions (a genuine barrier: dedup needs the full set) → adversarially verify each finding with a
+// skeptic panel → return ONLY the survivors, severity-ranked, plus the rejection ledger and the
+// coverage record. FAIL-CLOSED: a dimension whose reviewer died is reported as a COVERAGE GAP, never
+// as "clean".
+//
+// Launch (from the skill, Claude Code only):
 //   Workflow({ scriptPath: "<this file>", args: {
 //     root: "<abs repo path>",             // REQUIRED
 //     diffCmd: "git diff main...HEAD",     // REQUIRED — the exact diff command for the scope
@@ -16,7 +25,7 @@
 
 export const meta = {
   name: 'auto-review',
-  description: 'Multi-dimension diff review → dedup → adversarial verification; returns confirmed findings + rejection ledger + coverage (fail-closed)',
+  description: 'LEGACY Claude-only Workflow backend (NOT a cross-host runtime; the Codex adapter cannot select it) — multi-dimension diff review → dedup → adversarial verification; returns confirmed findings + rejection ledger + coverage (fail-closed)',
   phases: [
     { title: 'Review', detail: 'one independent reviewer per dimension over the diff' },
     { title: 'Verify', detail: 'majority-refute skeptic panel per deduped finding' },

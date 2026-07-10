@@ -1,0 +1,7 @@
+name: converge-loop
+description: Run a bounded, self-correcting loop that drives code to a machine-checkable target (until-green or until-dry) and STOPS honestly with a full termination set; delegates to the canonical converge-loop methodology.
+delegate: converge-loop
+display_name: Converge Loop
+short_description: Bounded until-green/until-dry loop that converges and stops honestly.
+default_prompt: Use the $converge-loop skill to drive this work to its measurable target and stop the instant it converges, exhausts its cap/budget, or stalls.
+allow_implicit_invocation: false

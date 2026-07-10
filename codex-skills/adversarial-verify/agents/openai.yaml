@@ -1,0 +1,7 @@
+name: adversarial-verify
+description: Prove a claim before acting on it by running N independent skeptics prompted to REFUTE it and keeping it only if a majority fails; fails closed on ties; delegates to the canonical adversarial-verify methodology.
+delegate: adversarial-verify
+display_name: Adversarial Verify
+short_description: Refute-first panel that gates a claim before you act on it.
+default_prompt: Use the $adversarial-verify skill to gate this claim before acting on it — run refute-first skeptics and keep it only if a majority fails to refute.
+allow_implicit_invocation: true

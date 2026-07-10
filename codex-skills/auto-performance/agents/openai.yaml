@@ -1,0 +1,7 @@
+name: auto-performance
+description: PERFORMANCE phase — metric + reproducible baseline first, profile to the real hotspots, then benchmark-gated per-hotspot changes kept only when the win is real beyond variance and correctness holds; else reverted.
+delegate: auto-performance
+display_name: Auto Performance
+short_description: Measurement-first optimization that accepts a change only when a benchmark proves it faster.
+default_prompt: Invoke the $auto-performance skill to establish a metric and reproducible baseline, profile to the real hotspots, and apply benchmark-gated optimizations that are kept only when proven faster beyond variance with correctness intact.
+allow_implicit_invocation: false
