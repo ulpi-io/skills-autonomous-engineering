@@ -3256,3 +3256,248 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
   .plugin-card,
   .related-card { break-inside: avoid; }
 }
+
+/* --- Original visual grammar: multipage readability ---------------------
+ * Keep the established measurement grid, ruled surfaces, type families, and
+ * rust instrumentation. New page components must use body-sized type for
+ * information; micro-mono remains metadata only.
+ */
+.page-hero .hero-index.panel {
+  align-self: center;
+  background: var(--ground-2);
+}
+
+.hero-index.panel > .lab {
+  padding: 14px 18px;
+  font-size: 12px;
+}
+
+.hero-index.panel > div {
+  min-height: 47px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 11px 18px;
+}
+
+.hero-index.panel b {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+}
+
+.hero-index.panel span:not(.lab) {
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.phase-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: visible;
+}
+
+.phase-stage {
+  min-width: 0;
+  min-height: 128px;
+  padding: 21px 20px 22px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.phase-stage:nth-child(4n) { border-right: 0; }
+.phase-stage:nth-last-child(-n + 4) { border-bottom: 0; }
+
+.phase-stage > span {
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.phase-stage code {
+  margin-top: 11px;
+  overflow-wrap: normal;
+  font-size: 15px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.phase-stage p {
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.phase-strip + .loopnote {
+  margin-top: 0;
+  padding: 14px 18px;
+  border: 1px solid var(--rule);
+  border-top: 0;
+  background: var(--ground-2);
+  color: var(--ink-2);
+  font-family: var(--body);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.phase-strip + .loopnote b {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+.instrument-top {
+  align-items: flex-start;
+  flex-direction: column;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.instrument-top > span:last-child {
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.rail-step {
+  padding-block: 12px;
+}
+
+.rail-step > p {
+  color: var(--ink-2);
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (max-width: 920px) {
+  .phase-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .phase-stage,
+  .phase-stage:nth-child(4n),
+  .phase-stage:nth-last-child(-n + 4) {
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .phase-stage:nth-child(2n) { border-right: 0; }
+  .phase-stage:nth-last-child(-n + 2) { border-bottom: 0; }
+
+  .detail-grid { gap: 0; }
+}
+
+@media (max-width: 600px) {
+  .phase-strip { grid-template-columns: 1fr; }
+
+  .phase-stage,
+  .phase-stage:nth-child(2n),
+  .phase-stage:nth-child(4n),
+  .phase-stage:nth-last-child(-n + 2),
+  .phase-stage:nth-last-child(-n + 4) {
+    display: grid;
+    min-height: 0;
+    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 16px;
+    padding: 17px 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .phase-stage:last-child { border-bottom: 0; }
+
+  .phase-stage > span {
+    grid-row: 1 / span 2;
+    align-self: start;
+    padding-top: 2px;
+  }
+
+  .phase-stage code {
+    grid-column: 2;
+    margin-top: 0;
+  }
+
+  .phase-stage p {
+    grid-column: 2;
+    margin-top: 4px;
+  }
+
+  .phase-strip + .loopnote {
+    display: block;
+    padding: 15px 18px;
+  }
+
+  .phase-strip + .loopnote b {
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .how-matrix,
+  .how-matrix tbody,
+  .how-matrix tr,
+  .how-matrix td {
+    display: block;
+    width: 100%;
+  }
+
+  .how-matrix {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .how-matrix thead {
+    display: none;
+  }
+
+  .how-matrix tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .how-matrix tr {
+    border: 1px solid var(--rule);
+    background: color-mix(in oklab, var(--ground) 80%, transparent);
+  }
+
+  .how-matrix td,
+  .how-matrix tbody tr:last-child td {
+    display: grid;
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 12px;
+    padding: 13px 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .how-matrix td:last-child,
+  .how-matrix tbody tr:last-child td:last-child { border-bottom: 0; }
+
+  .how-matrix td::before {
+    color: var(--ink-2);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .how-matrix td:nth-child(1)::before { content: "Mechanism"; }
+  .how-matrix td:nth-child(2)::before { content: "Enforces"; }
+  .how-matrix td:nth-child(3)::before { content: "Evidence"; }
+
+  .how-matrix code,
+  .how-matrix .mono {
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand span,
+  .site-brand span { max-width: 175px; }
+}
