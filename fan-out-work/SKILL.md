@@ -2,15 +2,10 @@
 name: fan-out-work
 version: 0.1.0
 description: |
-  Cover a large work-list in parallel without losing correctness or honesty — scout the items inline,
-  then run each through its stages concurrently (map, optionally reduce) via the Workflow tool, with
-  concurrency caps, per-item isolation where items mutate files, and an explicit account of anything
-  dropped. Use when the task is "do the same thing to N independent things" — audit every module, migrate
-  every call site, write tests for every gap, review every changed file — and N is big enough that serial
-  is wasteful. It keeps the coordinator in control of the decision to continue while the per-item work
-  runs in agents; it never silently truncates (a top-N/sampling cap is logged), and it aggregates results
-  faithfully (a failed item becomes a reported null, not a hidden success). Composes with converge-loop
-  (per-item loops) and adversarial-verify (gate each item's result).
+  Use when you have (or can cheaply discover) a list of INDEPENDENT items that each need the same multi-step
+  treatment and doing them serially wastes wall-clock — audit every module, migrate every call site, test
+  every gap, review every changed file. Triggers on "do this to all of them", a broad sweep, a per-file pass
+  over a big N. Not for a handful of items or cross-item-dependent work.
 allowed-tools:
   - Workflow
   - Agent

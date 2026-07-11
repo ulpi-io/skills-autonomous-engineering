@@ -4,7 +4,10 @@ version: 0.1.0
 disable-model-invocation: true
 user-invocable: true
 description: |
-  Make code measurably faster without breaking it: metric + reproducible baseline FIRST, profile to the real hotspots, then per hotspot apply a change and re-benchmark — kept ONLY if the win is real beyond variance AND correctness holds; otherwise reverted. Stops at the target or diminishing returns. Never accepts an unmeasured "should be faster".
+  Use when there is a performance requirement, a latency/throughput target, or a suspected regression and you
+  want to optimize the RIGHT thing, proven by measurement. Triggers on "make it faster", a slow
+  endpoint/page/query, a perf budget, "is this a regression", profiling. Not for a guessed "should be faster"
+  with no benchmark.
 allowed-tools:
   - Bash
   - Read

@@ -2,7 +2,10 @@
 name: budget-guard
 version: 0.1.0
 description: |
-  The discipline that keeps an autonomous run from becoming a runaway: before any unattended loop or workflow, declare the five stop conditions — done-condition, hard cap, token/time budget, no-progress rule, escalation triggers — then hold the run to them and stop the instant one fires. Fails closed: a capped run reports an honest partial, never fabricated success. Load at the start of ANY unattended run.
+  Use at the start of ANY unattended run — a loop, a fan-out, an auto-phase, the full pipeline — before it
+  spawns many agents or executes many rounds with no human in between, to set and enforce the stop conditions
+  that keep it from running away. Triggers on "run this unattended", "don't let it spin", long autonomous
+  work, anything looping toward a target.
 allowed-tools:
   - Bash
   - Read

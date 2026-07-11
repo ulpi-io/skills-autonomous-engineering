@@ -2,15 +2,10 @@
 name: auto-spec
 version: 0.1.0
 description: |
-  Turn a raw feature request into a grounded, TESTABLE spec — autonomously. It recons the real repo and
-  domain to ground every claim, drafts a spec (objectives, user-visible behavior, acceptance criteria,
-  explicit non-goals, constraints, interfaces, risks), then runs a completeness-critic loop that
-  adversarially hunts for gaps, ambiguity, and untestable criteria and fixes them until the spec is
-  stable. Every acceptance criterion it emits is measurable (you could write a test for it); every
-  requirement is grounded in the repo or flagged as an assumption — no invented requirements, no phantom
-  paths. It writes `.ulpi/spec/<name>.md` and is the DEFINE phase that feeds auto-plan. Composes
-  fan-out-work (recon), adversarial-verify (the critic), converge-loop (until-stable), and
-  checkpoint-resume.
+  Use at the start of any new feature, product, or significant change, when you need a written, testable spec
+  before planning or code — especially when the request is broad, vague, or needs grounding in the real repo
+  first. Triggers on "spec this out", "what should we build", "write the requirements", turning a rough idea
+  into acceptance criteria. Not for planning HOW to build.
 allowed-tools:
   - Bash
   - Read

@@ -2,7 +2,10 @@
 name: watch-and-act
 version: 0.2.0
 description: |
-  Wait on an EXTERNAL signal the harness can't notify you about — CI, a deploy, a queue, an endpoint — polling on a cache-aware cadence (≤270s active, ≥1200s idle, never ~300s), bounded by a deadline, acting on the transition. Prefers a NATIVE wait/monitor capability when present; when polling must cross a turn it persists a durable, atomic, resumable watch state (`scripts/watch-state.mjs`) so the ORIGINAL bound survives a fresh process and a missing wake capability degrades to a resumable PENDING report instead of blocking. Never polls harness-tracked background work (that re-invokes you automatically). Use to bridge a run to something happening elsewhere.
+  Use to wait on EXTERNAL state that changes on its own timeline and the harness won't wake you for — CI or
+  build status, a deploy, a remote queue draining, a URL becoming healthy, an approval landing — then act on
+  the transition. Triggers on "wait for CI", "watch the deploy", "poll until it's ready/green". Not for
+  harness-tracked background work (it re-invokes you automatically), and not for a one-time inline check.
 allowed-tools:
   - Bash
   - Read

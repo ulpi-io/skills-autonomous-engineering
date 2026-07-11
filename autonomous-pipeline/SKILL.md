@@ -2,15 +2,10 @@
 name: autonomous-pipeline
 version: 0.1.1
 description: |
-  Run the whole engineering lifecycle end-to-end from one request — spec → plan → build → simplify → test
-  → review → performance → ship — as a single autonomous pass with ONE human approval (the plan) and
-  hard-gated escalation for anything irreversible. It chains the auto-* phase skills, carries a durable
-  pipeline checkpoint so a stop/crash resumes at the exact phase and task it left off, watches the signal
-  between phases (a phase that misses its gate is recorded blocked and surfaces in the register — fail closed, no false-green downstream), and returns a
-  verified findings register at the end. It does NOT loop on its own: after one pass it reports what
-  shipped and what's open, and the user decides on any fix round. This is the top-level "maximise
-  autonomous agents" entry point. Composes every auto-* phase plus checkpoint-resume, budget-guard,
-  watch-and-act, and adversarial-verify.
+  Use when the user wants a whole request taken from idea to shipped in one autonomous run — spec, plan,
+  build, simplify, test, review, performance, ship — rather than invoking each phase by hand. Triggers on
+  "take this end to end", "build and ship this", "run the whole pipeline", "do the whole thing autonomously".
+  Explicit-user-only; spawns many agents over many rounds.
 allowed-tools:
   - Skill
   - Agent

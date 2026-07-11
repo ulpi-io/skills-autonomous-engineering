@@ -2,7 +2,10 @@
 name: schedule-recurring-agent
 version: 0.2.0
 description: |
-  Stand up a recurring scheduled agent for standing work (triage, monitoring, audits, digests): a self-contained IDEMPOTENT brief (each run wakes memory-less and must dedup prior work), a cadence matched to how often work actually arrives, a per-run BOUND, escalation rules, and a teardown condition. For durable unattended work that runs while you're offline, use claude.ai Routines (the /schedule skill / RemoteTrigger); an in-session CronCreate is the lighter, session-scoped alternative. Use for scheduled repeat work — not one-off waits (watch-and-act).
+  Use when standing work should run repeatedly on a cadence with no human kicking it off each time — recurring
+  triage, monitoring, audits, or digests on a daily/weekly/hourly schedule. Triggers on "every morning",
+  "check X weekly", "run this on a schedule", "set up a recurring agent / routine / cron". Not for a one-off
+  wait within the current run.
 allowed-tools:
   - Skill
   - RemoteTrigger

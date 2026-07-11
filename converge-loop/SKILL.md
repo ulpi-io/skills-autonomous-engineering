@@ -2,7 +2,10 @@
 name: converge-loop
 version: 0.1.0
 description: |
-  Run a bounded, self-correcting loop that drives code toward a target state and STOPS honestly — until-green (validate → diagnose → minimal fix → re-run) or until-dry (find → act → re-find until N dry rounds). Every loop declares a termination set (done-condition, max iterations, budget, no-progress stop) and compiles onto native /goal + /loop. Use for any "repeat until a measurable condition holds" work instead of hand-rolling a keep-going loop.
+  Use whenever the task is "repeat an action until a measurable condition holds" — fix until tests or
+  typecheck pass, clean until a linter is quiet, harden until an audit is dry, add tests until coverage is met
+  — and you want it to STOP honestly rather than spin. Triggers on "keep going until it's green", "loop until
+  done", until-green / until-dry work. Not for one-shot tasks or unmeasurable goals.
 allowed-tools:
   - Workflow
   - Bash

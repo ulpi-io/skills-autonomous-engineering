@@ -4,14 +4,9 @@ version: 0.1.0
 disable-model-invocation: true
 user-invocable: true
 description: |
-  Close every autonomous run with a learning pass so the machine never repeats a mistake it already
-  paid for: harvest the run's STRUCTURED artifacts (checkpoint register, blocked-task reasons, guard
-  blocks, fix-loop counts, degradations), verify each candidate lesson adversarially, dedupe against
-  what is already known, then WRITE each learning to the Claude Code memory that LOADS AUTOMATICALLY
-  next session — a convention or plan-shape rule into CLAUDE.md, an area-specific lesson into a
-  path-scoped .claude/rules file, an environment quirk into auto memory. Machine defects are surfaced to
-  the user, never self-patched. Because those are native context files Claude Code already loads, the
-  next run picks the lessons up with no extra step. Use as the closing phase of every run, or standalone.
+  Use at the end of an autonomous run, or after a session that hit blocks, thrash, wrong turns, or surprises
+  worth not repeating, when you want the lessons captured so the next session starts smarter. Triggers on run
+  wrap-up, "what did we learn", a recurring mistake, the post-mortem of a pipeline run.
 allowed-tools:
   - Bash
   - Read

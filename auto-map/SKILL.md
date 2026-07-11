@@ -4,15 +4,10 @@ version: 0.1.0
 disable-model-invocation: true
 user-invocable: true
 description: |
-  Generate and refresh the project's CONTEXT ARCHITECTURE — a disclosure-tiered map so the agent starts
-  every session knowing the repo without paying for what it doesn't need. Platform-aware by explicit
-  contract (claude|codex|dual): for Claude a lean root CLAUDE.md (loads always), path-scoped
-  .claude/rules/*.md (load only when touching matching files), nested CLAUDE.md throughout the tree
-  (loaded on demand — zero cost until then); for Codex the root + nested AGENTS.md tree instead — never
-  inventing a memory location the platform lacks, never touching private agent memory. Deep references
-  are LINKED, never imported. Every claim is VERIFIED against the real repo before it ships (commands
-  actually run; paths actually exist) — the map cannot lie. Use to initialize project context, refresh
-  it after meaningful changes, or as the pipeline's final phase so the map reflects what just shipped.
+  Use when a repo has no context map the agent can trust (a real CLAUDE.md / AGENTS.md), after
+  architecture-level changes (new packages, moved modules, changed build/test commands), or to audit an
+  existing map for drift. Triggers on onboarding a codebase, "set up project memory", stale docs, the agent
+  not knowing the layout.
 allowed-tools:
   - Bash
   - Read

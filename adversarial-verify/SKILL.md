@@ -2,7 +2,10 @@
 name: adversarial-verify
 version: 0.1.0
 description: |
-  Prove a claim before acting on it: spawn N independent skeptics prompted to REFUTE it (optionally through distinct lenses — correctness, reproduction, security, regression, measurement) and keep it only if a majority fails. Fails closed on ties. Use to gate findings before fixing, fixes before committing, and any "clean/safe" verdict before trusting it.
+  Use when you're about to act on something an agent claimed but did not prove — before fixing a reported bug,
+  committing a refactor, trusting a "no vulnerabilities" / "safe to merge" verdict, or accepting a benchmark
+  "win" — and getting it wrong would be expensive or hard to reverse. Triggers on unverified findings, "should
+  be fine", "looks clean", a single-source assertion about to drive a mutation.
 allowed-tools:
   - Agent
   - Workflow

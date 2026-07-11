@@ -2,16 +2,10 @@
 name: auto-build
 version: 0.1.1
 description: |
-  Implement a whole DAG plan autonomously — one approved pass, one clean rollback point per task, never
-  building on a broken base. It requires an approved plan (specced upstream) and a clean git baseline, takes a SINGLE human
-  approval of the plan, then walks the DAG layer by layer: for each task it implements on an isolated
-  worktree branch test-first (RED → GREEN), integrates the slice onto the working branch, reviews the
-  integrated change, runs a bounded fix loop until the task passes, and commits it individually — so any
-  point is a clean rollback. It follows the dependency graph strictly (a task builds only once its deps
-  integrate), checkpoints every task so it resumes exactly where it stopped, and STOPS-and-asks on
-  unfixable failures, ambiguity, or irreversible steps rather than pushing through. This is the BUILD
-  phase. Composes fan-out-work (per layer), converge-loop (per-task fix), adversarial-verify (per-task
-  review), checkpoint-resume, and budget-guard.
+  Use when a spec and an approved task plan already exist and you want the whole plan built in one unattended
+  pass — every task implemented test-first, integrated, reviewed, and committed individually — instead of
+  coding task-by-task by hand. Triggers on "build the plan", "implement all the tasks", "run the build phase".
+  Explicit-user-only; needs a plan and a clean git baseline first.
 allowed-tools:
   - Bash
   - Read

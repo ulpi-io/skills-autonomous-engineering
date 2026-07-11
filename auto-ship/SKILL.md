@@ -2,14 +2,10 @@
 name: auto-ship
 version: 0.1.1
 description: |
-  Take verified work to shippable — autonomously, with fail-closed gates and a human sign-off on anything
-  irreversible. It runs the pre-launch gate (final validate green, review clean, security/observability/
-  rollback checks), and a gate that DIDN'T actually run is treated as a blocker, never as clean. Then it
-  prepares the release: atomic commits, a changelog/release notes grounded in the actual changes, version
-  bump, docs for user-visible/API changes — and opens the PR (or stages the rollout: feature flag +
-  rollback path + monitoring). The deploy itself is gated on explicit human approval. It fails closed and
-  never fabricates a green gate to ship. This is the SHIP phase. Composes adversarial-verify (confirm the
-  "ready" claim), checkpoint-resume, and budget-guard.
+  Use when a change is already built, tested, and reviewed and you want it taken to shippable — release gates
+  run, changelog/version/docs prepared, PR opened or a rollout staged. Triggers on "ship it", "cut a release",
+  "open the PR", "prepare the deploy". Explicit-user-only; never deploys anything irreversible without human
+  sign-off.
 allowed-tools:
   - Bash
   - Read

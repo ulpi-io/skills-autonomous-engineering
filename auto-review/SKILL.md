@@ -2,15 +2,10 @@
 name: auto-review
 version: 0.1.0
 description: |
-  Review a change across every dimension at once, then keep only the findings that survive an adversarial
-  check — autonomously. It fans out independent reviewers over the diff (correctness, security,
-  performance, maintainability/readability, test adequacy, API/contract & compatibility), dedups their
-  findings, and puts each through a majority-refute verification so false positives never reach you or
-  drive a fix. Survivors come back severity-labeled and actionable (file:line, why, suggested fix), and —
-  if you ask — a bounded fix loop resolves the confirmed blockers. It fails closed: a dimension that
-  didn't actually run is reported as a gap, never as "clean". This is the REVIEW phase. Composes
-  fan-out-work (dimensions), adversarial-verify (confirm findings), converge-loop (optional fix), and
-  checkpoint-resume.
+  Use before merging a change, or to audit a module, branch, or PR, when you want a multi-axis review
+  (correctness, security, performance, maintainability, tests, API/compat) whose findings are verified real
+  rather than a raw model dump full of false positives. Triggers on "review this", a pre-merge check, "is this
+  safe to merge", a diff/branch/PR audit.
 allowed-tools:
   - Bash
   - Read

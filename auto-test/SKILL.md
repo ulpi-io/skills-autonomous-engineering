@@ -4,7 +4,10 @@ version: 0.1.1
 disable-model-invocation: true
 user-invocable: true
 description: |
-  Raise test health to a green, MEANINGFUL suite: find untested behaviors, write real tests, loop-until-green — with every added test MUTATION-CHECKED (break the code, the test must fail; tautologies rejected). Fails closed: never games the suite green (a skill-scoped hook mechanically blocks .skip/.only/suppressions in test files). Checkpointed and resumable. Use after a build, on a risky module, for a bug repro, or to de-flake (auto-test flaky).
+  Use when you want to prove code works and lock in its behavior with a meaningful suite — after a build, on a
+  risky or untested module, to add a regression test that reproduces a known bug, or to de-flake an unreliable
+  suite. Triggers on "add tests", "raise coverage", "cover this", "make the tests pass", flaky/intermittent
+  failures. Not for test-first authoring during new-behavior implementation.
 allowed-tools:
   - Bash
   - Read
