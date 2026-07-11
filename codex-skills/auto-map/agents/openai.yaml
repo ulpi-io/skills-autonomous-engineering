@@ -1,5 +1,5 @@
 name: auto-map
-description: Generate/refresh the project's disclosure-tiered context architecture (AGENTS.md tree on Codex), verified against the real repo before it ships; mutates durable project memory, so it is user-invoked, not auto-triggered.
+description: "Use when a repo has no context map the agent can trust (a real CLAUDE.md / AGENTS.md), after architecture-level changes (new packages, moved modules, changed build/test commands), or to audit an existing map for drift. Triggers on onboarding a codebase, \"set up project memory\", stale docs, the agent not knowing the layout."
 delegate: auto-map
 display_name: Auto Map
 short_description: Verified, disclosure-tiered project context map (Codex AGENTS.md tree).

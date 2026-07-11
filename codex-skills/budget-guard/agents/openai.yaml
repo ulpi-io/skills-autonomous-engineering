@@ -1,5 +1,5 @@
 name: budget-guard
-description: Before any unattended run declare the five stop conditions (done-condition, hard cap, budget, no-progress rule, escalation triggers) and hold the run to them, failing closed to an honest partial; delegates to the canonical budget-guard methodology.
+description: "Use when about to start ANY unattended run — a loop, a fan-out, an auto-phase, the full pipeline — that will spawn many agents or execute many rounds with no human in between, to set and enforce the stop conditions that keep it from running away. Triggers on \"run this unattended\", \"don't let it spin\", long autonomous work, anything looping toward a target."
 delegate: budget-guard
 display_name: Budget Guard
 short_description: Declare-and-enforce the five stop conditions for any unattended run.

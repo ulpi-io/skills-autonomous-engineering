@@ -1,9 +1,10 @@
 ---
 name: watch-and-act
 description: |
-  Codex adapter for waiting on an EXTERNAL signal (CI, deploy, queue, endpoint) on a cache-aware cadence,
-  bounded by a deadline, acting on the transition — with a durable, resumable watch state when polling must
-  cross a turn. Delegates to the canonical methodology.
+  Use when you must wait on EXTERNAL state that changes on its own timeline and the harness won't wake you for
+  — CI or build status, a deploy, a remote queue draining, a URL becoming healthy, an approval landing — then
+  act on the transition. Triggers on "wait for CI", "watch the deploy", "poll until it's ready/green". Not for
+  harness-tracked background work (it re-invokes you automatically), and not for a one-time inline check.
 ---
 
 # watch-and-act — Codex adapter (thin)

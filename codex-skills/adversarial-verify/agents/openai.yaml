@@ -1,5 +1,5 @@
 name: adversarial-verify
-description: Prove a claim before acting on it by running N independent skeptics prompted to REFUTE it and keeping it only if a majority fails; fails closed on ties; delegates to the canonical adversarial-verify methodology.
+description: "Use when you're about to act on something an agent claimed but did not prove — before fixing a reported bug, committing a refactor, trusting a \"no vulnerabilities\" / \"safe to merge\" verdict, or accepting a benchmark \"win\" — and getting it wrong would be expensive or hard to reverse. Triggers on unverified findings, \"should be fine\", \"looks clean\", a single-source assertion about to drive a mutation."
 delegate: adversarial-verify
 display_name: Adversarial Verify
 short_description: Refute-first panel that gates a claim before you act on it.

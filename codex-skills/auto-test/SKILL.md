@@ -1,10 +1,10 @@
 ---
 name: auto-test
 description: |
-  Codex adapter for the TEST phase — raise test health to a green, MEANINGFUL suite: find untested
-  behaviors, write real tests, loop-until-green with every test MUTATION-CHECKED; fails closed, never games
-  the suite green. Thin adapter: applies the Codex runtime map and delegates to the canonical auto-test
-  methodology.
+  Use when you want to prove code works and lock in its behavior with a meaningful suite — after a build, on a
+  risky or untested module, to add a regression test that reproduces a known bug, or to de-flake an unreliable
+  suite. Triggers on "add tests", "raise coverage", "cover this", "make the tests pass", flaky/intermittent
+  failures. Not for test-first authoring during new-behavior implementation.
 ---
 
 # Auto Test — Codex adapter

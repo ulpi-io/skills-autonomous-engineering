@@ -1,5 +1,5 @@
 name: fan-out-work
-description: Cover a large list of independent items in parallel with per-item isolation, concurrency bounds, and faithful accounting of covered, failed, and dropped items.
+description: "Use when you have (or can cheaply discover) a list of INDEPENDENT items that each need the same multi-step treatment and doing them serially wastes wall-clock — audit every module, migrate every call site, test every gap, review every changed file. Triggers on \"do this to all of them\", a broad sweep, a per-file pass over a big N. Not for a handful of items or cross-item-dependent work."
 delegate: fan-out-work
 display_name: Fan Out Work
 short_description: Parallel map over N independent items, honestly accounted.

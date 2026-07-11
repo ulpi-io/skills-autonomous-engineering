@@ -4,8 +4,8 @@ version: 0.1.0
 disable-model-invocation: true
 user-invocable: true
 description: |
-  Use at the end of an autonomous run, or after a session that hit blocks, thrash, wrong turns, or surprises
-  worth not repeating, when you want the lessons captured so the next session starts smarter. Triggers on run
+  Use when an autonomous run has just finished, or a session hit blocks, thrash, wrong turns, or surprises
+  worth not repeating, and you want the lessons captured so the next session starts smarter. Triggers on run
   wrap-up, "what did we learn", a recurring mistake, the post-mortem of a pipeline run.
 allowed-tools:
   - Bash

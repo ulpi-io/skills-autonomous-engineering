@@ -1,5 +1,5 @@
 name: auto-spec
-description: Codex adapter that turns a raw feature request into a grounded, testable spec via repo recon plus an adversarial completeness-critic loop, writing .ulpi/spec/<name>.md as the DEFINE phase feeding auto-plan.
+description: "Use when starting any new feature, product, or significant change and you need a written, testable spec before planning or code — especially when the request is broad, vague, or needs grounding in the real repo first. Triggers on \"spec this out\", \"what should we build\", \"write the requirements\", turning a rough idea into acceptance criteria. Not for planning HOW to build."
 delegate: auto-spec
 display_name: Auto Spec
 short_description: Grounded, testable spec from a raw request via an adversarial completeness loop.

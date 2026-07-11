@@ -1,5 +1,5 @@
 name: schedule-recurring-agent
-description: Stand up a recurring scheduled agent as a self-contained idempotent, per-run-bounded brief with escalation and teardown; on Codex, registration degrades honestly to a ready brief (no native scheduler).
+description: "Use when standing work should run repeatedly on a cadence with no human kicking it off each time — recurring triage, monitoring, audits, or digests on a daily/weekly/hourly schedule. Triggers on \"every morning\", \"check X weekly\", \"run this on a schedule\", \"set up a recurring agent / routine / cron\". Not for a one-off wait within the current run."
 delegate: schedule-recurring-agent
 display_name: Schedule Recurring Agent
 short_description: Recurring scheduled-agent brief with idempotency, bounds, and an off-switch.

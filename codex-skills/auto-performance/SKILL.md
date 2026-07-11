@@ -1,11 +1,10 @@
 ---
 name: auto-performance
 description: |
-  Codex adapter for the PERFORMANCE phase. Make code measurably faster without breaking it: pick a
-  metric and a reproducible baseline FIRST, profile to the real hotspots, then per hotspot apply a change
-  and re-benchmark — keep it ONLY when the win is real beyond variance AND correctness holds; otherwise
-  revert. Stops at the target or diminishing returns. Never accepts an unmeasured "should be faster".
-  Thin adapter — it applies the Codex runtime map and delegates to the canonical methodology.
+  Use when there is a performance requirement, a latency/throughput target, or a suspected regression and you
+  want to optimize the RIGHT thing, proven by measurement. Triggers on "make it faster", a slow
+  endpoint/page/query, a perf budget, "is this a regression", profiling. Not for a guessed "should be faster"
+  with no benchmark.
 ---
 
 # auto-performance — Codex adapter (thin)

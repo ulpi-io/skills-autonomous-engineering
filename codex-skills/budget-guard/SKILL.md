@@ -1,10 +1,10 @@
 ---
 name: budget-guard
 description: |
-  Codex adapter for the budget-guard methodology — before any unattended loop or workflow, declare the
-  five stop conditions (done-condition, hard cap, token/time budget, no-progress rule, escalation triggers)
-  and hold the run to them, stopping the instant one fires. Fails closed: a capped run reports an honest
-  partial, never fabricated success. Load at the start of ANY unattended run. Thin adapter: delegates.
+  Use when about to start ANY unattended run — a loop, a fan-out, an auto-phase, the full pipeline — that will
+  spawn many agents or execute many rounds with no human in between, to set and enforce the stop conditions
+  that keep it from running away. Triggers on "run this unattended", "don't let it spin", long autonomous
+  work, anything looping toward a target.
 ---
 
 # Budget Guard — Codex adapter

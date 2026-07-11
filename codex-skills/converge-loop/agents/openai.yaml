@@ -1,5 +1,5 @@
 name: converge-loop
-description: Run a bounded, self-correcting loop that drives code to a machine-checkable target (until-green or until-dry) and STOPS honestly with a full termination set; delegates to the canonical converge-loop methodology.
+description: "Use whenever the task is \"repeat an action until a measurable condition holds\" — fix until tests or typecheck pass, clean until a linter is quiet, harden until an audit is dry, add tests until coverage is met — and you want it to STOP honestly rather than spin. Triggers on \"keep going until it's green\", \"loop until done\", until-green / until-dry work. Not for one-shot tasks or unmeasurable goals."
 delegate: converge-loop
 display_name: Converge Loop
 short_description: Bounded until-green/until-dry loop that converges and stops honestly.

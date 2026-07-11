@@ -2,10 +2,10 @@
 name: checkpoint-resume
 version: 0.1.2
 description: |
-  Use for any long, multi-unit task that could be interrupted and is worth resuming without redoing finished
-  work — DAG builds, migrations, broad audits, long converge-loops, fan-outs. Triggers on "make this
-  resumable", "pick up where it stopped", crash or stop recovery, work with many independently-completable
-  units. Not for single-shot tasks.
+  Use when a long, multi-unit task could be interrupted and is worth resuming without redoing finished work —
+  DAG builds, migrations, broad audits, long converge-loops, fan-outs. Triggers on "make this resumable",
+  "pick up where it stopped", crash or stop recovery, work with many independently-completable units. Not for
+  single-shot tasks.
 allowed-tools:
   - Bash
   - Read

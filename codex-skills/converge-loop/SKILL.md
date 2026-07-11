@@ -1,10 +1,10 @@
 ---
 name: converge-loop
 description: |
-  Codex adapter for the converge-loop methodology — run a bounded, self-correcting loop that drives code
-  toward a machine-checkable target and STOPS honestly (until-green or until-dry), with a full termination
-  set (done-condition, max iterations, budget, no-progress stop). Use for any "repeat until a measurable
-  condition holds" work. Thin adapter: applies the Codex runtime map and delegates to the canonical skill.
+  Use whenever the task is "repeat an action until a measurable condition holds" — fix until tests or
+  typecheck pass, clean until a linter is quiet, harden until an audit is dry, add tests until coverage is met
+  — and you want it to STOP honestly rather than spin. Triggers on "keep going until it's green", "loop until
+  done", until-green / until-dry work. Not for one-shot tasks or unmeasurable goals.
 ---
 
 # Converge Loop — Codex adapter

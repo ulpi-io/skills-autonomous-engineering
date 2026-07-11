@@ -1,10 +1,10 @@
 ---
 name: autonomous-pipeline
 description: |
-  Codex adapter — run the whole engineering lifecycle (spec → plan → build → simplify → test → review →
-  performance → ship) as one governed autonomous pass with a single human plan-approval and hard-gated
-  escalation for anything irreversible. Explicit-user-only. Delegates the methodology to the canonical
-  autonomous-pipeline skill and drives the IMPLEMENTED deterministic coordinator CLI on Codex.
+  Use when the user wants a whole request taken from idea to shipped in one autonomous run — spec, plan,
+  build, simplify, test, review, performance, ship — rather than invoking each phase by hand. Triggers on
+  "take this end to end", "build and ship this", "run the whole pipeline", "do the whole thing autonomously".
+  Explicit-user-only; spawns many agents over many rounds.
 ---
 
 # Autonomous Pipeline — Codex adapter (thin)

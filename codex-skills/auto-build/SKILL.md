@@ -1,9 +1,10 @@
 ---
 name: auto-build
 description: |
-  Codex adapter for the BUILD phase — implement an approved DAG plan autonomously, one clean commit per
-  task, test-first, never building on a broken base. Requires an approved plan + clean git baseline. Thin
-  adapter: it applies the Codex runtime map and delegates to the canonical auto-build methodology.
+  Use when a spec and an approved task plan already exist and you want the whole plan built in one unattended
+  pass — every task implemented test-first, integrated, reviewed, and committed individually — instead of
+  coding task-by-task by hand. Triggers on "build the plan", "implement all the tasks", "run the build phase".
+  Explicit-user-only; needs a plan and a clean git baseline first.
 ---
 
 # Auto Build — Codex adapter

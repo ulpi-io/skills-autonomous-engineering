@@ -1,11 +1,10 @@
 ---
 name: auto-plan
 description: |
-  Codex adapter — turn a spec into a self-reviewed DAG of atomic build tasks: each task gets acceptance
-  criteria, a disjoint write scope (≤3 files), and a slice-scoped validate; dependencies are wired and
-  topologically layered so nothing builds on a missing base; adversarial critics attack the graph until it
-  is clean. Runs the deterministic structural gate and writes .ulpi/plans/<name>.json. Explicit-user-only.
-  Delegates the methodology to the canonical auto-plan skill and runs it under the Codex runtime map.
+  Use when a spec exists (from auto-spec or supplied) and needs to become an implementable, ordered task
+  breakdown before any code is written. Triggers on "plan this out", "break the spec into tasks", "what's the
+  build order", turning requirements into a buildable DAG. Not for defining WHAT to build, and not from a
+  vague, untestable spec.
 ---
 
 # Auto Plan — Codex adapter (thin)

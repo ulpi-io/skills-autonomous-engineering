@@ -2,8 +2,8 @@
 name: budget-guard
 version: 0.1.0
 description: |
-  Use at the start of ANY unattended run — a loop, a fan-out, an auto-phase, the full pipeline — before it
-  spawns many agents or executes many rounds with no human in between, to set and enforce the stop conditions
+  Use when about to start ANY unattended run — a loop, a fan-out, an auto-phase, the full pipeline — that will
+  spawn many agents or execute many rounds with no human in between, to set and enforce the stop conditions
   that keep it from running away. Triggers on "run this unattended", "don't let it spin", long autonomous
   work, anything looping toward a target.
 allowed-tools:

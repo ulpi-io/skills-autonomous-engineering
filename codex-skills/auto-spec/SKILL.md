@@ -1,10 +1,10 @@
 ---
 name: auto-spec
 description: |
-  Codex adapter — turn a raw feature request into a grounded, TESTABLE spec: recon the real repo/domain to
-  ground every claim, draft the spec, then run an adversarial completeness-critic loop until stable, and
-  write .ulpi/spec/<name>.md. The DEFINE phase that feeds auto-plan. Explicit-user-only. Delegates the
-  methodology to the canonical auto-spec skill and runs it under the Codex runtime map.
+  Use when starting any new feature, product, or significant change and you need a written, testable spec
+  before planning or code — especially when the request is broad, vague, or needs grounding in the real repo
+  first. Triggers on "spec this out", "what should we build", "write the requirements", turning a rough idea
+  into acceptance criteria. Not for planning HOW to build.
 ---
 
 # Auto Spec — Codex adapter (thin)

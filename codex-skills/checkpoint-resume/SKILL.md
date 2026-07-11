@@ -1,8 +1,10 @@
 ---
 name: checkpoint-resume
 description: |
-  Codex adapter for durable, resumable multi-unit runs — a live .ulpi/runs/<id>.json checkpoint that a
-  resume reads to SKIP already-done units, session-independent. Delegates to the canonical methodology.
+  Use when a long, multi-unit task could be interrupted and is worth resuming without redoing finished work —
+  DAG builds, migrations, broad audits, long converge-loops, fan-outs. Triggers on "make this resumable",
+  "pick up where it stopped", crash or stop recovery, work with many independently-completable units. Not for
+  single-shot tasks.
 ---
 
 # checkpoint-resume — Codex adapter (thin)

@@ -1,5 +1,5 @@
 name: auto-review
-description: REVIEW phase — multi-dimension review of a diff whose findings survive an adversarial refute check, returned severity-labeled and actionable; fails closed on any dimension that did not run.
+description: "Use when a change is about to be merged, or you want to audit a module, branch, or PR, and you want a multi-axis review (correctness, security, performance, maintainability, tests, API/compat) whose findings are verified real rather than a raw model dump full of false positives. Triggers on \"review this\", a pre-merge check, \"is this safe to merge\", a diff/branch/PR audit."
 delegate: auto-review
 display_name: Auto Review
 short_description: Verified multi-axis code review that keeps only findings surviving an adversarial check.

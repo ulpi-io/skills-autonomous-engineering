@@ -1,9 +1,10 @@
 ---
 name: fan-out-work
 description: |
-  Codex adapter for covering a large list of INDEPENDENT items in parallel without losing coverage or
-  honesty — map each item through the same stages with caps and per-item isolation, accounting for every
-  item (covered / failed / dropped). Delegates to the canonical methodology.
+  Use when you have (or can cheaply discover) a list of INDEPENDENT items that each need the same multi-step
+  treatment and doing them serially wastes wall-clock — audit every module, migrate every call site, test
+  every gap, review every changed file. Triggers on "do this to all of them", a broad sweep, a per-file pass
+  over a big N. Not for a handful of items or cross-item-dependent work.
 ---
 
 # fan-out-work — Codex adapter (thin)

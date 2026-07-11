@@ -1,10 +1,10 @@
 ---
 name: auto-simplify
 description: |
-  Codex adapter for the SIMPLIFY phase — reduce a change's complexity WITHOUT changing behavior, provably:
-  smallest clarifying edit, then prove behavior preserved (tests green + adversarial semantic check) or
-  REVERT, looping until dry; respects Chesterton's Fence. Thin adapter: applies the Codex runtime map and
-  delegates to the canonical auto-simplify methodology.
+  Use when code works but reads worse than it should — duplication, dead code, over-abstraction, a tangled
+  diff or messy module you want clarified WITHOUT changing behavior. Triggers on "clean this up", "simplify",
+  "reduce complexity", "make it readable", a post-build tidy. Not for changing behavior, fixing bugs, or
+  optimizing speed.
 ---
 
 # Auto Simplify — Codex adapter

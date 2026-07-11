@@ -1,5 +1,5 @@
 name: auto-performance
-description: PERFORMANCE phase — metric + reproducible baseline first, profile to the real hotspots, then benchmark-gated per-hotspot changes kept only when the win is real beyond variance and correctness holds; else reverted.
+description: "Use when there is a performance requirement, a latency/throughput target, or a suspected regression and you want to optimize the RIGHT thing, proven by measurement. Triggers on \"make it faster\", a slow endpoint/page/query, a perf budget, \"is this a regression\", profiling. Not for a guessed \"should be faster\" with no benchmark."
 delegate: auto-performance
 display_name: Auto Performance
 short_description: Measurement-first optimization that accepts a change only when a benchmark proves it faster.

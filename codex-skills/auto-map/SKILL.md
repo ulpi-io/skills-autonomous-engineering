@@ -1,10 +1,10 @@
 ---
 name: auto-map
 description: |
-  Codex adapter — generate/refresh the project's disclosure-tiered CONTEXT ARCHITECTURE, verified against
-  the real repo before it ships. Platform-aware: on Codex it builds the root + nested AGENTS.md tree (never
-  inventing a memory location the platform lacks). Mutates durable project memory, so it is not
-  auto-invoked; the verified-map methodology is delegated to the canonical skill.
+  Use when a repo has no context map the agent can trust (a real CLAUDE.md / AGENTS.md), after
+  architecture-level changes (new packages, moved modules, changed build/test commands), or to audit an
+  existing map for drift. Triggers on onboarding a codebase, "set up project memory", stale docs, the agent
+  not knowing the layout.
 ---
 
 # auto-map (Codex adapter)

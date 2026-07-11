@@ -1,5 +1,5 @@
 name: auto-build
-description: Codex adapter for the BUILD phase — autonomously implement an approved DAG plan test-first, one clean commit per task, delegating to the canonical auto-build methodology via the deterministic pipeline CLI.
+description: "Use when a spec and an approved task plan already exist and you want the whole plan built in one unattended pass — every task implemented test-first, integrated, reviewed, and committed individually — instead of coding task-by-task by hand. Triggers on \"build the plan\", \"implement all the tasks\", \"run the build phase\". Explicit-user-only; needs a plan and a clean git baseline first."
 delegate: auto-build
 display_name: Auto Build
 short_description: Implement an approved DAG plan autonomously, test-first, one clean commit per task.

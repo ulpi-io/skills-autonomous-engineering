@@ -1,5 +1,5 @@
 name: checkpoint-resume
-description: Make long autonomous work durable and resumable via a .ulpi/runs checkpoint that a resume reads to skip already-done units; session-independent.
+description: "Use when a long, multi-unit task could be interrupted and is worth resuming without redoing finished work — DAG builds, migrations, broad audits, long converge-loops, fan-outs. Triggers on \"make this resumable\", \"pick up where it stopped\", crash or stop recovery, work with many independently-completable units. Not for single-shot tasks."
 delegate: checkpoint-resume
 display_name: Checkpoint Resume
 short_description: Durable, resumable checkpoint for long multi-unit runs.

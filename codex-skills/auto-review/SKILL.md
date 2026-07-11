@@ -1,11 +1,10 @@
 ---
 name: auto-review
 description: |
-  Codex adapter for the REVIEW phase. Review a change across every dimension at once (correctness,
-  security, performance, maintainability, test adequacy, API/contract compatibility), keep only the
-  findings that survive an adversarial refute check, and report them severity-labeled and actionable
-  (file:line, why, suggested fix). Fails closed: a dimension that did not actually run is a gap, never
-  "clean". Thin adapter — it applies the Codex runtime map and delegates to the canonical methodology.
+  Use when a change is about to be merged, or you want to audit a module, branch, or PR, and you want a
+  multi-axis review (correctness, security, performance, maintainability, tests, API/compat) whose findings
+  are verified real rather than a raw model dump full of false positives. Triggers on "review this", a
+  pre-merge check, "is this safe to merge", a diff/branch/PR audit.
 ---
 
 # auto-review — Codex adapter (thin)

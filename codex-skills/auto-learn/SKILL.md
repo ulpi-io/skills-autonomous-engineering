@@ -1,11 +1,9 @@
 ---
 name: auto-learn
 description: |
-  Codex adapter — close an autonomous run with a learning pass: harvest the run's STRUCTURED artifacts
-  (checkpoint register, blocked reasons, guard blocks, fix-loop counts, degradations), verify each lesson
-  adversarially, dedupe, then write durable learnings into the memory the next session loads. Machine
-  defects are surfaced, never self-patched. Mutates durable memory, so not auto-invoked; methodology
-  delegated to the canonical skill.
+  Use when an autonomous run has just finished, or a session hit blocks, thrash, wrong turns, or surprises
+  worth not repeating, and you want the lessons captured so the next session starts smarter. Triggers on run
+  wrap-up, "what did we learn", a recurring mistake, the post-mortem of a pipeline run.
 ---
 
 # auto-learn (Codex adapter)

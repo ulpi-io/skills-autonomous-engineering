@@ -2,10 +2,10 @@
 name: auto-review
 version: 0.1.0
 description: |
-  Use before merging a change, or to audit a module, branch, or PR, when you want a multi-axis review
-  (correctness, security, performance, maintainability, tests, API/compat) whose findings are verified real
-  rather than a raw model dump full of false positives. Triggers on "review this", a pre-merge check, "is this
-  safe to merge", a diff/branch/PR audit.
+  Use when a change is about to be merged, or you want to audit a module, branch, or PR, and you want a
+  multi-axis review (correctness, security, performance, maintainability, tests, API/compat) whose findings
+  are verified real rather than a raw model dump full of false positives. Triggers on "review this", a
+  pre-merge check, "is this safe to merge", a diff/branch/PR audit.
 allowed-tools:
   - Bash
   - Read

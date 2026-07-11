@@ -1,5 +1,5 @@
 name: auto-plan
-description: Codex adapter that turns a spec into a self-reviewed, acyclic, topologically layered DAG of atomic build tasks with disjoint write scopes and slice-scoped validates, gated by the deterministic validate-plan.mjs and written to .ulpi/plans/<name>.json.
+description: "Use when a spec exists (from auto-spec or supplied) and needs to become an implementable, ordered task breakdown before any code is written. Triggers on \"plan this out\", \"break the spec into tasks\", \"what's the build order\", turning requirements into a buildable DAG. Not for defining WHAT to build, and not from a vague, untestable spec."
 delegate: auto-plan
 display_name: Auto Plan
 short_description: Spec to a self-reviewed, structurally gated DAG of atomic build tasks.

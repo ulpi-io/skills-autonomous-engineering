@@ -1,5 +1,5 @@
 name: auto-ship
-description: SHIP phase — run the fail-closed pre-launch gate (validate/review/security/observability/rollback), prepare the release (atomic commits, grounded release notes, version bump, docs) and open the PR or stage the rollout; the deploy is gated on explicit human approval.
+description: "Use when a change is already built, tested, and reviewed and you want it taken to shippable — release gates run, changelog/version/docs prepared, PR opened or a rollout staged. Triggers on \"ship it\", \"cut a release\", \"open the PR\", \"prepare the deploy\". Explicit-user-only; never deploys anything irreversible without human sign-off."
 delegate: auto-ship
 display_name: Auto Ship
 short_description: Fail-closed pre-launch gate and release prep, with human sign-off on anything irreversible.

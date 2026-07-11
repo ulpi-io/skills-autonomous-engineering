@@ -1,5 +1,5 @@
 name: auto-learn
-description: Close an autonomous run with a verified learning pass — harvest structured run artifacts, verify each lesson adversarially, dedupe, then route durable learnings into the next-session memory (AGENTS.md tree on Codex); mutates durable memory, so it is user-invoked.
+description: "Use when an autonomous run has just finished, or a session hit blocks, thrash, wrong turns, or surprises worth not repeating, and you want the lessons captured so the next session starts smarter. Triggers on run wrap-up, \"what did we learn\", a recurring mistake, the post-mortem of a pipeline run."
 delegate: auto-learn
 display_name: Auto Learn
 short_description: Verified, deduped learnings harvested from a run into durable memory.

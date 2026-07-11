@@ -1,5 +1,5 @@
 name: auto-test
-description: Codex adapter for the TEST phase — raise test health to a green, meaningful, mutation-checked suite that fails closed and never games itself green, delegating to the canonical auto-test methodology.
+description: "Use when you want to prove code works and lock in its behavior with a meaningful suite — after a build, on a risky or untested module, to add a regression test that reproduces a known bug, or to de-flake an unreliable suite. Triggers on \"add tests\", \"raise coverage\", \"cover this\", \"make the tests pass\", flaky/intermittent failures. Not for test-first authoring during new-behavior implementation."
 delegate: auto-test
 display_name: Auto Test
 short_description: Drive to a green, meaningful, mutation-checked suite — fails closed, never gamed green.

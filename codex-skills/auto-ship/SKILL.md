@@ -1,13 +1,10 @@
 ---
 name: auto-ship
 description: |
-  Codex adapter for the SHIP phase. Take verified work to shippable: run the pre-launch gate (final
-  validate green, review clean, security/observability/rollback checks) where a gate that did NOT
-  actually run is a blocker, never "clean"; then prepare the release (atomic commits, changelog/release
-  notes grounded in the real changes, version bump, docs for user-visible/API changes) and open the PR or
-  stage the rollout. The deploy itself is gated on explicit human approval. Fails closed — never
-  fabricates a green gate to ship. Thin adapter — applies the Codex runtime map and delegates to the
-  canonical methodology.
+  Use when a change is already built, tested, and reviewed and you want it taken to shippable — release gates
+  run, changelog/version/docs prepared, PR opened or a rollout staged. Triggers on "ship it", "cut a release",
+  "open the PR", "prepare the deploy". Explicit-user-only; never deploys anything irreversible without human
+  sign-off.
 ---
 
 # auto-ship — Codex adapter (thin)

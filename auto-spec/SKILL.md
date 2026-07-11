@@ -2,7 +2,7 @@
 name: auto-spec
 version: 0.1.0
 description: |
-  Use at the start of any new feature, product, or significant change, when you need a written, testable spec
+  Use when starting any new feature, product, or significant change and you need a written, testable spec
   before planning or code — especially when the request is broad, vague, or needs grounding in the real repo
   first. Triggers on "spec this out", "what should we build", "write the requirements", turning a rough idea
   into acceptance criteria. Not for planning HOW to build.

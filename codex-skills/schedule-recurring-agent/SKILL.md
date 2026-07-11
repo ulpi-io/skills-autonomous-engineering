@@ -1,10 +1,10 @@
 ---
 name: schedule-recurring-agent
 description: |
-  Codex adapter — stand up a recurring scheduled agent for standing work (triage, monitoring, audits,
-  digests) as a self-contained, IDEMPOTENT, per-run-BOUNDED brief with escalation rules and a teardown
-  condition. Codex has no native scheduler, so registration degrades honestly to a ready brief; the
-  cadence/idempotency/off-switch methodology is delegated to the canonical skill.
+  Use when standing work should run repeatedly on a cadence with no human kicking it off each time — recurring
+  triage, monitoring, audits, or digests on a daily/weekly/hourly schedule. Triggers on "every morning",
+  "check X weekly", "run this on a schedule", "set up a recurring agent / routine / cron". Not for a one-off
+  wait within the current run.
 ---
 
 # schedule-recurring-agent (Codex adapter)

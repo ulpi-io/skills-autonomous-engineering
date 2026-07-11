@@ -1,5 +1,5 @@
 name: autonomous-pipeline
-description: Codex adapter that runs the full spec-to-ship engineering lifecycle as one governed autonomous pass with a single human plan-approval and hard-gated irreversible steps, driving the implemented deterministic coordinator CLI.
+description: "Use when the user wants a whole request taken from idea to shipped in one autonomous run — spec, plan, build, simplify, test, review, performance, ship — rather than invoking each phase by hand. Triggers on \"take this end to end\", \"build and ship this\", \"run the whole pipeline\", \"do the whole thing autonomously\". Explicit-user-only; spawns many agents over many rounds."
 delegate: autonomous-pipeline
 display_name: Autonomous Pipeline
 short_description: One request to shipped-quality work in one governed, fail-closed autonomous pass.
