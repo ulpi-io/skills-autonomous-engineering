@@ -449,10 +449,13 @@ test('plugin pages make truthful, platform-specific availability claims', () => 
 
   const codexHtml = readFileSync(routeFile('plugins/codex'), 'utf8');
   const codexText = visibleText(codexHtml);
-  assert.match(codexText, /Available from source · v0\.1\.0/, 'Codex plugin must be visibly marked available');
+  assert.match(codexText, /Work in progress/i, 'Codex plugin must be visibly marked work in progress');
+  assert.match(codexText, /codex-native-plugin branch/i, 'Codex plugin must name the branch it is developed on');
+  assert.doesNotMatch(codexText, /Available (?:now|from source)/i, 'Codex plugin must not claim availability while it is a WIP');
   assert.match(codexText, /catalog_count = 18/, 'Codex artifact panel must report the sealed adapter count');
 
   const installFlow = [
+    'git checkout codex-native-plugin',
     'node scripts/package-codex-plugin.mjs --out /tmp/ulpi-codex-market',
     'codex plugin marketplace add /tmp/ulpi-codex-market',
     'codex plugin marketplace list',
@@ -480,7 +483,7 @@ test('plugin pages make truthful, platform-specific availability claims', () => 
   );
   assert.doesNotMatch(
     codexText,
-    /\b(?:preview|in development|not installable yet)\b/i,
+    /\b(?:preview|not installable yet)\b/i,
     'Codex page must not retain preview-era availability copy',
   );
 

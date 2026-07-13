@@ -2218,7 +2218,8 @@ footer a:hover,
 }
 
 .status-badge.status-preview,
-.status-badge.status-planned {
+.status-badge.status-planned,
+.status-badge.status-wip {
   border-color: var(--preview);
   background: var(--preview-wash);
   color: var(--preview);
@@ -2772,6 +2773,7 @@ a.evidence-card:hover { border-color: var(--verified); background: var(--verifie
 
 .callout > div > p { margin-top: 7px; color: var(--ink-2); }
 .stamp-ok { border-color: var(--verified); color: var(--verified); transform: rotate(-1deg); }
+.stamp-wip { border-color: var(--preview); color: var(--preview); transform: rotate(-1deg); }
 
 .release-panel {
   padding: 24px;

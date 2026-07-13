@@ -100,7 +100,7 @@ export const pluginComparison = [
   ['Context', 'CLAUDE.md, scoped rules, Claude memory', 'AGENTS.md and Codex-native project context'],
   ['Orchestration', 'Workflow templates plus native goal/loop surfaces', 'Deterministic coordinator plus pinned codex exec'],
   ['Hooks', 'Claude lifecycle events and skill guards', 'Repository hooks are not bundled in the source artifact'],
-  ['Status', 'Available now', 'Available now from source · v0.1.0'],
+  ['Status', 'Available now', 'Work in progress · codex-native-plugin branch'],
 ];
 
 export const claudeHooks = [
@@ -124,6 +124,7 @@ export const singleSkillInstall = (slug) => `${universalInstall} --skill ${slug}
 export const claudePipelineRun = '/autonomous-pipeline "<feature>"';
 export const codexPipelineRun = '$autonomous-engineering:autonomous-pipeline "<feature>"';
 export const codexInstallCommands = [
+  'git checkout codex-native-plugin',
   'node scripts/package-codex-plugin.mjs --out /tmp/ulpi-codex-market',
   'codex plugin marketplace add /tmp/ulpi-codex-market',
   'codex plugin marketplace list',
