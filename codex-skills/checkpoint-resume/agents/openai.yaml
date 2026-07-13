@@ -1,7 +1,0 @@
-name: checkpoint-resume
-description: Make long autonomous work durable and resumable via a .ulpi/runs checkpoint that a resume reads to skip already-done units; session-independent.
-delegate: checkpoint-resume
-display_name: Checkpoint Resume
-short_description: Durable, resumable checkpoint for long multi-unit runs.
-default_prompt: Use the $checkpoint-resume skill to create or resume a durable .ulpi/runs checkpoint for this multi-unit run, skipping already-done units.
-allow_implicit_invocation: true

@@ -1,7 +1,0 @@
-name: fan-out-work
-description: Cover a large list of independent items in parallel with per-item isolation, concurrency bounds, and faithful accounting of covered, failed, and dropped items.
-delegate: fan-out-work
-display_name: Fan Out Work
-short_description: Parallel map over N independent items, honestly accounted.
-default_prompt: Use the $fan-out-work skill to run the same treatment across every independent item in this work-list in parallel, isolating writers and reporting covered, failed, and dropped items.
-allow_implicit_invocation: false

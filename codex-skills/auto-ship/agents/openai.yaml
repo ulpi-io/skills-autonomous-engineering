@@ -1,7 +1,0 @@
-name: auto-ship
-description: SHIP phase — run the fail-closed pre-launch gate (validate/review/security/observability/rollback), prepare the release (atomic commits, grounded release notes, version bump, docs) and open the PR or stage the rollout; the deploy is gated on explicit human approval.
-delegate: auto-ship
-display_name: Auto Ship
-short_description: Fail-closed pre-launch gate and release prep, with human sign-off on anything irreversible.
-default_prompt: Invoke the $auto-ship skill to run the fail-closed pre-launch gate on the current branch, prepare the release (atomic commits, grounded changelog, version bump, docs) and open the PR, halting for explicit human approval before any irreversible deploy.
-allow_implicit_invocation: false

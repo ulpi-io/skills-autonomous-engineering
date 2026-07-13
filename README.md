@@ -3,7 +3,7 @@
 **Spec to a shippable PR, unattended. Then it learns.**
 
 Eight autonomous engineering phases behind one approval — then the machine harvests what it learned and
-improves itself for the next run. **18 skills · Claude Code + Codex · [skills.sh](https://skills.sh).**
+improves itself for the next run. **18 skills · Claude Code · [skills.sh](https://skills.sh).**
 
 Every AI agent can loop. The failure modes are what kill you: it "fixes" the suite by skipping the red
 test, grinds for three hours past the point of progress, `git add -A`s unrelated work into a commit it
@@ -109,42 +109,16 @@ live-run guards, a `Stop` honest-termination backstop, and a `SessionEnd` checkp
   skill is a `/skill-name` slash command. Skills must be *installed* — any of the five layouts the
   guard resolvers also cover: project `.claude/skills/` or `.agents/skills/`, user `~/.claude/skills/`
   or `~/.agents/skills/`, or a plugin — a raw clone is not discovered.
-- **Codex** is a **first-class, implemented** surface — not a promise. The same SKILL.md anatomy routes
-  natively (`name` + `description`), and the collection ships a real Codex plugin: 18 Codex adapters
-  (`codex-skills/`, sealed by `codex-skills/catalog.json`) that delegate to the canonical skills, a pinned
-  `codex exec` executor (`autonomous-pipeline/scripts/lib/codex-executor.mjs`), Codex-event guard hooks
-  (`hooks/hooks.json`), and a reproducible marketplace packager (`scripts/package-codex-plugin.mjs`).
-  Every claim is tied to a deterministic test — see the [Codex plugin](#codex-plugin) section.
+- **Other agents (Codex, Cursor, …)**: the same skills install through **skills.sh**, which adapts the
+  single SKILL.md source per agent; the `name` + `description` frontmatter routes natively wherever the
+  agent supports skills. (A Codex-native plugin — adapters, manifest, and a reproducible marketplace
+  packager — is developed on the `codex-native-plugin` branch.)
 - **Enforcement travels with the skill**: guard hooks are declared in skill frontmatter (skill-scoped —
   they fire only while that skill is active) and resolve to real, tested scripts in the skill's
   `scripts/` dir across all five install layouts, failing open if absent.
 - **Native goal/loop**: on Claude Code, each skill's termination set compiles into `/goal` (whose
   independent verifier model checks the done-condition) and `/loop` — see
   `converge-loop/references/native-goal-loop.md`.
-
-## Codex plugin
-
-Codex is **implemented today**, not deferred. The collection ships a real Codex plugin — read the operator
-guide at [`codex-skills/.shared/codex-plugin-guide.md`](codex-skills/.shared/codex-plugin-guide.md) for
-install (isolated `codex plugin marketplace add`/`list` → `plugin add`/`list` verification),
-new-session discovery, hook review/trust, the surface map (app / `codex exec` CLI / no-automation — where
-a missing creation capability is honest `created:false`/draft output, never a faked install), and the
-gated live smoke. It **never silently edits your user-global Codex config**.
-
-Every Codex-ready claim points at an implemented path AND a deterministic test that already passes:
-
-| Codex-ready claim | Implemented path | Deterministic test |
-|---|---|---|
-| Reproducible, topology-preserving marketplace artifact | `scripts/package-codex-plugin.mjs` | `bash scripts/test-codex-package.sh` |
-| 18 Codex adapters, sealed inventory + isolated discovery | `codex-skills/catalog.json` | `node scripts/validate-skills.mjs --surface codex` |
-| Plugin manifest + `./codex-skills/` discovery pointer | `.codex-plugin/plugin.json` | `node scripts/test-dual-plugin-discovery.mjs` |
-| Pinned `codex exec` executor (fail-closed `blocked`) | `autonomous-pipeline/scripts/lib/codex-executor.mjs` | `node scripts/test-codex-executor.mjs` |
-| Codex-event guard hooks (`apply_patch` gate, honest Stop) | `hooks/hooks.json` | `bash scripts/test-codex-hooks.sh` |
-
-Plus the required **live evidence** — the real-Codex plugin smoke, gated so an unavailable/mismatched CLI
-returns a nonzero `gateNotRun` (never a fabricated clean): `node scripts/smoke-codex-plugin.mjs --live`
-(implemented in `scripts/smoke-codex-plugin.mjs`, its zero-network CI form proven by
-`node scripts/test-codex-smoke.mjs`).
 
 ## Deterministic enforcement
 

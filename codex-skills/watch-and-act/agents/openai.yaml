@@ -1,7 +1,0 @@
-name: watch-and-act
-description: Wait on an external signal (CI, deploy, queue, endpoint) on a cache-aware cadence bounded by a deadline, acting on the transition, with durable resumable watch state across turns.
-delegate: watch-and-act
-display_name: Watch And Act
-short_description: Bounded, cache-aware polling of an external signal.
-default_prompt: Use the $watch-and-act skill to watch this external signal on a cache-aware cadence bounded by a deadline, persisting durable watch state and acting on the transition.
-allow_implicit_invocation: true

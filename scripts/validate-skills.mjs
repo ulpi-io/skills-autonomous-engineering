@@ -486,7 +486,9 @@ if (checkHooks) {
     }
   };
   checkHookFile('hooks/hooks.claude.json', { events: CLAUDE_EVENTS, mustVar: 'CLAUDE_PLUGIN_ROOT', banVar: 'CODEX_PLUGIN_ROOT' });
-  checkHookFile('hooks/hooks.json', { events: CODEX_EVENTS, mustVar: 'CODEX_PLUGIN_ROOT', banVar: 'CLAUDE_PLUGIN_ROOT', banEvent: 'SessionEnd' });
+  // The Codex hook manifest is validated only when the Codex adapter surface is present (absent is fine).
+  if (existsSync(join(ROOT, 'hooks', 'hooks.json')))
+    checkHookFile('hooks/hooks.json', { events: CODEX_EVENTS, mustVar: 'CODEX_PLUGIN_ROOT', banVar: 'CLAUDE_PLUGIN_ROOT', banEvent: 'SessionEnd' });
 }
 
 if (problems.length) {

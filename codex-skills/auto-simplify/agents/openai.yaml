@@ -1,7 +1,0 @@
-name: auto-simplify
-description: Codex adapter for the SIMPLIFY phase — reduce a change's complexity without changing behavior, proving each edit behavior-preserving or reverting, delegating to the canonical auto-simplify methodology.
-delegate: auto-simplify
-display_name: Auto Simplify
-short_description: Reduce complexity without changing behavior — prove each edit preserving, or revert.
-default_prompt: Invoke the $auto-simplify skill to reduce complexity in the current diff without changing behavior — smallest edit, prove behavior preserved or revert, loop until dry.
-allow_implicit_invocation: false

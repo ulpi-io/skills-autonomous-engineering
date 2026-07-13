@@ -9,9 +9,9 @@
 //                     --surface all --hooks, and the legacy pipeline-workflow) is a VISIBLE NAMED step.
 //   • UNMASKABLE    — no `continue-on-error`, no shell masking (`|| true`, `; passing-cmd`, pipe-to-true),
 //                     so a red gate fails the job and GitHub's fail-fast stops later steps from masking it.
-//   • HERMETIC      — no network / credential / secret use and the Codex smoke never runs `--live`
-//                     (default fake mode): CI needs NO login, NO network, NO user config, NO out-of-tree
-//                     writes.
+//   • HERMETIC      — no network / credential / secret use and no suite ever runs `--live` (the
+//                     codex-executor tests use a fake runtime): CI needs NO login, NO network, NO user
+//                     config, NO out-of-tree writes.
 //
 // The mutation battery at the bottom proves the checker actually BITES: a workflow missing a suite, or
 // carrying continue-on-error / a masked gate / a network+credential call, MUST fail.
@@ -32,19 +32,17 @@ const NODE_SUITES = [
   'test-git-integration.mjs', 'test-codex-executor.mjs', 'test-budget-ledger.mjs',
   'test-authorization.mjs', 'test-review-panel.mjs', 'test-build-engine.mjs',
   'test-phase-engine.mjs', 'test-pipeline-cli.mjs', 'test-pipeline-e2e.mjs',
-  'test-pipeline-security.mjs', 'test-dual-plugin-discovery.mjs', 'test-ci-workflow.mjs',
+  'test-pipeline-security.mjs', 'test-ci-workflow.mjs',
 ];
 const SHELL_SUITES = [
   'test-guards.sh', 'test-checkpoint.sh', 'test-run-status.sh', 'test-map-verify.sh',
   'test-plan-validate.sh', 'test-harvest.sh', 'test-validate-skills.sh', 'test-watch-state.sh',
-  'test-scheduled-job.sh', 'test-codex-hooks.sh', 'test-codex-package.sh',
-  'test-review-workflow-claude-only.sh',
+  'test-scheduled-job.sh',
 ];
 const REQUIRED = [
   ...NODE_SUITES.map((t) => ({ token: t })),
   ...SHELL_SUITES.map((t) => ({ token: t })),
   // checkpoint-store contract ships as the shell suite above (test-checkpoint.sh) — already covered.
-  { token: 'test-codex-smoke.mjs', mustNotInclude: ['--live'] },        // DEFAULT fake mode only
   { token: 'validate-skills.mjs', mustInclude: ['--surface all', '--hooks'] },
   { token: 'test-pipeline-workflow.mjs' },                              // legacy compatibility suite
   { token: 'test-site.mjs' },                                          // site slice — must stay wired
@@ -162,12 +160,8 @@ test('validate-skills runs both surfaces with hooks (--surface all --hooks)', ()
   assert.match(hit.run, /--hooks/, 'validate-skills must run --hooks');
 });
 
-test('the Codex smoke runs in DEFAULT fake mode (no --live anywhere)', () => {
+test('CI never opts into --live (real Codex / network) — every codex-touching suite runs in fake mode', () => {
   assert.doesNotMatch(stripComments(REAL), /--live\b/, 'CI must never opt into --live (real Codex / network)');
-  const steps = parseSteps(REAL);
-  const hit = steps.find((s) => s.run.includes('test-codex-smoke.mjs'));
-  assert.ok(hit, 'codex smoke suite is not wired into CI');
-  assert.doesNotMatch(hit.run, /--live\b/);
 });
 
 test('the site slice step is preserved (test-site.mjs still wired)', () => {
@@ -240,8 +234,8 @@ test('MUTATION — a network + credential call is caught', () => {
   assert.ok(v.some((x) => x.includes('CREDENTIAL')), `secrets use must be caught, got: ${JSON.stringify(v)}`);
 });
 
-test('MUTATION — flipping the smoke step to --live is caught', () => {
-  const broken = REAL.replace('scripts/test-codex-smoke.mjs', 'scripts/test-codex-smoke.mjs --live');
+test('MUTATION — flipping a codex-touching step to --live is caught', () => {
+  const broken = REAL.replace('scripts/test-codex-executor.mjs', 'scripts/test-codex-executor.mjs --live');
   const v = auditWorkflow(broken);
   assert.ok(v.some((x) => x.includes('--live')), `--live opt-in must be caught, got: ${JSON.stringify(v)}`);
 });

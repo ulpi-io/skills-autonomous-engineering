@@ -1,10 +1,12 @@
 # AGENTS.md — Autonomous Engineering Skills
 
 This repository is a collection of **agent skills for autonomous software delivery**: the lifecycle as
-bounded, self-correcting, checkpoint-resumable phases with deterministic enforcement. It ships to **both
-Claude Code and Codex** from one source of truth. This is the **shared contributor guide** — read it
-first no matter which agent you run; it is provider-neutral and self-sufficient. Claude-specific routing
-and Workflow-backend notes live in `CLAUDE.md`, and nothing here depends on reading that file.
+bounded, self-correcting, checkpoint-resumable phases with deterministic enforcement. It ships as a native
+**Claude Code** plugin and installs into other agents via **skills.sh** from one source of truth. This is
+the **shared contributor guide** — read it first no matter which agent you run; it is provider-neutral and
+self-sufficient. Claude-specific routing and Workflow-backend notes live in `CLAUDE.md`, and nothing here
+depends on reading that file. (The Codex-native plugin — thin adapters, a manifest, and a reproducible
+marketplace packager — is developed on the `codex-native-plugin` branch, not on `main`.)
 
 ## What lives here
 
@@ -37,32 +39,17 @@ The autonomy is not prose — `autonomous-pipeline` is backed by a real, testabl
   + `process-runner.mjs` (the agent executor seam). Heavyweight execution is injected as `seams` so the
   coordinator runs hermetically under tests with a fake runtime.
 
-## Provider adapters (dual Claude + Codex)
+## The skills (authoring source + discovery)
 
-The 18 canonical skills have exactly one authoring source and two discovery surfaces:
+The 18 canonical skills live in the **root skill dirs** (`auto-spec/`, `converge-loop/`, …). Each is a
+directory with a `SKILL.md` (frontmatter `name` + `description` for routing; the body is the operating
+procedure) plus optional `references/` (loaded on demand) and `scripts/` (executable helpers — run them
+rather than re-implementing their logic). The Claude plugin manifest (`.claude-plugin/plugin.json`,
+`skills: "./"`) discovers these directly; **skills.sh** adapts the same source into other agents.
 
-- **Claude surface** — the **root skill dirs** (`auto-spec/`, `converge-loop/`, …). Each is a directory
-  with a `SKILL.md` (frontmatter `name` + `description` for routing; the body is the operating
-  procedure) plus optional `references/` (loaded on demand) and `scripts/` (executable helpers — run
-  them rather than re-implementing their logic). The Claude plugin manifest (`.claude-plugin/plugin.json`,
-  `skills: "./"`) discovers these.
-- **Codex surface** — `codex-skills/` holds one thin **adapter** per skill (`SKILL.md` +
-  `agents/openai.yaml` that `delegate`s to the canonical root skill), plus `.shared/` (Codex runtime +
-  layout guides) and **`codex-skills/catalog.json`** — the sealed inventory. The catalog pins, for each
-  of the 18 skills, its adapter dir, its `canonicalSource` root dir, the `delegate`, and the
-  `invocationPolicy` (implicit-invocation flag). `.codex-plugin/plugin.json` (`skills: "./codex-skills/"`)
-  discovers these. Validation asserts both surfaces resolve the **same 18** with no cross-surface leak.
-
-## Packaging
-
-- **`scripts/package-codex-plugin.mjs`** — builds a **reproducible** Codex marketplace artifact under
-  `--out <dir>` (writes only there; never mutates the source). It emits the marketplace source
-  (`.agents/plugins/marketplace.json`) and the plugin tree whose topology mirrors source exactly: the
-  manifest, the 18 `codex-skills/` adapters (+ `.shared/` + `catalog.json`), and the canonical root
-  delegate dirs (shipped so delegates resolve, but kept OUTSIDE `codex-skills/` so they are not
-  Codex-discovered). Deterministic byte copies, stable `digest=sha256:<hex>`; it fails nonzero on any
-  sealed hazard (default `skills/` root, missing delegate, escaping path, stale catalog, invalid
-  marketplace source, topology drift).
+The Codex-native discovery surface — thin `codex-skills/` adapters that `delegate` to these root skills, a
+sealed `catalog.json`, the `.codex-plugin/` manifest, and the reproducible `package-codex-plugin.mjs`
+marketplace packager — is developed on the `codex-native-plugin` branch, not on `main`.
 
 ## The contract every skill honors
 
@@ -83,9 +70,8 @@ Stated plainly, provider-independent — these are what separate "autonomous" fr
 ## Using the skills (any agent)
 
 Install via `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering`, or as a native
-plugin: Claude Code from the marketplace manifest in `.claude-plugin/`; Codex from the artifact built by
-`scripts/package-codex-plugin.mjs`. On platforms with a native goal loop (Claude Code `/goal` + `/loop`;
-Codex `/goal`), compile the skill's termination set into it — see
+Claude Code plugin from the marketplace manifest in `.claude-plugin/`. On platforms with a native goal
+loop (Claude Code `/goal` + `/loop`; Codex `/goal`), compile the skill's termination set into it — see
 `converge-loop/references/native-goal-loop.md`.
 
 ## Working ON this repo
@@ -103,9 +89,10 @@ Codex `/goal`), compile the skill's termination set into it — see
 node scripts/validate-skills.mjs --surface all --hooks
 ```
 
-Validates both surfaces: frontmatter shape, the routing-budget cap, reference/script integrity,
-self-containment, the sealed `codex-skills/catalog.json` inventory, the doc-honesty guard (no banned
-over-claims in README.md / any SKILL.md), and — with `--hooks` — the provider-split hook manifests.
+Validates the skill surface: frontmatter shape, the routing-budget cap, reference/script integrity,
+self-containment, the doc-honesty guard (no banned over-claims in README.md / any SKILL.md), and — with
+`--hooks` — the Claude hook manifest. (The validator also checks the Codex adapter surface and its sealed
+`catalog.json` when that tree is present — e.g. on the `codex-native-plugin` branch.)
 
 **Shell suites (guards + gate contracts)**
 
@@ -119,9 +106,6 @@ bash scripts/test-harvest.sh                # auto-learn harvest evidence
 bash scripts/test-validate-skills.sh        # dual-surface flags + doc-honesty behavior
 bash scripts/test-watch-state.sh            # durable cross-turn watch bounds
 bash scripts/test-scheduled-job.sh          # scheduled-job schema/dedup/capability/teardown
-bash scripts/test-codex-hooks.sh            # dual Claude+Codex lifecycle hooks
-bash scripts/test-codex-package.sh          # Codex packager topology + 18 adapters + version parity
-bash scripts/test-review-workflow-claude-only.sh   # review workflow is Claude-only (Codex excludes it)
 ```
 
 **Node unit / E2E suites (`node:test`, mock/fake runtimes — no live agents, no network)**
@@ -140,19 +124,7 @@ node --test scripts/test-phase-engine.mjs          # fail-closed phase gates
 node --test scripts/test-pipeline-cli.mjs          # coordinator command surface
 node --test scripts/test-pipeline-e2e.mjs          # zero-network coordinator over temp repos + fake codex
 node --test scripts/test-pipeline-security.mjs     # isolation + redaction under adversarial input
-node --test scripts/test-dual-plugin-discovery.mjs # both surfaces resolve the same inventory
-node --test scripts/test-codex-smoke.mjs           # Codex smoke in DEFAULT fake mode (no login/network)
 node --test scripts/test-ci-workflow.mjs           # every CI suite is a named, unmaskable, hermetic gate
 node --test scripts/test-site.mjs                  # static-site routes/links/metadata/drift
 node scripts/test-pipeline-workflow.mjs            # legacy workflow transitions under a mock runtime
 ```
-
-**Live Codex smoke (opt-in, gated)**
-
-```
-node scripts/smoke-codex-plugin.mjs --live
-```
-
-Exercises the real `codex` CLI end-to-end. Preflight requires the pinned Codex version and an operable
-CLI; if either is absent it returns a nonzero **`gateNotRun`** (an honest refusal — never a fabricated
-clean). CI runs the smoke only in its default fake mode; `--live` is for local verification.

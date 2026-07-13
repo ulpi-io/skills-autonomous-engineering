@@ -41,12 +41,6 @@ jobs:
         run: bash scripts/test-watch-state.sh
       - name: Scheduled-job gate contract (schema, dedup-first, capability, teardown)
         run: bash scripts/test-scheduled-job.sh
-      - name: Codex lifecycle hooks contract (dual Claude+Codex resume/honest-termination)
-        run: bash scripts/test-codex-hooks.sh
-      - name: Codex marketplace packager contract (topology + 18 adapters + version parity)
-        run: bash scripts/test-codex-package.sh
-      - name: Review workflow is legacy Claude-only (Codex artifact excludes it)
-        run: bash scripts/test-review-workflow-claude-only.sh
 
       # --- Node unit / E2E suites (node:test, mock/fake runtimes — no live agents, no network) ---
       - name: Pipeline state machine (legal/illegal transitions + convergence conjunction)
@@ -75,10 +69,6 @@ jobs:
         run: node --test scripts/test-pipeline-e2e.mjs
       - name: Pipeline security (isolation + redaction + fail-closed under adversarial input)
         run: node --test scripts/test-pipeline-security.mjs
-      - name: Dual plugin discovery (Claude + Codex surfaces resolve the same inventory)
-        run: node --test scripts/test-dual-plugin-discovery.mjs
-      - name: Codex smoke (DEFAULT fake mode — no login, no network, isolated CODEX_HOME/HOME)
-        run: node --test scripts/test-codex-smoke.mjs
       - name: CI workflow contract (every suite is a named, unmaskable, hermetic gate)
         run: node --test scripts/test-ci-workflow.mjs
 

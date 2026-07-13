@@ -1,7 +1,0 @@
-name: schedule-recurring-agent
-description: Stand up a recurring scheduled agent as a self-contained idempotent, per-run-bounded brief with escalation and teardown; on Codex, registration degrades honestly to a ready brief (no native scheduler).
-delegate: schedule-recurring-agent
-display_name: Schedule Recurring Agent
-short_description: Recurring scheduled-agent brief with idempotency, bounds, and an off-switch.
-default_prompt: Invoke the $schedule-recurring-agent skill to design a bounded, idempotent recurring-agent brief and produce a ready-to-register schedule spec.
-allow_implicit_invocation: false

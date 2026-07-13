@@ -1,7 +1,0 @@
-name: auto-plan
-description: Codex adapter that turns a spec into a self-reviewed, acyclic, topologically layered DAG of atomic build tasks with disjoint write scopes and slice-scoped validates, gated by the deterministic validate-plan.mjs and written to .ulpi/plans/<name>.json.
-delegate: auto-plan
-display_name: Auto Plan
-short_description: Spec to a self-reviewed, structurally gated DAG of atomic build tasks.
-default_prompt: Invoke the $auto-plan skill to decompose this spec into a self-reviewed, layered DAG of atomic build tasks in .ulpi/plans/.
-allow_implicit_invocation: false

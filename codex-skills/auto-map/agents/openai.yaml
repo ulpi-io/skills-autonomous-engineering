@@ -1,7 +1,0 @@
-name: auto-map
-description: Generate/refresh the project's disclosure-tiered context architecture (AGENTS.md tree on Codex), verified against the real repo before it ships; mutates durable project memory, so it is user-invoked, not auto-triggered.
-delegate: auto-map
-display_name: Auto Map
-short_description: Verified, disclosure-tiered project context map (Codex AGENTS.md tree).
-default_prompt: Invoke the $auto-map skill to build or refresh the project's verified, disclosure-tiered context map.
-allow_implicit_invocation: false

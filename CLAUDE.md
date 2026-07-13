@@ -4,19 +4,18 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 **Read `AGENTS.md` first.** It is the shared, provider-neutral contributor guide and the single source of
 truth for the repository architecture: the deterministic coordinator
-(`autonomous-pipeline/scripts/pipeline.mjs` + `scripts/lib/`), the dual Claude + Codex provider adapters
-(`codex-skills/` + `catalog.json`; the Claude root skill dirs), the Codex packager
-(`scripts/package-codex-plugin.mjs`), and the **full validation command list** (skill/hook validation,
-the `node --test` suites, the shell suites, the Codex packager test, and the `--live` smoke). This file
-does NOT duplicate that — it adds only what is specific to running and authoring the collection **on
-Claude Code**.
+(`autonomous-pipeline/scripts/pipeline.mjs` + `scripts/lib/`), the Claude root skill dirs + plugin
+manifest, and the **full validation command list** (skill/hook validation, the `node --test` suites, and
+the shell suites). This file does NOT duplicate that — it adds only what is specific to running and
+authoring the collection **on Claude Code**. (The Codex-native plugin — adapters, manifest, packager —
+lives on the `codex-native-plugin` branch, not on `main`.)
 
 ## The collection in one line
 
 **@ulpi/skills-autonomous-engineering** turns the software delivery lifecycle into **autonomous, loop- and
 workflow-driven** phases (`auto-spec → auto-ship`) on top of durable loop / adversarial-verify /
-checkpoint / fan-out / budget-guard primitives. It ships to **both Claude Code and Codex** from one source
-and is distributed via [skills.sh](https://skills.sh).
+checkpoint / fan-out / budget-guard primitives. It ships as a native **Claude Code** plugin and is
+distributed via [skills.sh](https://skills.sh).
 
 Install all: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering`
 Install one: `npx skills add https://github.com/ulpi-io/skills-autonomous-engineering --skill <name>`
@@ -59,9 +58,8 @@ deterministic coordinator in `AGENTS.md`.)
   are **Workflow-tool templates** and must stay inside the Workflow JS sandbox: **no**
   `Date.now` / `Math.random` / arg-less `new Date` / `require` / ESM `import`.
   `scripts/validate-skills.mjs` enforces these banned constructs.
-- `review-workflow.js` is **legacy and Claude-only** — the Codex artifact deliberately excludes it
-  (asserted by `scripts/test-review-workflow-claude-only.sh`). The provider-neutral review path is the
-  coordinator's `review-panel.mjs`.
+- `review-workflow.js` is a **legacy, Claude-only** Workflow template. The provider-neutral review path
+  is the coordinator's `review-panel.mjs`.
 
 ## Claude plugin + hook wiring (Claude-specific)
 
@@ -77,8 +75,7 @@ deterministic coordinator in `AGENTS.md`.)
   - **SessionStart** → `hooks/session-start-announce.sh` — injects any resumable run into the opening
     context so a fresh session never blindly re-inits or redoes integrated work (read-only, bounded).
   - **SessionEnd** → `hooks/session-end-gc.sh` — archives terminal runs via `checkpoint.mjs gc`.
-    **SessionEnd is Claude-only** (unsupported on Codex); `validate-skills.mjs --hooks` enforces the
-    provider split between `hooks.claude.json` and the Codex `hooks/hooks.json`.
+    `validate-skills.mjs --hooks` validates the Claude hook manifest (`hooks/hooks.claude.json`).
 - Guards are real scripts owned by their skill; the SKILL.md hook frontmatter carries only the thin
   resolver line (finds the script across install layouts, fail-OPEN if absent — a guard must never brick
   a session).
