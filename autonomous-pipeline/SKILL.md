@@ -123,6 +123,17 @@ other a Claude-only compatibility shim.
 
 ## Phase 0: Intake — request, config, budget, mode
 
+- **Ultracode precheck (parallel-effort mode — WARN, never block; runs on new runs AND resumes).**
+  Build → review → verify fan out across many CONCURRENT agents (the `Workflow` backend + the Phase 1
+  concurrency caps). That concurrency only materializes at the session's top **runtime effort level,
+  `ultracode`** — a harness mode (ultrathink-style), NOT the static `effort: high` in this skill's
+  frontmatter. Check it: Claude Code surfaces the state in your session context (a system-reminder noting
+  ultracode on/off; the `Workflow` tool being your standing default is the tell). If you cannot confirm
+  it is on, tell the user in one line — *"For the fastest run, enable **ultracode**, the max effort level
+  for parallel work, so the build fans out across parallel agents: `/effort ultracode`, set the effort
+  level to its max, or include `ultracode` in your request. Optional — without it the pipeline still
+  completes with the SAME gates, checkpoints and findings register, just sequentially (slower)."* Then
+  **proceed either way**; never gate the run on this.
 - Detect **new run** vs **resume** (`$request` = "resume" / a pipeline checkpoint id → resume; skip
   intake, load the checkpoint, continue at the recorded phase).
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
