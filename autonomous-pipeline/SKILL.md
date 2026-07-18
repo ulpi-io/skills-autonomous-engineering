@@ -7,8 +7,9 @@ description: |
   hard-gated escalation for anything irreversible. It chains the auto-* phase skills, carries a durable
   pipeline checkpoint so a stop/crash resumes at the exact phase and task it left off, watches the signal
   between phases (a phase that misses its gate is recorded blocked and surfaces in the register — fail closed, no false-green downstream), and returns a
-  verified findings register at the end. It does NOT loop on its own: after one pass it reports what
-  shipped and what's open, and the user decides on any fix round. This is the top-level "maximise
+  verified findings register at the end. Autonomous: it AUTO-FIXES the confirmed findings in a bounded
+  converge-loop (never asking permission to fix), returning only the residual it can't converge within
+  budget or a fix needing an irreversible/ambiguous decision. This is the top-level "maximise
   autonomous agents" entry point. Composes every auto-* phase plus checkpoint-resume, budget-guard,
   watch-and-act, and adversarial-verify.
 allowed-tools:
@@ -40,16 +41,21 @@ This is the most powerful and the most dangerous skill here — the full lifecyc
 every phase's guardrails and adds pipeline-level ones. Non-negotiable:
 1. ONE HUMAN GATE (plan approval); irreversible/ambiguous/unfixable situations from ANY phase still STOP
    and ask. Approval authorizes the plan, not surprises.
-2. ONE PASS, NO AUTONOMOUS RECURSION. The pipeline runs each phase once, returns a verified findings
-   register, and STOPS. It never silently loops the whole lifecycle — an autonomous fix-loop is what turns
-   a run into a multi-hour grind. A fix round is a deliberate user choice (re-invoke with the findings).
+2. AUTO-FIX TO CONVERGENCE — BOUNDED, NEVER INFINITE. Autonomous means the pipeline FIXES what it finds; it
+   NEVER hands you a list of confirmed blockers and asks permission to fix them. After review it runs a
+   bounded fix converge-loop (`converge-loop` + `budget-guard`): fix the confirmed findings, regression-test,
+   re-review, repeat until the register is clean. It STOPS and returns the STILL-OPEN residual ONLY when a
+   termination condition fires — the fix budget/round-cap is exhausted without convergence, no-progress/thrash
+   is detected, or a fix needs a genuinely irreversible/ambiguous human decision (that one escalates).
+   Exhausted ≠ converged: a loop that spent its budget returns the open items, never a fabricated green.
 3. PHASE GATES FAIL CLOSED. A phase that doesn't reach its bar (build blocked, red validate, unverified
    review, a died agent) is recorded `blocked` — never `done` — its items go to the register and
    `converged` is false, so a resume re-enters it and no phase ever hands a FALSE-GREEN forward. The run
-   is ONE forward pass: rather than hard-stop mid-run (a Workflow can't ask the user), downstream phases
-   still execute over whatever integrated and collect their findings (except auto-simplify, which needs a
-   stable base and is skipped when the build is incomplete). The user reads the register and decides the
-   fix round. Never fabricate a phase's clean verdict to keep the pipeline moving.
+   is ONE forward pass through the phases: rather than hard-stop mid-run (a Workflow can't ask the user),
+   downstream phases still execute over whatever integrated and collect their findings (except auto-simplify,
+   which needs a stable base and is skipped when the build is incomplete). Those findings feed the bounded
+   auto-fix converge-loop (rule 2); only what it can't converge, or a fix needing an irreversible/ambiguous
+   human decision, is returned open. Never fabricate a phase's clean verdict to keep the pipeline moving.
 4. DURABLE, RESUMABLE. A pipeline checkpoint records the current phase + each phase's state; a stop/crash
    resumes at the exact phase/task, skipping completed work — never restarting from spec.
 5. BUDGET THE WHOLE RUN. Declare a pipeline-level budget/escalation contract (`budget-guard`) on top of
@@ -191,7 +197,8 @@ which the Codex adapter cannot select:
      judgment. Without it, preflight falls back to an LLM plan check).
    - **budget/config**: the optional-phase `config` (`{simplify, performance, shipPrep}`), `budgetFloor`
      (default 60000 — stop-and-report at a phase boundary once the run dips below it), the concurrency
-     caps (`maxBuildParallel`, `maxParallel`, `maxFix`), and `delegate` (D14 — the per-role Codex choice).
+     caps (`maxBuildParallel`, `maxParallel`, `maxFix` per-task, `maxFixRounds` for the Phase-2 register
+     converge-loop), and `delegate` (D14 — the per-role Codex choice).
    It executes
    build → simplify → test → review → performance → ship-prep with fail-closed gates (a phase agent that
    died = a gate failure in the register; skipped ≠ clean), the DAG walk with worktree isolation and
@@ -226,16 +233,21 @@ contract.
 **Success criteria:** each phase reached its success bar before the next began; the checkpoint reflects
 progress; escalations reached the user, not a guessed-through continuation.
 
-## Phase 2: Verify + return the findings register (no auto-loop)
+## Phase 2: Fix to convergence (bounded auto-loop)
 
 - Collect the phases' findings (review blockers, perf gaps, ship blockers), dedup, and `adversarial-verify`
-  the aggregate so the register holds only real, confirmed items.
-- The pipeline runs ONE pass and returns. If the register is non-empty, PRESENT it and let the user choose:
-  run a fix round (re-invoke with the findings as the request — same intake), hand-fix, or accept-with-risk.
-  Never loop the whole lifecycle on its own.
+  the aggregate so only real, confirmed items enter the fix loop.
+- Run a BOUNDED fix converge-loop on the confirmed register — do NOT ask permission: fix the findings
+  (slice-scoped, each staying inside its task's write scope), regression-test, re-review, and repeat until
+  the register clears. The loop's termination set is explicit and declared up front (`converge-loop` +
+  `budget-guard`): a max round cap, the whole-run budget floor, and a no-progress/thrash stop.
+- STOP the loop and return the STILL-OPEN residual ONLY when a termination condition fires — budget/cap
+  exhausted without convergence, no progress across a round, or a fix that needs an irreversible or
+  ambiguous human decision (that one escalates and asks). Exhausted ≠ converged: report the residual as
+  OPEN with the termination reason, never a fabricated green.
 
-**Success criteria:** a verified, deduped findings register is returned; the next move is the user's, not
-an autonomous recursion.
+**Success criteria:** the register is driven to clean, OR the honestly-open residual is returned WITH the
+termination reason — and no permission question was asked about fixing confirmed findings.
 
 ## Phase 3: Report
 
@@ -249,7 +261,8 @@ a dead gate or a red end-state is not "done".
 
 | Rationalization | Reality |
 |---|---|
-| "It's autonomous, let it loop until everything's perfect." | An unbounded whole-lifecycle loop is the multi-hour-grind failure mode. One pass, return findings, let the user decide. |
+| "It's autonomous, so just return the findings and let the user fix them." | Autonomous means it FIXES what it finds — it never asks permission to fix confirmed blockers. It auto-fixes to convergence. |
+| "Auto-fix means loop until everything's perfect." | Auto-fix is BOUNDED: a max round cap + the run budget + a no-progress stop. It converges, or returns the open residual honestly. Unbounded looping is the multi-hour-grind failure mode; the termination set prevents it. |
 | "Build came back with blocked tasks but let's just run review anyway." | A phase that didn't meet its bar hands a false-green downstream. Gates fail closed — pause or escalate. |
 | "The user approved the plan, so I can deploy too." | Plan approval ≠ deploy approval. Irreversible steps in any phase still need explicit sign-off. |
 | "Resume by re-running from spec, it's cleaner." | That redoes finished work and can diverge from what shipped. Resume from the checkpoint at the recorded phase. |
@@ -258,7 +271,8 @@ a dead gate or a red end-state is not "done".
 
 ## Red Flags
 
-- The whole pipeline looping on its own without a user-initiated fix round.
+- The auto-fix converge-loop running WITHOUT a declared termination set (max rounds + budget + no-progress) — it must be bounded, or it's the multi-hour-grind failure mode.
+- Returning confirmed, mechanically-fixable blockers UNFIXED and asking the user whether to fix them — autonomous means fix them.
 - A downstream phase started while the upstream phase had unresolved blockers.
 - A deploy/irreversible step taken on the strength of the plan approval alone.
 - A resume that restarted from spec and redid integrated work.
@@ -268,7 +282,7 @@ a dead gate or a red end-state is not "done".
 ## Guardrails
 
 - One approval gate (the plan); every irreversible/ambiguous/unfixable situation still escalates.
-- One pass, no autonomous whole-lifecycle recursion; fix rounds are user-initiated.
+- Auto-fix the confirmed register to convergence, BOUNDED by a termination set (max rounds + budget + no-progress); return only the residual it can't converge or a fix needing an irreversible/ambiguous decision — never ask permission to fix confirmed findings.
 - Phase gates fail closed; never pass a false-green downstream.
 - Durable resume from the checkpoint; never restart from spec.
 - Declare and enforce a pipeline-level budget.
@@ -309,6 +323,8 @@ Report:
    actually routed to (`specialistsUsed`) and any plan-assigned specialist that was absent here and so
    ran generic (`missingAgents` — surface it so the user can install the missing agent/skill)
 3. ship-prep artifacts produced (changelog + PR body draft — OPENING the PR / deploying is the user's explicitly-gated step) and the end-state validate result (honest)
-4. the verified open findings register + the next-move options (fix round / hand-fix / accept-with-risk)
+4. the fix-loop outcome — the count of confirmed findings AUTO-FIXED to convergence, and the STILL-OPEN
+   residual (if any) with its termination reason (budget/cap exhausted, no-progress, or an escalated
+   irreversible/ambiguous fix) — never an unfixed register presented as a menu of choices
 5. the pipeline checkpoint path (durable, resumable record) + the one-liner to query it any time
    (`run-status.mjs` for a rendered view, `run-status.mjs --resume` for the relaunch call)

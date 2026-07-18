@@ -14,10 +14,11 @@
 // auto-spec, auto-plan, and THE SINGLE PLAN APPROVAL (a Workflow cannot ask the user mid-run).
 // This script executes the approved, unattended stretch — build → simplify → test → review →
 // performance → ship-prep — with FAIL-CLOSED gates between phases, a durable checkpoint the
-// skill created beforehand, and a verified findings register as the return value. ONE pass,
-// no autonomous recursion: if the register is non-empty the USER decides on a fix round. Unlike
-// the canonical coordinator (which HARD-STOPS downstream on a blocked required gate), this legacy
-// backend does ONE FORWARD PASS collecting findings — see references/pipeline-state.md.
+// skill created beforehand, and a verified findings register as the return value. ONE forward pass
+// through the phases; the returned register then feeds the skill's BOUNDED auto-fix converge-loop
+// (Phase 2) — it is NEVER presented to the user as a fix-or-not choice. Unlike the canonical coordinator
+// (which HARD-STOPS downstream on a blocked required gate), this legacy backend collects findings across
+// the forward pass rather than hard-stopping — see references/pipeline-state.md.
 //
 // Launch (from the skill):
 //   Workflow({ scriptPath: "<this file>", args: {
@@ -440,6 +441,6 @@ return {
   workspaceValidatePassed: fin?.passed === true,
   specialistsUsed: [...usedSpecialists],   // installed agents the build actually routed to
   missingAgents: [...missingAgents],       // plan-assigned specialists absent here → ran generic
-  register,                                // the verified open findings — the USER decides the fix round
+  register,                                // the verified open findings — fed to the skill's bounded auto-fix loop, never a user fix-or-not choice
   statusFile: STATUS,
 }

@@ -160,8 +160,10 @@ additionally halts at `awaiting_authorization` and requires a fresh action capab
 `references/authorization-contract.md`). The user resolves it and re-invokes `resume` — it continues from
 `currentPhase`. The pipeline never decides a user-owned question to keep itself moving.
 
-## One pass, then stop
+## Auto-fix to convergence, then stop
 
-After `auto-ship` (or an early fail-closed stop), the pipeline verifies + returns the `register` (rebuilt from the persisted `openItems`) and sets
-`status` (`done` if empty and everything shipped, else `needs_attention`). It does NOT loop the lifecycle.
-A fix round is a fresh invocation with the findings as the request.
+After the phases, the pipeline runs a BOUNDED auto-fix converge-loop over the verified `register` (rebuilt
+from the persisted `openItems`): fix → re-review, capped by `maxFixRounds` + the run budget + a no-progress
+stop. It never asks the user whether to fix confirmed findings. It then sets `status` (`done` if the
+register converged and everything shipped, else `needs_attention` carrying the honestly-open residual +
+the termination reason). Only a fix that needs an irreversible/ambiguous human decision escalates and pauses.
