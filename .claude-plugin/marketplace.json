@@ -10,8 +10,8 @@
     {
       "name": "autonomous-engineering",
       "source": {
-        "source": "github",
-        "repo": "ulpi-io/skills-autonomous-engineering"
+        "source": "url",
+        "url": "https://github.com/ulpi-io/skills-autonomous-engineering.git"
       },
       "description": "The software delivery lifecycle as autonomous, loop- and workflow-driven phases: auto-spec → auto-plan → auto-build → auto-simplify → auto-test → auto-review → auto-performance → auto-ship, plus the converge-loop / adversarial-verify / checkpoint-resume / fan-out-work / budget-guard primitives, deterministic guard hooks, and runnable Workflow templates.",
       "homepage": "https://github.com/ulpi-io/skills-autonomous-engineering",
