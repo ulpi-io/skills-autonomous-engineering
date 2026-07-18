@@ -17,6 +17,17 @@
       "homepage": "https://github.com/ulpi-io/skills-autonomous-engineering",
       "license": "MIT",
       "keywords": ["autonomous", "agents", "loops", "goals", "workflow", "delivery", "spec", "plan", "build", "test", "review", "ship"]
+    },
+    {
+      "name": "handoff",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/ulpi-io/handoff.git"
+      },
+      "description": "Hand off a build or review to another one-shot headless agent — Codex, Grok, or Kiro — over one uniform, fail-closed contract (/handoff:codex-build, /handoff:grok-review, …). The prompt is fed as literal bytes (never argv), trust is scoped to the verb (read-only review, least-write build), and an agent that cannot run is reported gateNotRun, never a fabricated clean.",
+      "homepage": "https://github.com/ulpi-io/handoff",
+      "license": "MIT",
+      "keywords": ["handoff", "delegate", "codex", "grok", "kiro", "review", "build", "agents"]
     }
   ]
 }
