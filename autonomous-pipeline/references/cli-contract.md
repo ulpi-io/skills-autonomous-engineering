@@ -87,6 +87,21 @@ Both `--flag value` and `--flag=value` are accepted; `--json` is a boolean switc
 - `parseCanonicalPlan(text)` → parses JSON, requires an object with `tasks: []` and `layers: []`;
   malformed or schema-invalid throws (`code = 2`).
 
+### Binding scope at `approve`
+
+`approve` performs a second, pre-mutation gate over the parsed plan. Executable pipeline plans carry:
+
+- `selectedScope: [{ id, title, source }]` — the itemized intake selection and scope authority;
+- `tasks[].scopeItems: [id, ...]` — task coverage mappings;
+- `scopeDrops: [{ scopeId, reason, acknowledgedByUser: true, acknowledgement }]` — only after the user
+  separately acknowledges that exact drop. General plan approval is not acknowledgement evidence.
+
+The coordinator recomputes `scopeCoverage = { total, covered, dropped, uncovered, errors }` before it
+creates a checkpoint or mints a capability. It refuses with exit `3` on `scope-missing`, `scope-invalid`,
+`scope-drop-unacknowledged`, or `scope-uncovered`. A successful approve returns and durably stores the
+coverage object; the plan hash binds it to the capability. The approval UI/report renders **SCOPE
+COVERAGE: N of M selected-scope items covered** plus every drop and UNCOVERED id.
+
 ### One-object-on-stdout JSON rule
 
 In `--json` mode the CLI emits **exactly one final JSON object on stdout**; all diagnostics go to

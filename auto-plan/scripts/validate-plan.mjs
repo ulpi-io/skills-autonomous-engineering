@@ -12,7 +12,9 @@
 //   4. INDEPENDENT — within a layer, write scopes are disjoint (prefix-aware: src/api and
 //                    src/api/handlers.ts overlap) — parallel writers must never race.
 //   5. ATOMIC      — ≤3 entries per writeScope (split bigger tasks).
-//   6. SLICE VALIDATE — non-empty per task; BLOCKS whole-suite e2e gates (a bare playwright/cypress
+//   6. SCOPE       — executable plans carry binding selectedScope[]; every id maps to task.scopeItems[]
+//                    or a separately acknowledged scopeDrops[] entry. Unknown/duplicate/uncovered ids fail.
+//   7. SLICE VALIDATE — non-empty per task; BLOCKS whole-suite e2e gates (a bare playwright/cypress
 //                    runner that only greens at end-state); WARNS (non-blocking) on the ambiguous
 //                    `<runner> test -- <file>` form — the vitest footgun (`--` drops the positional)
 //                    but ALSO canonical for Jest, so it advises an explicit runner without blocking.
@@ -87,6 +89,75 @@ const isExecutable = plan.executable === true
   || (typeof plan.mode === 'string' && /^(executable|expansion|codex)$/i.test(plan.mode.trim()))
   || tasks.some((t) => typeof t?.validateCommand === 'string' && t.validateCommand.trim());
 
+// ── binding selected-scope coverage ───────────────────────────────────────────────────
+// The spec is not the scope authority: selectedScope[] is captured at intake and survives spec/plan.
+// A proposed drop is resolved only when the plan records a distinct, per-id user acknowledgement with
+// evidence; general plan approval is deliberately not accepted here as a substitute.
+const selectedScope = Array.isArray(plan.selectedScope) ? plan.selectedScope : [];
+const scopeDrops = Array.isArray(plan.scopeDrops) ? plan.scopeDrops : [];
+const scopeById = new Map();
+const mappedById = new Map();
+const droppedById = new Map();
+
+if (isExecutable && selectedScope.length === 0) {
+  p('(scope)', 'executable plan is missing nonempty selectedScope[] — intake scope authority is absent');
+}
+if (plan.selectedScope !== undefined && !Array.isArray(plan.selectedScope)) p('(scope)', 'selectedScope must be an array');
+if (plan.scopeDrops !== undefined && !Array.isArray(plan.scopeDrops)) p('(scope)', 'scopeDrops must be an array');
+
+for (const item of selectedScope) {
+  const id = item?.id;
+  if (typeof id !== 'string' || !SAFE_ID.test(id)) { p('(scope)', `selectedScope entry has invalid id ${JSON.stringify(id)}`); continue; }
+  if (scopeById.has(id)) p(id, 'duplicate selectedScope id');
+  else scopeById.set(id, item);
+  if (typeof item?.title !== 'string' || item.title.trim() === '') p(id, 'selectedScope item is missing a nonempty title');
+  if (typeof item?.source !== 'string' || item.source.trim() === '') p(id, 'selectedScope item is missing a nonempty source');
+}
+
+for (const t of tasks) {
+  if (isExecutable && !Array.isArray(t?.scopeItems)) {
+    p(t?.id || '(task)', 'executable task is missing scopeItems[]');
+    continue;
+  }
+  if (t?.scopeItems !== undefined && !Array.isArray(t.scopeItems)) {
+    p(t?.id || '(task)', 'scopeItems must be an array of selectedScope ids');
+    continue;
+  }
+  for (const raw of t?.scopeItems || []) {
+    const id = String(raw);
+    if (!scopeById.has(id)) p(t.id, `scopeItems references unknown selectedScope id '${id}'`);
+    const owners = mappedById.get(id) || [];
+    if (owners.includes(t.id)) p(t.id, `scopeItems repeats '${id}'`);
+    else owners.push(t.id);
+    mappedById.set(id, owners);
+  }
+}
+
+for (const drop of scopeDrops) {
+  const id = drop?.scopeId;
+  if (typeof id !== 'string' || !scopeById.has(id)) { p('(scope)', `scopeDrops references unknown selectedScope id '${String(id)}'`); continue; }
+  if (droppedById.has(id)) { p(id, 'duplicate scopeDrops entry'); continue; }
+  const validReason = typeof drop?.reason === 'string' && drop.reason.trim() !== '';
+  const validAck = drop?.acknowledgedByUser === true
+    && typeof drop?.acknowledgement === 'string' && drop.acknowledgement.trim() !== '';
+  if (!validReason) p(id, 'scope drop is missing a nonempty reason');
+  if (!validAck) p(id, 'scope drop lacks explicit per-id user acknowledgement evidence');
+  if (validReason && validAck) droppedById.set(id, drop);
+}
+
+const scopeCoverage = { total: scopeById.size, covered: [], dropped: [], uncovered: [] };
+for (const id of scopeById.keys()) {
+  const mapped = (mappedById.get(id) || []).length > 0;
+  const dropped = droppedById.has(id);
+  if (mapped && dropped) p(id, 'selectedScope id is both task-mapped and dropped');
+  if (mapped) scopeCoverage.covered.push(id);
+  else if (dropped) scopeCoverage.dropped.push(id);
+  else {
+    scopeCoverage.uncovered.push(id);
+    p(id, 'UNCOVERED selected-scope item — map it to task.scopeItems[] or record an explicit per-id user-approved drop');
+  }
+}
+
 // ── 1. shape ──────────────────────────────────────────────────────────────────────
 const byId = {};
 for (const t of tasks) {
@@ -150,7 +221,7 @@ for (const [i, layer] of layers.entries()) {
 // ── 5. atomicity cap ───────────────────────────────────────────────────────────────
 for (const t of tasks) if ((t?.writeScope || []).length > 3) p(t.id, `writeScope has ${t.writeScope.length} entries > 3 — split the task`);
 
-// ── 6. slice-validate command form ─────────────────────────────────────────────────
+// ── 7. slice-validate command form ─────────────────────────────────────────────────
 for (const t of tasks) {
   const v = sliceCommandOf(t);   // the command that will actually run (validateCommand preferred, else legacy validate)
   // ADVISORY (non-blocking): `<runner> test -- <file>` is the vitest footgun (the `--` makes vitest
@@ -206,6 +277,9 @@ if (isExecutable) {
 if (rest.includes('--render')) {
   // derived human view — rendered on demand from the single canonical JSON; never stored, so it can never drift
   const lines = [`# Plan: ${plan.name || file} — ${tasks.length} tasks, ${layers.length} layers`, ''];
+  lines.push(`## SCOPE COVERAGE: ${scopeCoverage.covered.length} of ${scopeCoverage.total} selected-scope items covered`);
+  lines.push(`- explicitly dropped: ${scopeCoverage.dropped.length ? scopeCoverage.dropped.join(', ') : 'none'}`);
+  lines.push(`- UNCOVERED: ${scopeCoverage.uncovered.length ? scopeCoverage.uncovered.join(', ') : 'none'}`, '');
   layers.forEach((layer, i) => {
     lines.push(`## Layer ${i + 1}`);
     for (const id of layer) {
@@ -220,7 +294,7 @@ if (rest.includes('--render')) {
   console.log(lines.join('\n'));
 }
 
-const out = { file, tasks: tasks.length, layers: layers.length, violations: problems.length, problems, warnings };
+const out = { file, tasks: tasks.length, layers: layers.length, scopeCoverage, violations: problems.length, problems, warnings };
 if (rest.includes('--json')) console.log(JSON.stringify(out, null, 2));
 else {
   if (warnings.length) console.error(`⚠ ${warnings.length} advisory warning(s) (non-blocking):\n` + warnings.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));

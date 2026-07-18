@@ -68,8 +68,10 @@ export function makeGitRepo({ layers, redTasks = [], run } = {}) {
   const allIds = layers.flat();
   const tasks = allIds.map((id) => ({
     id, writeScope: [`src/${id}.js`], paths: [`src/${id}.js`], subject: `integrate ${id}`,
+    scopeItems: [`SCOPE-${id}`],
   }));
-  const plan = { planId: `${runId}-plan`, base: { approvalReady: true }, tasks, layers };
+  const selectedScope = allIds.map((id) => ({ id: `SCOPE-${id}`, title: `deliver ${id}`, source: 'e2e fixture intake' }));
+  const plan = { planId: `${runId}-plan`, base: { approvalReady: true }, selectedScope, scopeDrops: [], tasks, layers };
   const budget = {
     maxCodexCalls: 200, maxActiveWallMs: 600000, maxAttemptsPerTask: 20,
     maxAttemptsPerPhase: 100, maxNoProgressBarriers: 20, escalationTriggers: [],

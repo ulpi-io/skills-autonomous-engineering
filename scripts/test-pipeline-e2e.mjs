@@ -88,7 +88,11 @@ function startSeams(fx, spies) {
     executor: makeExecutor(fx, spies),
     validateFor: (id) => ({ command: process.execPath, args: ['-e', VALIDATOR, join(fx.root, 'src', `${id}.js`)] }),
     review: async () => ({ canAdvance: true }),
-    phaseFns: { test: async () => { spies.phaseTestRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; } },
+    phaseFns: {
+      test: async () => { spies.phaseTestRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+      auto_learn: async () => { spies.autoLearnRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+      auto_map: async () => { spies.autoMapRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+    },
     validateFn: async ({ phase }) => { const r = realGreen(fx.root); return { ok: r.ok, head: '', signature: phase }; },
     finalValidateFn: async () => { spies.finalValidateRan = true; spies.finalValidateSeq = spies.seq++; return realGreen(fx.root); },
     reviewOptions: {
@@ -191,9 +195,11 @@ test('AC1/AC2: forced-red isolates the failure durably; resume repairs only it, 
     // Resume re-executed ONLY the failed task; the durable one was skipped (never re-run).
     assert.deepEqual(s2.execCalls, ['beta'], 'resume repaired only the failed task; the durable one was skipped');
 
-    // Every required gate actually ran (test agent, review dimension, terminal final validation).
+    // Every required gate actually ran (test, review, learn, map, terminal final validation).
     assert.equal(s2.phaseTestRan, true, 'the test phase ran');
     assert.equal(s2.reviewDimRan, true, 'the review dimension ran');
+    assert.equal(s2.autoLearnRan, true, 'auto-learn closeout ran');
+    assert.equal(s2.autoMapRan, true, 'auto-map closeout ran');
     assert.equal(s2.finalValidateRan, true, 'the final validation ran');
 
     // Exactly ONE publication, and it happened AFTER final validation.
@@ -207,6 +213,8 @@ test('AC1/AC2: forced-red isolates the failure durably; resume repairs only it, 
     assert.equal(doc.phases.build.status, 'done');
     assert.equal(doc.phases.test.status, 'done');
     assert.equal(doc.phases.review.status, 'done');
+    assert.equal(doc.phases.auto_learn.status, 'done');
+    assert.equal(doc.phases.auto_map.status, 'done');
     assert.equal(doc.finalValidation.status, 'green');
     const tip = refSha(fx.root, fx.integrationRef);
     assert.equal(refSha(fx.root, 'refs/heads/main'), tip, 'the target fast-forwarded to the integration tip');
@@ -260,6 +268,8 @@ test('AC3: a clean run preserves ordering, bounded parallelism, checkpoint evide
     assert.equal(doc.phases.build.status, 'done');
     assert.equal(doc.phases.test.status, 'done');
     assert.equal(doc.phases.review.status, 'done');
+    assert.equal(doc.phases.auto_learn.status, 'done');
+    assert.equal(doc.phases.auto_map.status, 'done');
     for (const p of ['simplify', 'performance', 'ship_prep']) assert.equal(doc.phases[p].status, 'skipped');
     assert.equal(doc.finalValidation.status, 'green');
 

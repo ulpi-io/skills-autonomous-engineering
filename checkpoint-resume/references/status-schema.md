@@ -1,7 +1,9 @@
 # Status File Schema & Lifecycle
 
 Load when defining a run's status schema, writing resume logic, or recovering a crashed run. The file
-lives at `.ulpi/runs/<id>.json`. It is BOTH the live progress view and the durable checkpoint.
+lives at `.ulpi/runs/<id>.json`. It is the durable-primary progress view and checkpoint cache. For a
+git-integrating pipeline, reachable `Task-Id` trailers are the durable integration log and resume
+reconciles the file against that log before trusting its per-unit completion state.
 
 ## Full schema
 
@@ -60,7 +62,11 @@ produces) carries four more durable facts. A v1 run keeps working unchanged; the
   },
   "pipeline": {                               // coordinator metadata (stamped by `approve`)
     "integrationRef": "refs/heads/ulpi-int-<run>",   // the serialized integration branch
-    "targetRef": "refs/heads/main"                   // the eventual publish target
+    "targetRef": "refs/heads/main",                  // the eventual publish target
+    "scopeCoverage": {                        // recomputed before approval mutates state
+      "total": 2, "covered": ["SCOPE-001", "SCOPE-002"],
+      "dropped": [], "uncovered": [], "errors": []
+    }
   }
 }
 ```
@@ -71,6 +77,30 @@ produces) carries four more durable facts. A v1 run keeps working unchanged; the
 - **finalValidation** — the run's terminal workspace verdict. `finalize done` (with `requireValidation`)
   refuses unless it is present and `green`. `red`/absent is reported honestly, never masked.
 - **integrationRef** — the branch per-task changes are serialized onto before they reach `targetRef`.
+- **scopeCoverage** — the binding intake checklist receipt. Canonical `finalize done` refuses when this is
+  absent/invalid or `uncovered` is nonempty. A drop appears only after a separate per-id user
+  acknowledgement; general plan approval is not a drop acknowledgement.
+
+### Git-backed integration durability (coordinator + legacy Workflow)
+
+For git-integrating pipeline runs, a commit carrying `Task-Id: <id>` and reachable from the run's
+integration ref is the durable proof that the unit integrated. The canonical coordinator uses
+`pipeline.integrationRef`; the legacy Claude Workflow uses its configured `workingBranch` and now emits
+the same trailer on each merge commit.
+
+Resume reconciles before scheduling work:
+
+- A reachable trailer whose status write was lost is recovered into the existing `done` state and skipped.
+  The coordinator records `note: "reconciled-from-trailer:<sha>"`; `run-status.mjs` surfaces that note.
+- The coordinator treats a checkpoint `done` with no reachable trailer as a durable blocker (`stale-done`),
+  rather than trusting a cache entry whose integration cannot be proved.
+- The legacy Workflow preflight unconditionally scans `git log <workingBranch>` even when no
+  `checkpointCli` is configured, and unions matching reachable trailer ids into `doneUnits`. A commit that
+  exists only on `task/<id>` is not reachable from the integration branch, so it is re-run.
+
+There is deliberately no separate `integrated` unit status: reconciled work uses `done`, the only state
+existing resume/finalize consumers skip. There is also no claimed merge-plus-checkpoint transaction. The
+merge and status write are separate; Git is the recovery backstop when the latter is lost.
 
 ## Per-unit state machine
 
@@ -81,8 +111,9 @@ pending ──▶ in_progress ──▶ done
    └──▶ dep_blocked                  (a dependency isn't done — points at the root)
 ```
 
-- **done** is the ONLY state that causes a skip on resume. Everything else is re-eligible (subject to
-  deps). An `in_progress` unit found on resume was interrupted → redo it.
+- **done** is the ONLY state that causes a skip on resume. A git-integrating pipeline first reconciles
+  reachable trailers into `done`; everything else is re-eligible (subject to deps). An `in_progress` unit
+  found on resume with no reachable trailer was interrupted → redo it.
 - **blocked** vs **dep_blocked**: `blocked` = this unit itself failed its attempts; `dep_blocked` = it
   never got to run because an upstream unit isn't `done`. Keep them distinct so triage points at the real
   root, not the symptom.
@@ -114,6 +145,15 @@ The bash `jq` recipe below is the lightweight SINGLE-writer form (atomic swap, n
 writes are effectively serialized (one coordinator patching between phases), NOT when many agents patch at
 once — use `checkpoint.mjs` for that.
 
+### Optional append-only transition log
+
+The default remains one locked, atomic `.json` checkpoint. Massive plans may explicitly opt into
+`scripts/lib/event-log.mjs`: it appends one fsynced `<id>.events.jsonl` transition, then atomically
+refreshes the same `<id>.json` snapshot. Normal appends inspect only the log tail, while
+`rebuildSnapshot()` replays the hash-chained log after a crash. Replay may discard only a syntactically
+torn final fragment without a newline; corruption in a complete record fails closed. Because readers
+still consume the snapshot, `run-status.mjs` behaves identically in both modes.
+
 ```bash
 patch() {  # patch <file> <unit> <status> [note]
   local f=$1 u=$2 s=$3 n=${4:-}
@@ -136,9 +176,16 @@ dir with `cksum` before/after every read path and asserts byte-identity).
 
 - **badge** — the honest terminal/live state (`◐ running`, `● done`, `▲ needs attention`, `✗ aborted`).
 - **branch** — `pipeline.integrationRef → pipeline.targetRef` when present (`integration → target`).
-- **phases** — each phase glyph in canonical order; the current phase bolded while `running`.
+- **phases** — each phase glyph in canonical order, including required `auto_learn` then `auto_map`
+  closeout receipts; the current phase bolded while `running`.
 - **build** — a `done/total` unit bar plus chips for in-progress / blocked / dep-blocked / pending, with a
-  detail line (note + duration) for anything not moving forward.
+  detail line (note + duration) for anything not moving forward, plus any
+  `reconciled-from-trailer:<sha>` provenance carried by a recovered done unit.
+- **Live workflow / divergence** — a best-effort overlay from the newest external Claude Code
+  `journal.jsonl` for this project (`started`/`result` envelopes only), followed by live agents spawned vs
+  durable units done. Absence, a torn final append, or external-format drift never blocks the durable
+  render: absence prints an honest `no live workflow … use /workflows` note. The reader never opens
+  `agent-<id>.jsonl`, spawns Git, or writes the run document.
 - **open / resolved** — the count of UNRESOLVED findings (with up to ten one-liners) and a one-line count
   of the durable `resolvedItems` audit trail.
 - **final** — the `finalValidation` verdict: `✓ validation green` or an honest `✗ validation red/…`.
@@ -173,10 +220,12 @@ dep_blocked:{unit→root} }`.
 ## Recovering a crashed run (no final write)
 
 A run killed mid-flight leaves `status: "running"` and maybe an `in_progress` unit — do NOT trust that
-as the end state. Reconstruct from artifacts:
+as the end state. Reconcile from artifacts:
 
-- For a git-integrating run: `git log`/`git branch` shows which units actually merged → those are `done`
-  regardless of what the file says.
+- For a coordinator run: `reconcileResume` scans `Task-Id` trailers reachable from `integrationRef`,
+  recovers lost writes as `done` with `reconciled-from-trailer:<sha>`, and blocks stale `done` records.
+- For the legacy Workflow: its preflight scans reachable trailers on `workingBranch` and unions them into
+  `doneUnits`; a task branch that never merged remains eligible.
 - For a file migration: check each target file's actual content/marker.
 - For a converge-loop: re-run the validate; the real signal beats the recorded one.
 
@@ -185,7 +234,8 @@ Rebuild the `units` map from that ground truth, then resume normally. This is wh
 
 ## Relationship to the runtime's resume
 
-Claude Code's Workflow tool has its own `resumeFromRunId` (agent-result cache). That's an *optimization*
-layered on top — it makes a same-session resume instant. This file is the *source of truth*: it works
-across sessions, survives cache invalidation (any template edit busts the agent cache), and is what makes
-resume durable rather than best-effort. Use both when available; rely on the file.
+Claude Code's Workflow tool has its own `resumeFromRunId` (agent-result cache), and `run-status` can read
+its external workflow journal as a live overlay. Both are optional session conveniences. Durable resume
+uses the on-disk status document plus, for git integration, reachable `Task-Id` trailers; it works across
+sessions and survives cache invalidation or a missing journal. Never make the journal or agent-result
+cache a resume dependency.

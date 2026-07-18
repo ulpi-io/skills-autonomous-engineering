@@ -64,10 +64,18 @@ Stated plainly, provider-independent — these are what separate "autonomous" fr
    that spent its budget without converging says so and returns the open items — no fabricated green.
 3. **Verify before acting.** Findings/claims that drive mutations are adversarially refuted (N skeptics,
    majority-refute) before they are acted on. See `adversarial-verify`.
-4. **Durable + resumable.** Long runs checkpoint to `.ulpi/runs/<id>.json`; resume skips done units and
-   never restarts integrated work — session-independent, not cache-dependent. See `checkpoint-resume`.
+4. **Durable + resumable.** Long runs checkpoint to `.ulpi/runs/<id>.json`; git-integrating coordinator
+   and legacy Workflow runs reconcile resume from reachable `Task-Id` trailers, so a lost status write
+   never restarts integrated work. Status is durable-primary with a best-effort live overlay; the session
+   journal is never a dependency. See `checkpoint-resume`.
 5. **Escalate, don't guess.** Irreversible or ambiguous decisions that are the human's to make stop and
    surface rather than looping or picking silently.
+6. **Bind intake scope.** A named user selection is itemized as `selectedScope[]` before spec. The spec
+   cannot demote an id to non-goals; every id maps to a task or a separately user-acknowledged drop.
+   Approval renders per-id coverage, and uncovered scope blocks convergence.
+7. **Close every run.** "Fix all" means the complete actionable register across all phases and severities.
+   A successful convergence also requires durable `auto_learn` then `auto_map` receipts; a green build or
+   plan approval cannot substitute for either closing phase.
 
 ## Using the skills (any agent)
 
@@ -113,6 +121,8 @@ bash scripts/test-scheduled-job.sh          # scheduled-job schema/dedup/capabil
 **Node unit / E2E suites (`node:test`, mock/fake runtimes — no live agents, no network)**
 
 ```
+node --test scripts/test-workflow-journal.mjs       # captured-format best-effort live overlay
+node --test scripts/test-event-log.mjs              # opt-in append log + atomic snapshot recovery
 node --test scripts/test-pipeline-state.mjs        # state machine transitions + convergence
 node --test scripts/test-cli-contract.mjs          # argv/flag parsing + fail-closed refusals
 node --test scripts/test-git-workspaces.mjs        # worktree isolation lifecycle

@@ -2,7 +2,7 @@
 //
 // Where review-panel.mjs owns the review phase's *decision* machinery (kept deliberately separate and
 // imported here for the review phase), THIS module owns the sequential *orchestration* of every other
-// post-build phase — simplify, test, review, performance, ship_prep — and the terminal FINAL VALIDATION
+// post-build phase — simplify, test, review, performance, ship_prep, auto_learn, auto_map — and the terminal FINAL VALIDATION
 // gate. It runs them SEQUENTIALLY in the coordinator-owned integration worktree, turning "run the rest of
 // the pipeline" into structured, evidence-honest, hard-gated results:
 //
@@ -17,8 +17,9 @@
 //      resolution is the coordinator's observation (observedBy:'coordinator'), not the claimant's word.
 //   4. HARD DOWNSTREAM GATE. Agent death, ok:false / malformed output, red OR missing coordinator
 //      validation, a refused budget reservation, a no-progress / budget stop, a blocked review panel, or a
-//      failed checkpoint write BLOCKS the phase AND every downstream phase. Nothing runs past a gate that
-//      did not go green — and a phase that did not actually pass is NEVER reported 'done'.
+//      failed checkpoint write BLOCKS the phase and later ORDINARY phases. Required closeout still runs
+//      auto_learn then auto_map after a bumpy pass; auto_map never runs past failed auto_learn. A phase that
+//      did not actually pass is NEVER reported 'done'.
 //   5. CONVERGENCE. The engine ends by reconciling its phase states + the terminal final-validation result
 //      against pipeline-state's convergence conjunction, so a blocked run reports converged:false honestly.
 //
@@ -58,14 +59,18 @@ export const PHASE_BLOCK_REASONS = Object.freeze({
 export const FINAL_VALIDATION = '__final_validation__';
 
 // The canonical POST-BUILD phase order (build itself is upstream of this engine). Optional phases may be
-// omitted; required phases may not. `review` is delegated to review-panel; the rest invoke a phase agent.
+// omitted; required phases may not. `review` is delegated to review-panel. auto_learn/auto_map are required
+// CLOSEOUT phases: after a real pass they run even when an ordinary phase blocked, in that exact order.
 export const POST_BUILD_PHASES = Object.freeze([
   Object.freeze({ name: 'simplify', optional: true, mutating: true }),
   Object.freeze({ name: 'test', optional: false, mutating: true }),
   Object.freeze({ name: 'review', optional: false, review: true }),
   Object.freeze({ name: 'performance', optional: true, mutating: true }),
   Object.freeze({ name: 'ship_prep', optional: true, mutating: true }),
+  Object.freeze({ name: 'auto_learn', optional: false, mutating: true, closeout: true }),
+  Object.freeze({ name: 'auto_map', optional: false, mutating: true, closeout: true }),
 ]);
+export const CLOSEOUT_PHASES = Object.freeze(POST_BUILD_PHASES.filter((p) => p.closeout === true));
 
 // ── phase output validation ─────────────────────────────────────────────────────────
 // A phase agent's structured output MUST be a plain object that explicitly claims ok:true. Anything else
@@ -84,6 +89,7 @@ function normPhase(p) {
     optional: p.optional === true,
     mutating: p.review === true ? false : p.mutating !== false, // agent phases mutate by default; review does not
     review: p.review === true,
+    closeout: p.closeout === true,
     schema: p.schema ?? null,
   };
 }
@@ -98,6 +104,7 @@ function normalizeOptions(opts) {
   const phaseFns = (o.phaseFns && typeof o.phaseFns === 'object' && !Array.isArray(o.phaseFns)) ? o.phaseFns : {};
   const validateFn = typeof o.validateFn === 'function' ? o.validateFn : null;         // coordinator per-phase validation
   const finalValidateFn = typeof o.finalValidateFn === 'function' ? o.finalValidateFn : null; // coordinator terminal gate
+  const terminalValidation = o.terminalValidation !== false;
   const reviewOptions = (o.reviewOptions && typeof o.reviewOptions === 'object' && !Array.isArray(o.reviewOptions)) ? o.reviewOptions : null;
   const skipRaw = Array.isArray(o.skip) ? o.skip : [];
   const skip = new Set(skipRaw.map(String));
@@ -109,7 +116,7 @@ function normalizeOptions(opts) {
   const setPhaseState = typeof hooks.setPhaseState === 'function' ? hooks.setPhaseState : ckPhase;
   const recordValidation = typeof hooks.recordValidation === 'function' ? hooks.recordValidation : ckValidation;
   return {
-    file: o.file, worktree: o.worktree, phaseDefs, phaseFns, validateFn, finalValidateFn, reviewOptions,
+    file: o.file, worktree: o.worktree, phaseDefs, phaseFns, validateFn, finalValidateFn, terminalValidation, reviewOptions,
     skip, callTimeoutMs, clock, openItems, units, setPhaseState, recordValidation,
   };
 }
@@ -264,6 +271,7 @@ export async function runPhaseEngine(opts) {
   const order = [];
   const blockedReasons = [];
   let gated = false;              // the hard downstream-gate latch
+  let closeoutBlocked = false;    // auto_map never runs past a failed auto_learn
   let firstBlockedPhase = null;
 
   const trip = (name, reasonToken) => {
@@ -274,7 +282,7 @@ export async function runPhaseEngine(opts) {
 
   for (const p of ctx.phaseDefs) {
     // (4) HARD DOWNSTREAM GATE: once anything blocked, nothing after it runs — it is gated, not skipped.
-    if (gated) {
+    if ((gated && !p.closeout) || (p.closeout && closeoutBlocked)) {
       tryCheckpoint(ctx, p.name, 'blocked');
       results.push({ name: p.name, state: 'blocked', ran: false, reason: PHASE_BLOCK_REASONS.UPSTREAM_BLOCKED });
       blockedReasons.push(`${PHASE_BLOCK_REASONS.UPSTREAM_BLOCKED}:${p.name}`);
@@ -286,13 +294,13 @@ export async function runPhaseEngine(opts) {
       if (!p.optional) {
         tryCheckpoint(ctx, p.name, 'blocked');
         const r = blockedResult(p.name, PHASE_BLOCK_REASONS.REQUIRED_OMITTED, { ran: false });
-        results.push(r.result); trip(p.name, r.reason);
+        results.push(r.result); trip(p.name, r.reason); if (p.closeout) closeoutBlocked = true;
         continue;
       }
       const ck = tryCheckpoint(ctx, p.name, 'skipped');
       if (!ck.ok) {
         const r = blockedResult(p.name, PHASE_BLOCK_REASONS.CHECKPOINT_FAILED, { ran: false, error: ck.error });
-        results.push(r.result); trip(p.name, r.reason);
+        results.push(r.result); trip(p.name, r.reason); if (p.closeout) closeoutBlocked = true;
         continue;
       }
       results.push({ name: p.name, state: 'skipped', ran: false });
@@ -302,12 +310,12 @@ export async function runPhaseEngine(opts) {
     // RUN the phase (review is delegated; every other phase invokes its agent).
     const r = p.review ? await runReviewPhase(ctx, p, order) : await runAgentPhase(ctx, p, order);
     results.push(r.result);
-    if (r.blocked) trip(p.name, r.reason);
+    if (r.blocked) { trip(p.name, r.reason); if (p.closeout) closeoutBlocked = true; }
   }
 
   // Terminal final-validation gate — only reached when no phase blocked.
   let finalValidation = null;
-  if (!gated) {
+  if (!gated && ctx.terminalValidation) {
     finalValidation = await runFinalValidation(ctx);
     if (finalValidation.ok !== true) {
       const reason = finalValidation.missing ? PHASE_BLOCK_REASONS.VALIDATION_MISSING : PHASE_BLOCK_REASONS.VALIDATION_RED;

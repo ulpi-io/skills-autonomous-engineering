@@ -28,7 +28,7 @@ const REAL = readFileSync(WORKFLOW, 'utf8');
 // ---- required suites: token = a substring that MUST appear in some step's `run` ----
 // mustInclude / mustNotInclude add per-suite flag assertions.
 const NODE_SUITES = [
-  'test-pipeline-state.mjs', 'test-cli-contract.mjs', 'test-git-workspaces.mjs',
+  'test-workflow-journal.mjs', 'test-event-log.mjs', 'test-pipeline-state.mjs', 'test-cli-contract.mjs', 'test-git-workspaces.mjs',
   'test-git-integration.mjs', 'test-codex-executor.mjs', 'test-budget-ledger.mjs',
   'test-authorization.mjs', 'test-review-panel.mjs', 'test-build-engine.mjs',
   'test-phase-engine.mjs', 'test-pipeline-cli.mjs', 'test-pipeline-e2e.mjs',

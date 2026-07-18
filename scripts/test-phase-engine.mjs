@@ -2,7 +2,7 @@
 // test-phase-engine.mjs — behavior contract for autonomous-pipeline/scripts/lib/phase-engine.mjs.
 //
 // The phase engine is the fail-closed post-build phase RUNNER: it runs simplify/test/review/performance/
-// ship_prep + final validation SEQUENTIALLY in the coordinator-owned integration worktree, reserving the
+// ship_prep + required auto_learn/auto_map closeout + final validation SEQUENTIALLY in the coordinator-owned integration worktree, reserving the
 // immutable budget BEFORE each mutating agent, advancing a phase ONLY on valid structured output PLUS
 // coordinator-run validation, and BLOCKING a phase + every downstream phase on any failure. These tests
 // drive the ACTUAL module against a REAL throwaway checkpoint (never the project state) with FAKE phase/
@@ -431,16 +431,110 @@ test('the review phase advances when the panel clears ship prep', async () => {
   cleanup(dir);
 });
 
+// ═══ required always-run closeout ════════════════════════════════════════════════════
+
+const closeoutDefs = () => ([
+  { name: 'test', optional: false, mutating: true },
+  { name: 'ordinary_after_test', optional: true, mutating: true },
+  { name: 'auto_learn', optional: false, mutating: true, closeout: true },
+  { name: 'auto_map', optional: false, mutating: true, closeout: true },
+]);
+
+test('auto_learn then auto_map run and persist receipts after a clean ordinary pass', async () => {
+  const { dir, file } = mkCheckpoint();
+  const order = [];
+  const res = await runPhaseEngine({
+    file, worktree: WORKTREE, phases: closeoutDefs(),
+    phaseFns: Object.fromEntries(['test', 'ordinary_after_test', 'auto_learn', 'auto_map'].map((name) => [name, async () => { order.push(name); return { ok: true }; }])),
+    validateFn: greenValidate, finalValidateFn: greenFinal,
+  });
+  assert.deepEqual(order, ['test', 'ordinary_after_test', 'auto_learn', 'auto_map']);
+  assert.equal(res.converged, true);
+  const doc = readDoc(file);
+  assert.equal(doc.phases.auto_learn.status, 'done');
+  assert.equal(doc.phases.auto_map.status, 'done');
+  cleanup(dir);
+});
+
+test('a bumpy ordinary pass gates ordinary downstream but still attempts auto_learn then auto_map', async () => {
+  const { dir, file } = mkCheckpoint();
+  const order = [];
+  const res = await runPhaseEngine({
+    file, worktree: WORKTREE, phases: closeoutDefs(),
+    phaseFns: {
+      test: async () => { order.push('test'); return { ok: false }; },
+      ordinary_after_test: async () => { order.push('ordinary_after_test'); return { ok: true }; },
+      auto_learn: async () => { order.push('auto_learn'); return { ok: true }; },
+      auto_map: async () => { order.push('auto_map'); return { ok: true }; },
+    },
+    validateFn: greenValidate, finalValidateFn: greenFinal,
+  });
+  assert.deepEqual(order, ['test', 'auto_learn', 'auto_map'], 'ordinary downstream stayed gated; closeout still ran in order');
+  const byName = Object.fromEntries(res.phases.map((p) => [p.name, p]));
+  assert.equal(byName.ordinary_after_test.reason, PHASE_BLOCK_REASONS.UPSTREAM_BLOCKED);
+  assert.equal(byName.auto_learn.state, 'done');
+  assert.equal(byName.auto_map.state, 'done');
+  assert.equal(res.converged, false, 'closeout receipts do not erase the ordinary blocker');
+  assert.equal(res.finalValidation, null, 'terminal validation does not run past the ordinary blocker');
+  cleanup(dir);
+});
+
+test('failed auto_learn writes a typed blocker and auto_map cannot run past it', async () => {
+  const { dir, file } = mkCheckpoint();
+  let mapCalls = 0;
+  const res = await runPhaseEngine({
+    file, worktree: WORKTREE,
+    phases: [
+      { name: 'auto_learn', optional: false, mutating: true, closeout: true },
+      { name: 'auto_map', optional: false, mutating: true, closeout: true },
+    ],
+    phaseFns: {
+      auto_learn: async () => { throw new Error('harvest failed'); },
+      auto_map: async () => { mapCalls++; return { ok: true }; },
+    },
+    validateFn: greenValidate, finalValidateFn: greenFinal,
+  });
+  const byName = Object.fromEntries(res.phases.map((p) => [p.name, p]));
+  assert.equal(byName.auto_learn.reason, PHASE_BLOCK_REASONS.AGENT_DEAD);
+  assert.equal(byName.auto_map.reason, PHASE_BLOCK_REASONS.UPSTREAM_BLOCKED);
+  assert.equal(byName.auto_map.ran, false);
+  assert.equal(mapCalls, 0);
+  assert.equal(readDoc(file).phases.auto_learn.status, 'blocked');
+  assert.equal(readDoc(file).phases.auto_map.status, 'blocked');
+  cleanup(dir);
+});
+
+test('configured omission of required auto_learn is refused and gates auto_map', async () => {
+  const { dir, file } = mkCheckpoint();
+  const res = await runPhaseEngine({
+    file, worktree: WORKTREE,
+    phases: [
+      { name: 'auto_learn', optional: false, mutating: true, closeout: true },
+      { name: 'auto_map', optional: false, mutating: true, closeout: true },
+    ],
+    skip: ['auto_learn'], phaseFns: { auto_map: fakeAgent() }, validateFn: greenValidate, finalValidateFn: greenFinal,
+  });
+  const byName = Object.fromEntries(res.phases.map((p) => [p.name, p]));
+  assert.equal(byName.auto_learn.reason, PHASE_BLOCK_REASONS.REQUIRED_OMITTED);
+  assert.equal(byName.auto_map.reason, PHASE_BLOCK_REASONS.UPSTREAM_BLOCKED);
+  assert.equal(res.converged, false);
+  cleanup(dir);
+});
+
 // ═══ default post-build phase set + input validation ═════════════════════════════════
 
-test('the default POST_BUILD_PHASES order is simplify → test → review → performance → ship_prep', () => {
-  assert.deepEqual(POST_BUILD_PHASES.map((p) => p.name), ['simplify', 'test', 'review', 'performance', 'ship_prep']);
+test('the default POST_BUILD_PHASES order ends with required auto_learn → auto_map closeout', () => {
+  assert.deepEqual(POST_BUILD_PHASES.map((p) => p.name), ['simplify', 'test', 'review', 'performance', 'ship_prep', 'auto_learn', 'auto_map']);
   const byName = Object.fromEntries(POST_BUILD_PHASES.map((p) => [p.name, p]));
   assert.equal(byName.test.optional, false);
   assert.equal(byName.review.optional, false);
   assert.equal(byName.simplify.optional, true);
   assert.equal(byName.performance.optional, true);
   assert.equal(byName.ship_prep.optional, true);
+  assert.equal(byName.auto_learn.optional, false);
+  assert.equal(byName.auto_learn.closeout, true);
+  assert.equal(byName.auto_map.optional, false);
+  assert.equal(byName.auto_map.closeout, true);
 });
 
 test('input validation: missing file / worktree / bad phase are refused (fail-closed usage errors)', async () => {

@@ -154,7 +154,16 @@ function humanLine(r) {
     r.converged !== undefined ? `converged=${r.converged}` : null,
     r.published !== undefined ? `published=${r.published}` : null,
     r.action ? `action=${r.action}` : null];
-  return bits.filter(Boolean).join(' ');
+  const summary = bits.filter(Boolean).join(' ');
+  const c = r.scopeCoverage;
+  if (r.command !== 'approve' || !c || typeof c !== 'object') return summary;
+  return [
+    summary,
+    `SCOPE COVERAGE: ${(c.covered || []).length} of ${c.total} selected-scope items covered`,
+    `covered: ${(c.covered || []).join(', ') || 'none'}`,
+    `explicitly dropped: ${(c.dropped || []).join(', ') || 'none'}`,
+    `UNCOVERED: ${(c.uncovered || []).join(', ') || 'none'}`,
+  ].join('\n');
 }
 
 // ── script tail ─────────────────────────────────────────────────────────────────────────────────────

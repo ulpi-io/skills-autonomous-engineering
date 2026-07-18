@@ -178,6 +178,25 @@ node "$CK" finalize $FV done >/dev/null 2>&1; ref $? "finalize done refused whil
 node "$CK" validation $FV green >/dev/null
 node "$CK" finalize $FV done >/dev/null; ok $? "finalize done ok once final validation is GREEN"
 
+# ── canonical pipeline finalize refuses missing/uncovered binding scope ───────────────
+node --input-type=module -e '
+import * as s from "'"$LIB"'";
+const f = ".ulpi/runs/scope-finalize.json";
+s.init(f, { task: "scope finalize", units: ["u"], id: "scope-finalize" });
+s.unit(f, "u", "done");
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline={}; s.writeDoc(f,d); });
+let missing=false; try { s.finalize(f,"done"); } catch (e) { missing=/coverage receipt is absent/.test(e.message); }
+if (!missing) throw new Error("missing scope receipt did not refuse");
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:1,covered:[],dropped:[],uncovered:["SCOPE-001"],errors:[]}; s.writeDoc(f,d); });
+let uncovered=false; try { s.finalize(f,"done"); } catch (e) { uncovered=/UNCOVERED: SCOPE-001/.test(e.message); }
+if (!uncovered) throw new Error("uncovered scope did not refuse");
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:2,covered:["SCOPE-001"],dropped:[],uncovered:[],errors:[]}; s.writeDoc(f,d); });
+let tampered=false; try { s.finalize(f,"done"); } catch (e) { tampered=/accounts for 1 of 2/.test(e.message); }
+if (!tampered) throw new Error("tampered scope receipt did not refuse");
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:1,covered:["SCOPE-001"],dropped:[],uncovered:[],errors:[]}; s.writeDoc(f,d); });
+s.finalize(f,"done");
+'; ok $? "canonical finalize requires a valid, fully covered selected-scope receipt"
+
 # ── schemaVersion:1 back-compat: v1 files load/resume/finalize UNCHANGED (add-only in-place upgrade) ──
 V1=.ulpi/runs/legacy.json
 python3 -c '

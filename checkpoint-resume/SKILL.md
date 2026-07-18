@@ -19,21 +19,23 @@ when_to_use: |
 ---
 
 <EXTREMELY-IMPORTANT>
-The status file is the durable record — but it is OBSERVABILITY, never a gate. Non-negotiable:
-1. RESUME MEANS SKIP-DONE. On resume you MUST read the existing status file and rebuild only units NOT
-   marked done. NEVER overwrite an existing run's status file with a fresh all-`pending` document — that
-   erases the checkpoint and redoes everything.
-2. Durability is on DISK — the status file is the SOLE authority. Resume must work in a brand-new session
-   with no runtime memory of the prior run. The portable, session-independent resume is the Codex-native
-   coordinator path: `node autonomous-pipeline/scripts/pipeline.mjs resume --run <id>` (surfaced by
-   `run-status.mjs --resume`), which reads THIS durable checkpoint and skips done units. Claude Code's
-   `Workflow(...resumeFromRunId)` is an agent-result CACHE optimization layered on top — never the source
-   of truth, and NOT a shell command; never present it as the executable Codex resume path.
+The status file is the durable-primary record — but observability writes are never a work gate. For a
+git-integrating pipeline, reachable `Task-Id` trailers are the durable integration log and the status file
+is its reconciled cache. Non-negotiable:
+1. RESUME MEANS RECONCILE, THEN SKIP-DONE. Read the existing status file; for a git pipeline reconcile it
+   from reachable trailers; rebuild only units not proven `done`. NEVER overwrite it with a fresh all-
+   `pending` document — that erases the checkpoint and redoes everything.
+2. Durability is on DISK and session-independent. The canonical coordinator and legacy Workflow both
+   recover a lost status write from `Task-Id` commits reachable on their integration branch. The portable
+   Codex path is `node autonomous-pipeline/scripts/pipeline.mjs resume --run <id>` (surfaced by
+   `run-status.mjs --resume`). Claude's `Workflow(...resumeFromRunId)` cache and external session journal
+   are optional overlays — never a source of durable completion and never a resume dependency.
 3. Status writes are NON-FATAL. A failed/racing write is logged and ignored — it MUST NOT block or fail
    the underlying work. Never gate delivery on a status write; never report a run failed solely because
    its status file is stale — reconstruct state from the actual artifacts instead.
 4. Mark a unit done ONLY when it is actually complete and verified (its own check passed / it integrated)
-   — never optimistically. A wrongly-`done` unit is silently skipped forever on resume.
+   — never optimistically. The coordinator blocks a `done` integration with no reachable trailer; generic
+   runners without that backstop can otherwise skip a false `done` forever.
 5. A unit is eligible only when its dependencies are actually done. Never skip a unit as "done" whose
    prerequisite never landed — that builds on a missing base.
 </EXTREMELY-IMPORTANT>
@@ -48,13 +50,13 @@ The status file is the durable record — but it is OBSERVABILITY, never a gate.
 ## Goal
 
 Turn a long, multi-unit task into one that can be stopped and restarted at will — from any session,
-after any interruption — without losing finished work or redoing it. The status file is simultaneously
-the live progress view (status / stop / resume) and the durable checkpoint.
+after any interruption — without losing finished work or redoing it. The status file is the durable-
+primary progress view; git-integrating pipelines reconcile it from their reachable trailer log.
 
 ## Step 0: New run or resume? (decide FIRST)
 
 - **Resume** if `$target` names an existing run id/file, or the user says "resume / continue". Do NOT
-  re-initialize. Read the file, honor its per-unit state, and proceed to Step 3.
+  re-initialize. Read the file, reconcile any git-backed integration state, and proceed to Step 3.
 - **New run** otherwise. Create a fresh status file (Step 1) and proceed.
 
 Getting this wrong is the whole failure mode: a "resume" that writes a fresh `pending` document throws
@@ -82,6 +84,13 @@ node <skill-dir>/scripts/checkpoint.mjs gc    <runs-dir> [--keep-days 7]  # arch
 Append `|| true` at call sites — status writes are non-fatal. The CLI exits 2 (refuses) on the
 contract-violating operations: re-`init` over a live checkpoint, demoting a `done` unit, and
 `finalize done` while units are open. Those refusals are the guardrails, enforced in code.
+
+**Large-run opt-in.** Keep the single atomic JSON file as the default. For plans where rewriting the
+snapshot on every transition is too costly, import `scripts/lib/event-log.mjs`, call
+`initializeEventLog(file, doc, { enabled: true })`, then `appendTransition(...)`. It fsyncs one JSONL
+transition before atomically replacing the same reader-compatible `.json` snapshot; `rebuildSnapshot`
+replays after a crash and discards only a torn final non-newline fragment. The event path is explicitly
+opt-in and does not change `run-status.mjs` or the ordinary checkpoint CLI contract.
 
 **Everything is timestamped** (ISO-8601 UTC): the doc (`createdAt`/`updatedAt`/`finishedAt`), each unit
 (`createdAt`/`updatedAt` + `startedAt`/`finishedAt`), each phase (`startedAt`/`updatedAt`/`finishedAt`),
@@ -118,8 +127,12 @@ node <skill-dir>/scripts/run-status.mjs --resume --json  # emit ONLY the typed r
 ```
 
 It auto-discovers `.ulpi/runs/` by walking up from the cwd, renders phases + a per-task progress bar +
-the open findings register + a resume affordance, and `--resume` classifies the persisted `launch`
-descriptor into exactly one of three resume recipes (it never fabricates a command):
+the open findings register + a resume affordance. The default render is durable-primary, then adds a
+best-effort `Live workflow` overlay and a visible live-agent-vs-durable-unit divergence line. The overlay
+reads only external Claude `journal.jsonl` started/result envelopes; absence or format drift prints an
+honest `no live workflow … use /workflows` note and never changes durable status. The reader never opens
+agent transcripts, spawns Git, or writes. `--resume` classifies the persisted `launch` descriptor into
+exactly one of three resume recipes (it never fabricates a command):
 
 - **Runnable (`codex-cli`)** — the persisted launch is the coordinator recipe (basename `pipeline.mjs`,
   `args.command==="resume"`). `--resume` prints the shell-safe Codex command
@@ -191,7 +204,14 @@ loses at most the in-flight unit.
 
 ## Step 3: Resume — skip done, rebuild the rest
 
-On resume, read the file and compute the work set:
+On resume, reconcile durable integration evidence, then compute the work set:
+
+0. For a git-integrating pipeline, scan `Task-Id: <id>` trailers reachable from the integration ref
+   (coordinator: `pipeline.integrationRef`; legacy Workflow: `workingBranch`). A reachable trailer recovers
+   a lost status write into `done`; the coordinator stamps `reconciled-from-trailer:<sha>` and blocks a
+   stale checkpoint `done` with no reachable commit. A commit only on `task/<id>` did not integrate and
+   stays eligible. Use the existing `done` state — never invent a separate `integrated` state or claim the
+   merge and status write form one transaction.
 
 1. Load `units`. A unit is **done** → skip it entirely.
 2. ANY unit not `done` — **pending / in_progress / blocked / dep_blocked** — whose `dependsOn` are all
@@ -218,7 +238,7 @@ coordinator recipe; the coordinator re-reads the durable checkpoint and re-runs 
 
 | Situation | State in the file | What resume does |
 |---|---|---|
-| **Fresh session** — no runtime memory of the prior run | any live checkpoint on disk | Drive off the FILE, not a cache. `node pipeline.mjs resume --run <id>` (or read the file + compute the resume set) — the durable checkpoint is the sole authority; `Workflow(...resumeFromRunId)` is a Claude-only cache, never the resume you rely on. |
+| **Fresh session** — no runtime memory of the prior run | any live checkpoint on disk | Drive off durable DISK state, not a session cache. `node pipeline.mjs resume --run <id>` reads the file, reconciles reachable `Task-Id` trailers, then skips proven-done units; `Workflow(...resumeFromRunId)` is a Claude-only cache, never the resume you rely on. |
 | **Interrupted unit** — died mid-flight | a unit left `in_progress` | Re-run it. `in_progress` is NOT done — only `done` skips. The at-most-one in-flight unit is redone; everything `done` before it is skipped. |
 | **Dependency-blocked** | a unit whose `dependsOn` are not all `done` | Mark it `dep_blocked` pointing at the missing root and do NOT build it — never build on a partial base. When the prerequisite later lands, it becomes eligible again automatically. |
 | **Malformed / absent recipe** | `launch` missing, an array/string, or not the coordinator shape | `run-status.mjs` classifies it `no-launch` → **non-runnable**; it emits the computed `resumeSet` and points at `pipeline.mjs approve`/`start`. It NEVER fabricates a runnable command. |
@@ -251,6 +271,8 @@ units' own checks) rather than trusting a stale `running` — see `references/st
 ## Guardrails
 
 - Never overwrite an existing run's file with a fresh `pending` document on resume.
+- For git-integrating pipelines, reconcile reachable `Task-Id` trailers before computing the resume set;
+  never make the live session journal a resume dependency.
 - Never mark a unit `done` before it is complete AND verified.
 - Never skip a unit whose dependency didn't actually land.
 - Never let a status-write failure block, abort, or fail the underlying work.

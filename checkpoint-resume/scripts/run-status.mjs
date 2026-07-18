@@ -29,6 +29,7 @@
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
+import { readWorkflowStatus } from './lib/workflow-journal.mjs';
 
 const ARGV = process.argv.slice(2);
 const SELF = process.argv[1];
@@ -91,6 +92,11 @@ function loadRuns(dir) {
   out.sort((a, b) => String(key(b)).localeCompare(String(key(a)))); // newest first
   return out;
 }
+function projectRootForRunsDir(dir) {
+  const ulpiDir = dirname(dir);
+  if (basename(dir) === 'runs' && basename(ulpiDir) === '.ulpi') return dirname(ulpiDir);
+  return process.cwd();
+}
 
 // ── status vocabulary ───────────────────────────────────────────────────────────
 const RUN_BADGE = {
@@ -98,7 +104,7 @@ const RUN_BADGE = {
   needs_attention: ylw('▲ needs attention'), done: grn('● done'), aborted: red('✗ aborted'),
 };
 const PH_GLYPH = { done: grn('●'), running: cyn('◐'), blocked: red('✗'), skipped: dim('·'), pending: dim('○') };
-const PHASE_ORDER = ['build', 'simplify', 'test', 'review', 'performance', 'ship_prep', 'finalize'];
+const PHASE_ORDER = ['build', 'simplify', 'test', 'review', 'performance', 'ship_prep', 'auto_learn', 'auto_map', 'finalize'];
 function orderedPhases(phases) {
   return Object.keys(phases || {})
     .sort((a, b) => {
@@ -145,6 +151,10 @@ function render(r, dir) {
   const d = r.doc;
   if (!d) { console.log(red(`! ${r.name} is unreadable: ${r.err}`)); return; }
   const b = buckets(d.units), total = Object.keys(d.units || {}).length;
+  // External Claude session state is deliberately an optional overlay. The durable document above and
+  // below renders identically whether this returns data or null; overlay absence/format drift cannot
+  // downgrade a durable unit/run status or block status inspection.
+  const live = readWorkflowStatus(projectRootForRunsDir(dir));
 
   console.log();
   console.log(`  ${bold(d.id || r.name)}   ${RUN_BADGE[d.status] || d.status}`);
@@ -190,6 +200,28 @@ function render(r, dir) {
       const t = u.startedAt ? dim(` (${dur(u.startedAt, u.finishedAt || new Date().toISOString())})`) : '';
       console.log(`          ${g} ${id}${u.note ? dim(' — ' + u.note) : ''}${t}`);
     }
+    // A lost checkpoint write recovered from the durable git log becomes the existing `done` state with
+    // this note. Surface that provenance even though ordinary done units stay compact.
+    for (const id of b.done) {
+      const note = d.units[id]?.note;
+      if (typeof note === 'string' && note.startsWith('reconciled-from-trailer')) {
+        console.log(`          ${grn('↺')} ${id}${dim(' — ' + note)}`);
+      }
+    }
+  }
+
+  console.log();
+  if (live) {
+    const running = live.running.length
+      ? ` ${dim('(' + live.running.slice(0, 6).join(', ') + (live.running.length > 6 ? ', …' : '') + ')')}`
+      : '';
+    const age = live.stale ? ylw(` · stale (${rel(live.mtime)})`) : dim(` · updated ${rel(live.mtime)}`);
+    console.log(`  ${dim('Live workflow')}  ${cyn(live.wf)} · ${live.done} done · ${live.running.length} running${running}${age}`);
+    const gap = live.spawned - b.done.length;
+    const warning = gap > 0 ? ylw(` · ${gap} more agent start(s) than durable done unit(s)`) : '';
+    console.log(`  ${dim('divergence')}     live agents ${live.spawned} vs durable units ${b.done.length}/${total}${warning}`);
+  } else {
+    console.log(`  ${dim('Live workflow')}  ${dim('no live workflow transcript found — use /workflows for runtime details; durable status remains authoritative')}`);
   }
 
   // Findings register: the UNRESOLVED (open) findings that gate finalize, plus a one-line count of the

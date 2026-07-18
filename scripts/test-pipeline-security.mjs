@@ -87,7 +87,11 @@ function baseSeams(fx, spies) {
     executor: makeFakeExecutor(fx, spies),
     validateFor: (id) => ({ command: process.execPath, args: ['-e', VALIDATOR, join(fx.root, 'src', `${id}.js`)] }),
     review: async () => ({ canAdvance: true }),
-    phaseFns: { test: async () => { spies.phaseTestRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; } },
+    phaseFns: {
+      test: async () => { spies.phaseTestRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+      auto_learn: async () => { spies.autoLearnRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+      auto_map: async () => { spies.autoMapRan = true; return { ok: true, tokens: { input: 1, output: 1 } }; },
+    },
     validateFn: async ({ phase }) => ({ ok: realGreen(fx.root).ok, head: '', signature: phase }),
     finalValidateFn: async () => { spies.finalValidateRan = true; return realGreen(fx.root); },
     reviewOptions: {

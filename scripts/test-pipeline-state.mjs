@@ -84,10 +84,11 @@ test('applyTransition returns the new state on a legal move and throws on illega
 });
 
 // ── Phase defs & optionality ─────────────────────────────────────────────────────────────────────────
-test('canonical phases: build/test/review required, simplify/performance/ship_prep optional', () => {
-  assert.deepEqual(PHASES.map((p) => p.name), ['build', 'simplify', 'test', 'review', 'performance', 'ship_prep']);
+test('canonical phases include required auto_learn → auto_map closeout after ordinary phases', () => {
+  assert.deepEqual(PHASES.map((p) => p.name), ['build', 'simplify', 'test', 'review', 'performance', 'ship_prep', 'auto_learn', 'auto_map']);
   assert.ok(!isOptionalPhase('build') && !isOptionalPhase('test') && !isOptionalPhase('review'));
   assert.ok(isOptionalPhase('simplify') && isOptionalPhase('performance') && isOptionalPhase('ship_prep'));
+  assert.ok(!isOptionalPhase('auto_learn') && !isOptionalPhase('auto_map'));
   assert.ok(!isOptionalPhase('nonexistent'));
 });
 
@@ -97,10 +98,12 @@ test('requiredUpstream skips optional phases', () => {
   assert.deepEqual(requiredUpstream('test'), ['build']); // simplify (optional) does not gate
   assert.deepEqual(requiredUpstream('review'), ['build', 'test']);
   assert.deepEqual(requiredUpstream('ship_prep'), ['build', 'test', 'review']); // performance (optional) skipped
+  assert.deepEqual(requiredUpstream('auto_learn'), [], 'closeout can run after a bumpy ordinary pass');
+  assert.deepEqual(requiredUpstream('auto_map'), ['auto_learn'], 'map waits for learn');
 });
 
 test('an UNRUN required upstream phase makes every downstream phase non-runnable', () => {
-  const s = { build: 'pending', simplify: 'pending', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending' };
+  const s = { build: 'pending', simplify: 'pending', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending', auto_learn: 'pending', auto_map: 'pending' };
   // build has no required upstream → runnable; everything downstream gated by unrun build
   assert.ok(isPhaseRunnable('build', s));
   assert.ok(!isPhaseRunnable('test', s));
@@ -112,7 +115,7 @@ test('an UNRUN required upstream phase makes every downstream phase non-runnable
 });
 
 test('a BLOCKED required upstream phase makes every downstream phase non-runnable', () => {
-  const s = { build: 'done', simplify: 'skipped', test: 'blocked', review: 'pending', performance: 'pending', ship_prep: 'pending' };
+  const s = { build: 'done', simplify: 'skipped', test: 'blocked', review: 'pending', performance: 'pending', ship_prep: 'pending', auto_learn: 'pending', auto_map: 'pending' };
   // test is blocked → itself runnable (re-enter), but review/ship_prep gated because required upstream test != done
   assert.ok(isPhaseRunnable('test', s)); // blocked is not terminal → re-runnable
   assert.ok(!isPhaseRunnable('review', s));
@@ -122,14 +125,14 @@ test('a BLOCKED required upstream phase makes every downstream phase non-runnabl
 });
 
 test('an optional upstream phase does NOT gate downstream (skipped simplify still lets test run)', () => {
-  const s = { build: 'done', simplify: 'skipped', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending' };
+  const s = { build: 'done', simplify: 'skipped', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending', auto_learn: 'pending', auto_map: 'pending' };
   assert.ok(isPhaseRunnable('test', s)); // build done, simplify skipped → test's gate is clear
   assert.ok(!isPhaseRunnable('review', s)); // gated by unrun test
   assert.deepEqual(runnablePhases(s), ['test']);
 });
 
 test('a crashed RUNNING phase is re-runnable on resume (running is not terminal)', () => {
-  const s = { build: 'running', simplify: 'pending', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending' };
+  const s = { build: 'running', simplify: 'pending', test: 'pending', review: 'pending', performance: 'pending', ship_prep: 'pending', auto_learn: 'pending', auto_map: 'pending' };
   assert.ok(isPhaseRunnable('build', s));
   assert.ok(!isPhaseRunnable('test', s)); // build not done → gated
   // terminal phases are not runnable
@@ -162,8 +165,10 @@ test('runnableUnits returns pending/blocked units whose deps are all done', () =
 // ── Convergence conjunction ──────────────────────────────────────────────────────────────────────────
 const fullyGreen = () => ({
   units: { T1: { status: 'done' }, T2: { status: 'done' } },
-  phases: { build: 'done', simplify: 'done', test: 'done', review: 'done', performance: 'skipped', ship_prep: 'done' },
+  phases: { build: 'done', simplify: 'done', test: 'done', review: 'done', performance: 'skipped', ship_prep: 'done', auto_learn: 'done', auto_map: 'done' },
   openItems: [],
+  scopeCoverage: { total: 1, covered: ['SCOPE-001'], dropped: [], uncovered: [], errors: [] },
+  requireScopeCoverage: true,
   finalValidation: { passed: true },
 });
 
@@ -214,6 +219,40 @@ test('converged is FALSE for an unresolved blocker in the open register', () => 
   s.openItems = [{ task: 'T1', phase: 'build', reason: 'escalated' }];
   assert.ok(!converged(s));
   assert.ok(convergenceFailures(s).some((f) => f.code === 'open-register'));
+});
+
+test('converged is FALSE when binding selected-scope coverage is missing', () => {
+  const s = fullyGreen();
+  s.scopeCoverage = null;
+  assert.ok(!converged(s));
+  assert.ok(convergenceFailures(s).some((f) => f.code === 'scope-coverage-missing'));
+});
+
+test('converged is FALSE for every never-mapped selected-scope item', () => {
+  const s = fullyGreen();
+  s.scopeCoverage = { total: 2, covered: ['SCOPE-001'], dropped: [], uncovered: ['SCOPE-002'], errors: [] };
+  assert.ok(!converged(s));
+  const failures = convergenceFailures(s).filter((f) => f.code === 'scope-uncovered');
+  assert.equal(failures.length, 1);
+  assert.match(failures[0].detail, /SCOPE-002/);
+});
+
+test('converged is FALSE for a tampered selected-scope coverage receipt', () => {
+  const missingAccount = fullyGreen();
+  missingAccount.scopeCoverage = { total: 2, covered: ['SCOPE-001'], dropped: [], uncovered: [], errors: [] };
+  assert.ok(convergenceFailures(missingAccount).some((f) => f.code === 'scope-coverage-invalid' && /accounts for 1 of 2/.test(f.detail)));
+
+  const overlap = fullyGreen();
+  overlap.scopeCoverage = { total: 1, covered: ['SCOPE-001'], dropped: ['SCOPE-001'], uncovered: [], errors: [] };
+  assert.ok(convergenceFailures(overlap).some((f) => f.code === 'scope-coverage-invalid' && /appears in both/.test(f.detail)));
+});
+
+test('mapped-but-blocked scope is covered, while unit blockers keep convergence false', () => {
+  const s = fullyGreen();
+  s.units.T2 = { status: 'blocked' };
+  const codes = convergenceFailures(s).map((f) => f.code);
+  assert.ok(codes.includes('unit-unfinished') && codes.includes('blocked-unit'));
+  assert.ok(!codes.includes('scope-uncovered'));
 });
 
 test('converged is FALSE for a blocked unit', () => {

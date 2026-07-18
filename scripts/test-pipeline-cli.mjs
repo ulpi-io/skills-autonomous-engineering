@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -51,7 +51,9 @@ function setup(over = {}) {
   };
   const plan = {
     planId: 'plan-1', base: { approvalReady: true },
-    tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'] }], layers: [['TASK-001']],
+    selectedScope: [{ id: 'SCOPE-001', title: 'build the selected feature', source: 'user selected Full MVP' }],
+    scopeDrops: [],
+    tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'], scopeItems: ['SCOPE-001'] }], layers: [['TASK-001']],
     ...over.plan,
   };
   const planPath = join(dir, 'plan.json'); writeFileSync(planPath, JSON.stringify(plan));
@@ -91,6 +93,7 @@ function successfulSeams(s, spies = {}) {
     runPhaseEngineFn: async (opts) => {
       spies.phaseOpts = opts;
       ckPhase(opts.file, 'test', 'done'); ckPhase(opts.file, 'review', 'done');
+      ckPhase(opts.file, 'auto_learn', 'done'); ckPhase(opts.file, 'auto_map', 'done');
       for (const p of ['simplify', 'performance', 'ship_prep']) ckPhase(opts.file, p, 'skipped');
       ckValidation(opts.file, 'green');
       return { status: 'ok', converged: true, finalValidation: { ok: true } };
@@ -141,7 +144,23 @@ test('CLI: approve happy path → exit 0, exactly one JSON object on stdout, sta
   const obj = assertSingleStdoutObject(out.text().trim());
   assert.equal(obj.ok, true);
   assert.equal(obj.status, 'prepared');
+  assert.deepEqual(obj.scopeCoverage, { total: 1, covered: ['SCOPE-001'], dropped: [], uncovered: [], errors: [] });
   assert.equal(readDoc(s.checkpointFile).status, 'prepared');
+  assert.deepEqual(readDoc(s.checkpointFile).pipeline.scopeCoverage, obj.scopeCoverage);
+});
+
+test('CLI: human approve renders the per-item SCOPE COVERAGE block', async () => {
+  const s = setup();
+  const out = sink(); const err = sink();
+  const code = await main(['approve', '--plan', s.planPath, '--config', s.configPath], {
+    stdout: out, stderr: err, env: { ULPI_RUNS_DIR: s.stateDir }, cwd: s.dir,
+    seams: { resolveBase: () => FIXED_BASE, interactive: true, context: 'coordinator' },
+  });
+  assert.equal(code, EXIT.SUCCESS);
+  assert.match(out.text(), /SCOPE COVERAGE: 1 of 1 selected-scope items covered/);
+  assert.match(out.text(), /covered: SCOPE-001/);
+  assert.match(out.text(), /explicitly dropped: none/);
+  assert.match(out.text(), /UNCOVERED: none/);
 });
 
 test('CLI: status after approve → exit 0, one JSON object, converged=false', async () => {
@@ -166,6 +185,61 @@ test('approve: refuses plan.base.approvalReady=false (exit 3) before any state i
     async () => approveRun(s),
     (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'approval-not-ready'); return true; },
   );
+});
+
+test('approve: missing selectedScope refuses before checkpoint/capability mutation', async () => {
+  const s = setup({ plan: { selectedScope: undefined } });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'scope-missing'); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false, 'scope refusal creates no checkpoint');
+  assert.equal(existsSync(s.capDir), false, 'scope refusal mints no capability');
+});
+
+test('approve: every executable task must declare scopeItems[]', async () => {
+  const s = setup({ plan: { tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'] }] } });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => e.reason === 'scope-invalid' && /missing scopeItems/.test(e.message),
+  );
+  assert.equal(existsSync(s.checkpointFile), false);
+});
+
+test('approve: selected item omitted by tasks is UNCOVERED even when the smaller plan is approvalReady', async () => {
+  const s = setup({ plan: {
+    selectedScope: [
+      { id: 'SCOPE-001', title: 'first', source: 'user' },
+      { id: 'SCOPE-002', title: 'spec accidentally omitted this', source: 'user selected Full MVP' },
+    ],
+  } });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'scope-uncovered'); assert.match(e.message, /SCOPE-002/); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false);
+});
+
+test('approve: general plan approval does NOT acknowledge a proposed scope drop', async () => {
+  const s = setup({ plan: {
+    tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'], scopeItems: [] }],
+    scopeDrops: [{ scopeId: 'SCOPE-001', reason: 'cannot fit this pass' }],
+  } });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'scope-drop-unacknowledged'); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false);
+});
+
+test('approve: a distinct per-id user-acknowledged drop is reported separately and may proceed', async () => {
+  const s = setup({ plan: {
+    tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'], scopeItems: [] }],
+    scopeDrops: [{ scopeId: 'SCOPE-001', reason: 'user reduced scope', acknowledgedByUser: true, acknowledgement: 'Drop SCOPE-001' }],
+  } });
+  const res = approveRun(s);
+  assert.deepEqual(res.scopeCoverage, { total: 1, covered: [], dropped: ['SCOPE-001'], uncovered: [], errors: [] });
+  assert.equal(readDoc(s.checkpointFile).status, 'prepared');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -291,6 +365,25 @@ test('start: a blocked build stops the run (exit 4), never publishes, never fina
   assert.notEqual(readDoc(s.checkpointFile).status, 'done');
 });
 
+test('start: a blocked build still attempts required closeout, but never terminal validation or publication', async () => {
+  const s = setup(); approveRun(s);
+  const spies = {}; const seams = successfulSeams(s, spies);
+  seams.runBuildFn = async () => ({ status: 'blocked', converged: false });
+  seams.runPhaseEngineFn = async (opts) => {
+    spies.closeoutOpts = opts;
+    ckPhase(opts.file, 'auto_learn', 'done'); ckPhase(opts.file, 'auto_map', 'done');
+    return { status: 'ok', converged: false, phases: [{ name: 'auto_learn', state: 'done' }, { name: 'auto_map', state: 'done' }] };
+  };
+  const res = await engine.start({ checkpointFile: s.checkpointFile, ...seams });
+  assert.equal(res.exitCode, EXIT.BLOCKED);
+  assert.deepEqual(spies.closeoutOpts.phases.map((p) => p.name), ['auto_learn', 'auto_map']);
+  assert.equal(spies.closeoutOpts.terminalValidation, false);
+  assert.equal(readDoc(s.checkpointFile).phases.auto_learn.status, 'done');
+  assert.equal(readDoc(s.checkpointFile).phases.auto_map.status, 'done');
+  assert.equal(spies.publishOpts, undefined);
+  assert.notEqual(readDoc(s.checkpointFile).status, 'done');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════
 // AC2/AC3 — the DURABLE convergence conjunction overrides an agent's advisory converged:true
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -303,6 +396,24 @@ test('start: engines claim converged but a durable unit is unfinished → blocke
   assert.equal(res.exitCode, EXIT.BLOCKED);
   assert.equal(res.blockedStage, 'convergence');
   assert.ok(Array.isArray(res.convergenceFailures) && res.convergenceFailures.some((f) => f.code === 'unit-unfinished'));
+  assert.equal(spies.publishOpts, undefined);
+  assert.notEqual(readDoc(s.checkpointFile).status, 'done');
+});
+
+test('start: otherwise-green run with missing auto_learn/auto_map receipts cannot finalize or publish', async () => {
+  const s = setup(); approveRun(s);
+  const spies = {}; const seams = successfulSeams(s, spies);
+  seams.runPhaseEngineFn = async (opts) => {
+    ckPhase(opts.file, 'test', 'done'); ckPhase(opts.file, 'review', 'done');
+    for (const p of ['simplify', 'performance', 'ship_prep']) ckPhase(opts.file, p, 'skipped');
+    ckValidation(opts.file, 'green');
+    return { status: 'ok', converged: true, finalValidation: { ok: true } }; // advisory lie: no closeout receipts
+  };
+  const res = await engine.start({ checkpointFile: s.checkpointFile, ...seams });
+  assert.equal(res.exitCode, EXIT.BLOCKED);
+  assert.equal(res.blockedStage, 'convergence');
+  const missing = res.convergenceFailures.filter((f) => f.code === 'phase-not-green').map((f) => f.detail);
+  assert.ok(missing.some((x) => /auto_learn/.test(x)) && missing.some((x) => /auto_map/.test(x)));
   assert.equal(spies.publishOpts, undefined);
   assert.notEqual(readDoc(s.checkpointFile).status, 'done');
 });

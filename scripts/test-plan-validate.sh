@@ -5,7 +5,8 @@
 # `test -- <file>` footgun, and whole-suite e2e validates.
 #
 # EXECUTABLE plans (Codex-native, coordinator-run: ids reach `git worktree add -b task/<id>`,
-# validateCommand is executed) get HARDENED checks — this suite also asserts: an unsafe/traversal
+# validateCommand is executed) get HARDENED checks — including binding selected-scope coverage. This suite
+# also asserts: an unsafe/traversal
 # task id, a missing required execution field, a cycle, a mis-layering, and an end-state-only
 # (whole-suite) validate each FAIL with task-specific evidence; a valid executable plan (whose
 # tasks carry only the provider-neutral `validateCommand`, no legacy `validate`) PASSES.
@@ -30,11 +31,12 @@ def w(name, plan): json.dump(plan, open(f"{TMP}/{name}", "w"))
 # executable task: provider-neutral `validateCommand` (no legacy `validate`) — a task carrying a
 # nonempty validateCommand is what marks a plan EXECUTABLE (coordinator-run). `drop` removes a
 # required execution field to exercise the missing-field gate.
-def xtask(id, ws=None, dep=None, vc=None, acc=None, drop=None):
+def xtask(id, ws=None, dep=None, vc=None, acc=None, drop=None, scopes=None):
     t = {"id": id, "title": id,
          "writeScope": ws if ws is not None else [f"src/{id}.ts"],
          "acceptanceCriteria": acc or ["does X", "rejects bad input"],
-         "validateCommand": vc if vc is not None else f"pnpm exec vitest run src/x-{id}.test.ts"}
+         "validateCommand": vc if vc is not None else f"pnpm exec vitest run src/x-{id}.test.ts",
+         "scopeItems": scopes if scopes is not None else ["SCOPE-001"]}
     if dep: t["dependsOn"] = dep
     for k in (drop or []): t.pop(k, None)
     return t
@@ -82,6 +84,35 @@ w("xmislayer.json",{"executable": True, "tasks": [xtask("TASK-001"), xtask("TASK
                     "layers": [["TASK-002"], ["TASK-001"]]})
 # end-state-only (whole-suite) validateCommand for a task → must FAIL.
 w("xendstate.json",{"tasks": [xtask("TASK-001", vc="pnpm -w test")], "layers": [["TASK-001"]]})
+
+# Every executable fixture above gets a binding intake scope. This keeps each negative fixture focused on
+# its named defect instead of also failing the new scope gate.
+SCOPE = {"id": "SCOPE-001", "title": "selected feature", "source": "user selected Full MVP"}
+for name in ["xsafe.json", "xchars.json", "xslice.json", "xtraversal.json", "xmeta.json", "xflag.json",
+             "xmissing.json", "xnocmd.json", "xcycle.json", "xmislayer.json", "xendstate.json"]:
+    path = f"{TMP}/{name}"
+    plan = json.load(open(path))
+    plan["selectedScope"] = [SCOPE]
+    plan["scopeDrops"] = []
+    w(name, plan)
+
+# Binding-scope contract fixtures.
+w("xscope-missing.json", {"tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-uncovered.json", {"selectedScope": [SCOPE, {"id": "SCOPE-002", "title": "second", "source": "user"}],
+                            "scopeDrops": [], "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-unknown.json", {"selectedScope": [SCOPE], "scopeDrops": [],
+                          "tasks": [xtask("TASK-001", scopes=["SCOPE-GHOST"])], "layers": [["TASK-001"]]})
+w("xscope-task-missing.json", {"selectedScope": [SCOPE], "scopeDrops": [],
+    "tasks": [xtask("TASK-001", drop=["scopeItems"])], "layers": [["TASK-001"]]})
+w("xscope-drop-unack.json", {"selectedScope": [SCOPE],
+    "scopeDrops": [{"scopeId": "SCOPE-001", "reason": "too large"}],
+    "tasks": [xtask("TASK-001", scopes=[])], "layers": [["TASK-001"]]})
+VALID_DROP = {"scopeId": "SCOPE-001", "reason": "user removed it",
+              "acknowledgedByUser": True, "acknowledgement": "Drop SCOPE-001"}
+w("xscope-drop-valid.json", {"selectedScope": [SCOPE], "scopeDrops": [VALID_DROP],
+    "tasks": [xtask("TASK-001", scopes=[])], "layers": [["TASK-001"]]})
+w("xscope-conflict.json", {"selectedScope": [SCOPE], "scopeDrops": [VALID_DROP],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
 PY
 
 want 0  "safe plan passes"                        safe.json
@@ -113,6 +144,25 @@ catch   "executable cycle caught"                    "cycle"           xcycle.js
 catch   "executable mis-layering caught"             "missing base"    xmislayer.json
 catch   "end-state-only validateCommand caught"      "end-state"       xendstate.json
 want 1  "end-state-only validateCommand fails (exit 1)"   xendstate.json
+
+# ── BINDING selected-scope coverage ───────────────────────────────────────────────────
+catch   "missing intake scope authority"       "missing nonempty selectedScope" xscope-missing.json
+catch   "selected item with no task is UNCOVERED" "UNCOVERED"                   xscope-uncovered.json
+catch   "task mapping to unknown scope id"      "unknown selectedScope"          xscope-unknown.json
+catch   "every executable task declares scopeItems" "missing scopeItems"          xscope-task-missing.json
+catch   "drop needs per-id user acknowledgement" "explicit per-id"               xscope-drop-unack.json
+want 0  "explicit per-id acknowledged drop passes"                              xscope-drop-valid.json
+catch   "scope id cannot be mapped and dropped" "both task-mapped and dropped"   xscope-conflict.json
+if node "$V" "$TMP/xsafe.json" --render 2>/dev/null | grep -q "SCOPE COVERAGE: 1 of 1"; then
+  echo "PASS (render) scope coverage block"
+else
+  echo "FAIL (render) scope coverage block"; fails=$((fails+1))
+fi
+if node "$V" "$TMP/xsafe.json" --json 2>/dev/null | grep -q '"scopeCoverage"'; then
+  echo "PASS (json) scope coverage object"
+else
+  echo "FAIL (json) scope coverage object"; fails=$((fails+1))
+fi
 
 want 2  "unreadable plan exits 2"                 nope.json
 

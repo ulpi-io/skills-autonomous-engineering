@@ -44,7 +44,7 @@ import {
 } from './authorization.mjs';
 import { convergenceFailures, PHASES } from './pipeline-state.mjs';
 import { runBuild } from './build-engine.mjs';
-import { runPhaseEngine } from './phase-engine.mjs';
+import { runPhaseEngine, CLOSEOUT_PHASES } from './phase-engine.mjs';
 import { publishToTarget } from './git-integration.mjs';
 import { resolveBaseSha, createIntegrationWorktree } from './git-workspaces.mjs';
 import { initBudget, reconcileOpenSegments, stopStatus } from './budget-ledger.mjs';
@@ -97,6 +97,68 @@ export function defaultGitStatus(root) {
 }
 
 const integrationRefFor = (run) => `refs/heads/ulpi-int-${run}`;
+
+// ── binding selected-scope coverage ───────────────────────────────────────────────────────────────────
+// Intake selection is the scope authority. This check is intentionally repeated at approval (rather than
+// trusting auto-plan's validator): it runs before checkpoint/capability mutation and is bound into the
+// approved plan hash. A general plan approval is never interpreted as acknowledgement of a proposed drop.
+export function selectedScopeCoverage(plan) {
+  const errors = [];
+  const selected = Array.isArray(plan?.selectedScope) ? plan.selectedScope : [];
+  const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+  const drops = Array.isArray(plan?.scopeDrops) ? plan.scopeDrops : [];
+  const SAFE_SCOPE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+  const scopeById = new Map();
+  const mapped = new Map();
+  const dropped = new Map();
+
+  if (selected.length === 0) errors.push({ code: 'scope-missing', detail: 'selectedScope[] is absent or empty' });
+  if (plan?.scopeDrops !== undefined && !Array.isArray(plan.scopeDrops)) errors.push({ code: 'scope-invalid', detail: 'scopeDrops must be an array' });
+  for (const item of selected) {
+    const id = item?.id;
+    if (typeof id !== 'string' || !SAFE_SCOPE_ID.test(id)) { errors.push({ code: 'scope-invalid', detail: 'selectedScope item has an invalid id' }); continue; }
+    if (scopeById.has(id)) errors.push({ code: 'scope-invalid', scopeId: id, detail: 'duplicate selectedScope id' });
+    else scopeById.set(id, item);
+    if (typeof item?.title !== 'string' || item.title.trim() === '' || typeof item?.source !== 'string' || item.source.trim() === '') {
+      errors.push({ code: 'scope-invalid', scopeId: id, detail: 'selectedScope item needs nonempty title and source' });
+    }
+  }
+  for (const task of tasks) {
+    if (!Array.isArray(task?.scopeItems)) {
+      errors.push({ code: 'scope-invalid', detail: `task ${task?.id || '(unknown)'} is missing scopeItems[]` });
+      continue;
+    }
+    for (const raw of task?.scopeItems || []) {
+      const id = String(raw);
+      if (!scopeById.has(id)) errors.push({ code: 'scope-invalid', scopeId: id, detail: `task ${task?.id || '(unknown)'} maps an unknown selectedScope id` });
+      const owners = mapped.get(id) || [];
+      if (owners.includes(task?.id)) errors.push({ code: 'scope-invalid', scopeId: id, detail: `task ${task?.id || '(unknown)'} repeats a selectedScope id` });
+      else owners.push(task?.id);
+      mapped.set(id, owners);
+    }
+  }
+  for (const drop of drops) {
+    const id = drop?.scopeId;
+    if (typeof id !== 'string' || !scopeById.has(id)) { errors.push({ code: 'scope-invalid', scopeId: id, detail: 'scopeDrops references an unknown selectedScope id' }); continue; }
+    if (dropped.has(id)) { errors.push({ code: 'scope-invalid', scopeId: id, detail: 'duplicate scopeDrops entry' }); continue; }
+    const valid = typeof drop?.reason === 'string' && drop.reason.trim() !== ''
+      && drop?.acknowledgedByUser === true
+      && typeof drop?.acknowledgement === 'string' && drop.acknowledgement.trim() !== '';
+    if (!valid) errors.push({ code: 'scope-drop-unacknowledged', scopeId: id, detail: 'drop lacks distinct per-id user acknowledgement evidence' });
+    else dropped.set(id, drop);
+  }
+
+  const result = { total: scopeById.size, covered: [], dropped: [], uncovered: [], errors };
+  for (const id of scopeById.keys()) {
+    const isMapped = (mapped.get(id) || []).length > 0;
+    const isDropped = dropped.has(id);
+    if (isMapped && isDropped) errors.push({ code: 'scope-invalid', scopeId: id, detail: 'selectedScope id is both mapped and dropped' });
+    if (isMapped) result.covered.push(id);
+    else if (isDropped) result.dropped.push(id);
+    else result.uncovered.push(id);
+  }
+  return result;
+}
 
 // ── run-config normalization ──────────────────────────────────────────────────────────────────────────
 /**
@@ -166,6 +228,8 @@ export function checkpointConvergence(doc) {
   return convergenceFailures({
     units, phases, phaseDefs: PHASES,
     openItems: Array.isArray(doc.openItems) ? doc.openItems : [],
+    scopeCoverage: doc.pipeline?.scopeCoverage || null,
+    requireScopeCoverage: !!doc.pipeline,
     finalValidation,
   });
 }
@@ -194,6 +258,18 @@ export function approve(opts) {
     refuse('approval-not-ready', 'plan.base.approvalReady is not true — the plan is not cleared for autonomous execution', EXIT.PREFLIGHT);
   }
 
+  // 1b. SCOPE-COVERAGE GATE. Recompute from the approved plan bytes before ANY durable state/capability
+  // mutation. Proposed drops without their own user acknowledgement remain uncovered; plan approval alone
+  // never clears them.
+  const scopeCoverage = selectedScopeCoverage(plan);
+  if (scopeCoverage.errors.length > 0) {
+    const first = scopeCoverage.errors[0];
+    refuse(first.code, `scope coverage invalid: ${first.detail}`, EXIT.PREFLIGHT);
+  }
+  if (scopeCoverage.uncovered.length > 0) {
+    refuse('scope-uncovered', `SCOPE COVERAGE: ${scopeCoverage.covered.length} of ${scopeCoverage.total} selected-scope items covered; UNCOVERED: ${scopeCoverage.uncovered.join(', ')}`, EXIT.PREFLIGHT);
+  }
+
   const { run, capDir, worktreesDir, targetRef, integrationRef } = config;
   assertCapabilityDirIsolated(capDir, [worktreesDir]); // children must never receive issuance state
 
@@ -216,6 +292,7 @@ export function approve(opts) {
     run, root: config.root, planPath: opts.planPath ?? null, configPath: opts.configPath ?? null,
     planSha, configSha, base: config.base, approvedBaseSha: baseSha, targetRef, integrationRef,
     worktreesDir, capDir, skip: config.skip, engineVersion: ENGINE_VERSION,
+    scopeCoverage,
     approvalTtlMs: config.approvalTtlMs, authorizeTtlMs: config.authorizeTtlMs, callTimeoutMs: config.callTimeoutMs,
   });
 
@@ -232,6 +309,7 @@ export function approve(opts) {
   return {
     command: 'approve', ok: true, run, status: 'prepared',
     planSha, configSha, baseSha, targetRef,
+    scopeCoverage,
     capability: { kind: 'plan', expiresAt: cap.expiresAt },
     exitCode: EXIT.SUCCESS,
   };
@@ -355,7 +433,22 @@ async function driveToConvergence(ctx, opts, phase) {
     callTimeoutMs: ctx.callTimeoutMs,
   });
   if (stopStatus(ctx.checkpointFile)) return budgetStop(ctx, phase);           // never treat a stop as done
-  if (!build || build.converged !== true) return blockedRun(ctx, phase, 'build', build);
+  if (!build || build.converged !== true) {
+    // auto-learn/map are run closeout, not success-only phases. A bumpy BUILD never enters the ordinary
+    // post-build chain, so drive the closeout-only definitions explicitly. Terminal workspace validation
+    // stays off: an incomplete build must not run/claim the end-state truth gate.
+    let closeout = null;
+    try {
+      closeout = await runPhaseEngineFn({
+        file: ctx.checkpointFile, worktree: integrationDir, phases: CLOSEOUT_PHASES,
+        phaseFns: opts.phaseFns, validateFn: opts.validateFn, finalValidateFn: opts.finalValidateFn,
+        terminalValidation: false, callTimeoutMs: ctx.callTimeoutMs,
+      });
+    } catch (e) {
+      closeout = { status: 'blocked', converged: false, blockedReasons: [`closeout-engine:${String((e && e.message) || e)}`] };
+    }
+    return blockedRun(ctx, phase, 'build', { build, closeout });
+  }
 
   // POST-BUILD PHASES — sequential, fail-closed, coordinator-validated.
   const phaseRes = await runPhaseEngineFn({
@@ -400,6 +493,7 @@ function blockedRun(ctx, phase, stage, detail) {
     command: phase, ok: false, run: ctx.run, status: 'blocked', converged: false, blockedStage: stage,
     convergenceFailures: (detail && detail.convergenceFailures) || undefined,
     blockedReasons: (detail && detail.blockedReasons) || undefined,
+    closeout: (detail && detail.closeout) || undefined,
     exitCode: EXIT.BLOCKED,
   };
 }
@@ -494,6 +588,7 @@ export function status(opts) {
     converged: convFailures.length === 0, convergenceFailures: convFailures,
     units: unitCounts, phases,
     openItems: Array.isArray(doc.openItems) ? doc.openItems.length : 0,
+    scopeCoverage: doc.pipeline?.scopeCoverage || null,
     finalValidation: doc.finalValidation || null,
     budgetStopped: budget,
     exitCode: EXIT.SUCCESS,

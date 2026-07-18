@@ -32,8 +32,9 @@ const TRANSITIONS = Object.freeze({
 
 /**
  * The canonical workflow-owned phases, in execution order, each tagged required vs optional. These are the
- * six keys the Workflow owns (spec/plan/approval are skill-owned and happen before launch). Optional phases
- * (`simplify`, `performance`, `ship_prep`) may be skipped by user config; `build`/`test`/`review` may not.
+ * eight keys the canonical lifecycle owns (spec/plan/approval are skill-owned and happen before launch).
+ * Optional phases (`simplify`, `performance`, `ship_prep`) may be skipped by user config;
+ * `build`/`test`/`review` and the always-run closeout phases `auto_learn`/`auto_map` may not.
  */
 export const PHASES = Object.freeze([
   Object.freeze({ name: 'build', optional: false }),
@@ -42,6 +43,8 @@ export const PHASES = Object.freeze([
   Object.freeze({ name: 'review', optional: false }),
   Object.freeze({ name: 'performance', optional: true }),
   Object.freeze({ name: 'ship_prep', optional: true }),
+  Object.freeze({ name: 'auto_learn', optional: false, closeout: true }),
+  Object.freeze({ name: 'auto_map', optional: false, closeout: true }),
 ]);
 
 /** @returns {boolean} whether `s` is one of the five canonical states. */
@@ -104,7 +107,12 @@ export function applyTransition(from, to, opts = {}) {
 export function requiredUpstream(name, phaseDefs = PHASES) {
   const idx = phaseDefs.findIndex((p) => p.name === name);
   if (idx < 0) return [];
-  return phaseDefs.slice(0, idx).filter((p) => p.optional === false).map((p) => p.name);
+  const current = phaseDefs[idx];
+  // Closeout is intentionally independent of ordinary success: auto_learn must run after a bumpy pass.
+  // Within closeout, order still gates (auto_map waits for auto_learn).
+  return phaseDefs.slice(0, idx)
+    .filter((p) => p.optional === false && (current.closeout === true ? p.closeout === true : true))
+    .map((p) => p.name);
 }
 
 /**
@@ -131,6 +139,15 @@ export function isPhaseRunnable(name, phaseStates, phaseDefs = PHASES) {
   const state = phaseStates[name];
   if (state === undefined) return false; // unknown phase — not part of this pipeline
   if (isTerminal(state)) return false; // done or skipped — nothing to run
+  const idx = phaseDefs.findIndex((p) => p.name === name);
+  const def = phaseDefs[idx];
+  if (def?.closeout === true) {
+    // Do not launch closeout at the start of a run. It becomes eligible only after every ordinary phase
+    // reached a pass boundary (done/skipped/blocked); blocked is acceptable here because learn runs on
+    // bumpy passes, but it remains a convergence blocker elsewhere.
+    const settled = new Set(['done', 'skipped', 'blocked']);
+    if (phaseDefs.slice(0, idx).filter((p) => p.closeout !== true).some((p) => !settled.has(phaseStates[p.name]))) return false;
+  }
   return requiredUpstreamCleared(name, phaseStates, phaseDefs);
 }
 
@@ -176,6 +193,8 @@ export function runnableUnits(units) {
  *   converged === (every unit done)
  *              AND (every required phase done, and every optional phase done or legitimately skipped)
  *              AND (no unresolved blocker: no phase/unit in `blocked`, and no open register items)
+ *              AND (binding selected-scope coverage is present and has no uncovered/invalid item,
+ *                   when the caller marks it required)
  *              AND (final validation is present AND green).
  *
  * @param {object} state
@@ -183,6 +202,8 @@ export function runnableUnits(units) {
  * @param {Record<string,string>} [state.phases] phase name → state
  * @param {ReadonlyArray<{name:string,optional:boolean}>} [state.phaseDefs]
  * @param {Array<any>} [state.openItems] the open register (verified blocking findings)
+ * @param {{total:number,covered:string[],dropped:string[],uncovered:string[],errors?:any[]}|null} [state.scopeCoverage]
+ * @param {boolean} [state.requireScopeCoverage] whether absence is itself a failure
  * @param {{passed:boolean}|null|undefined} [state.finalValidation] final workspace validation result
  * @returns {Array<{code:string, detail:string}>}
  */
@@ -192,6 +213,8 @@ export function convergenceFailures(state = {}) {
     phases = {},
     phaseDefs = PHASES,
     openItems = [],
+    scopeCoverage = null,
+    requireScopeCoverage = false,
     finalValidation = null,
   } = state;
   const failures = [];
@@ -230,7 +253,46 @@ export function convergenceFailures(state = {}) {
     failures.push({ code: 'open-register', detail: `${openItems.length} unresolved open register item(s)` });
   }
 
-  // 4. Final validation must be present AND green.
+  // 4. Binding selected-scope coverage. A mapped-but-blocked task is still covered here; the unit clauses
+  // above keep it non-converged. This clause catches the distinct never-mapped/silently-demoted case.
+  if (requireScopeCoverage && (!scopeCoverage || typeof scopeCoverage !== 'object' || Array.isArray(scopeCoverage))) {
+    failures.push({ code: 'scope-coverage-missing', detail: 'binding selected-scope coverage receipt is absent' });
+  } else if (scopeCoverage && typeof scopeCoverage === 'object' && !Array.isArray(scopeCoverage)) {
+    const groups = ['covered', 'dropped', 'uncovered'];
+    const seen = new Map();
+    if (!Number.isInteger(scopeCoverage.total) || scopeCoverage.total < 1) {
+      failures.push({ code: 'scope-coverage-invalid', detail: 'selected-scope coverage total must be at least 1' });
+    }
+    for (const group of groups) {
+      if (!Array.isArray(scopeCoverage[group])) {
+        failures.push({ code: 'scope-coverage-invalid', detail: `selected-scope coverage ${group} must be an array` });
+        continue;
+      }
+      for (const id of scopeCoverage[group]) {
+        if (typeof id !== 'string' || id.trim() === '') {
+          failures.push({ code: 'scope-coverage-invalid', detail: `${group} contains an invalid selected-scope id` });
+          continue;
+        }
+        if (seen.has(id)) {
+          failures.push({ code: 'scope-coverage-invalid', detail: `selected-scope item ${id} appears in both ${seen.get(id)} and ${group}` });
+        } else seen.set(id, group);
+      }
+    }
+    if (Number.isInteger(scopeCoverage.total) && scopeCoverage.total !== seen.size) {
+      failures.push({ code: 'scope-coverage-invalid', detail: `selected-scope coverage accounts for ${seen.size} of ${scopeCoverage.total} item(s)` });
+    }
+    if (!Array.isArray(scopeCoverage.errors)) {
+      failures.push({ code: 'scope-coverage-invalid', detail: 'selected-scope coverage errors must be an array' });
+    }
+    for (const err of Array.isArray(scopeCoverage.errors) ? scopeCoverage.errors : []) {
+      failures.push({ code: 'scope-coverage-invalid', detail: err?.detail || String(err) });
+    }
+    for (const id of Array.isArray(scopeCoverage.uncovered) ? scopeCoverage.uncovered : []) {
+      failures.push({ code: 'scope-uncovered', detail: `selected-scope item ${id} is uncovered` });
+    }
+  }
+
+  // 5. Final validation must be present AND green.
   if (finalValidation === null || finalValidation === undefined) {
     failures.push({ code: 'final-validation-missing', detail: 'final validation is absent' });
   } else if (finalValidation.passed !== true) {

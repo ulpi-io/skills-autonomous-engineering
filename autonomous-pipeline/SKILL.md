@@ -144,6 +144,11 @@ other a Claude-only compatibility shim.
   intake, load the checkpoint, continue at the recorded phase).
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
   phases to run (simplify, performance, go-live/ship-deploy), and any budget/scope steer. Keep it light.
+- **Make the selected scope binding before spec.** When the user selects a named scope (for example,
+  `Full MVP = PRD §13.1`), expand that selection into stable, itemized `selectedScope[]` entries with
+  `id`, `title`, and `source`. This checklist — not the later spec — is the scope authority for the run.
+  Every id must later map to one or more plan tasks or to a drop the user explicitly acknowledges for that
+  id. Never let a downstream phase silently rewrite or shorten this checklist.
 - **Codex delegation (D14 — offer ONLY if detected).** Probe for a Codex integration (`command -v codex`,
   or a `codex`-type subagent in your available agents). If — and only if — one is present, offer the user
   a choice to delegate any of three roles to Codex: **build** (the per-task engineer), **review** (the
@@ -159,8 +164,8 @@ other a Claude-only compatibility shim.
 - Verify a git work tree + working branch; declare the pipeline `budget-guard` contract; create the
   pipeline `checkpoint-resume` file (one unit per build task (phase statuses live in the same file)).
 
-**Success criteria:** run mode determined; ultracode precheck surfaced (or confirmed on); phase config +
-budget set; git preflight passed; checkpoint open.
+**Success criteria:** run mode determined; selected scope captured as a binding checklist; ultracode
+precheck surfaced (or confirmed on); phase config + budget set; git preflight passed; checkpoint open.
 
 ## Phase 1: Run the lifecycle (one approved pass)
 
@@ -178,10 +183,15 @@ which the Codex adapter cannot select:
    invocation only), and the docs are explicit that dmi *blocks programmatic invocation* — so a
    `Skill(auto-spec)` from here would fail. Instead read the installed skill's `SKILL.md` (find it under
    `.claude/skills/`, `.agents/skills/`, or the plugin root) and execute its phases directly; if it isn't
-   installed, apply the methodology inline. Then the SINGLE approval gate on the plan (unambiguous
-   affirmative).
+   installed, apply the methodology inline. Pass the intake `selectedScope[]` to both phases. At the
+   SINGLE approval gate, render **SCOPE COVERAGE: N of M selected-scope items covered** and list every
+   uncovered id. A general plan approval never authorizes a drop: ask for and record a separate,
+   unambiguous acknowledgement for each proposed drop id, update the plan, re-run its gate, and only then
+   ask for the plan approval.
 2. **Create the checkpoint** (`checkpoint-resume`'s `scripts/checkpoint.mjs init`) — the Workflow
    sandbox has no filesystem access, so the skill creates the status file before launch. Pass
+   `--required-phases "build,test,review,auto_learn,auto_map" --require-validation` so the store itself
+   refuses a premature `done`. Pass
    `--launch '{"scriptPath":"<pipeline-workflow.js>","args":{…the full launch args…}}'` so the exact
    relaunch recipe is persisted IN the status file — then `run-status.mjs --resume` can reconstruct the
    resume with no session memory.
@@ -203,16 +213,10 @@ which the Codex adapter cannot select:
    build → simplify → test → review → performance → ship-prep with fail-closed gates (a phase agent that
    died = a gate failure in the register; skipped ≠ clean), the DAG walk with worktree isolation and
    bounded fix loops (each engineer/reviewer routed to its task's specialist), and per-task checkpoint
-   writes. It hard-throws without `approved: true` — the human gate cannot be bypassed.
+   writes. It hard-throws without `approved: true` — the human gate cannot be bypassed. Its return field
+   `workflowConverged` describes only this ordinary pass; its final `converged` remains false because the
+   outer skill still owns whole-register remediation and the required closeout.
 4. AROUND the workflow (before launch / after it returns), use `watch-and-act` to gate on external signals — e.g. CI green on the pushed branch before offering a fix round. (A Workflow cannot invoke skills mid-run.)
-4b. **After EVERY run (even a bumpy one)**, close by following the `auto-learn` contract (again by
-   CONTRACT — it's a dmi skill; read its installed `SKILL.md` and execute it, don't `Skill()` it) —
-   harvest the checkpoint's register/blocked-units/degradations into verified, routed learnings so the
-   next run doesn't repay this run's tuition. Machine defects it finds are surfaced in the final report,
-   never self-patched.
-4c. **After a real (non-aborted) run**, then follow the `auto-map` contract (same — read its `SKILL.md`,
-   don't `Skill()` it) — refresh the disclosure-tiered context map so every future session starts knowing
-   the code that just shipped. (Learn first: learnings may update rules the map refresh then verifies.)
 5. Any escalation (unfixable/ambiguous/irreversible) surfaces in the returned register and PAUSES the
    pipeline; on resolution, re-invoke — the checkpoint resumes at the exact phase/task.
 
@@ -222,38 +226,67 @@ ONLY, so it's safe to run while the pipeline is in flight. `--list` shows all ru
 exact Workflow call to continue. This is how the user checks "where's my run at?" without touching it.
 
 **Native /goal framing (Claude Code):** for a fully unattended run, set the session goal to the
-pipeline's Output Contract before launching — `/goal` pins the done-condition ("workflow returned
-converged:true with an empty register; every gate ran") and the platform's independent verifier model
+pipeline's Output Contract before launching — `/goal` pins the done-condition ("selected scope is fully
+covered; the whole actionable register is empty; every gate and final validation passed; durable
+auto_learn and auto_map receipts are done") and the platform's independent verifier model
 checks it, so the actor never grades itself. See `converge-loop`'s
 `references/native-goal-loop.md` for the full termination-set → /goal compilation.
 
 See `references/pipeline-state.md` for the state machine, per-phase gate conditions, and the handoff
 contract.
 
-**Success criteria:** each phase reached its success bar before the next began; the checkpoint reflects
-progress; escalations reached the user, not a guessed-through continuation.
+**Success criteria:** each ordinary phase reached its success bar before the next began; the checkpoint
+reflects progress; escalations reached the user, not a guessed-through continuation. This phase alone
+never claims final lifecycle convergence.
 
 ## Phase 2: Fix to convergence (bounded auto-loop)
 
-- Collect the phases' findings (review blockers, perf gaps, ship blockers), dedup, and `adversarial-verify`
-  the aggregate so only real, confirmed items enter the fix loop.
-- Run a BOUNDED fix converge-loop on the confirmed register — do NOT ask permission: fix the findings
+- Build ONE **whole-run actionable register** from every current source: build/blocked units, simplify,
+  test, review, performance, ship-prep, integration, final validation, and closeout. Severity never makes a
+  defect non-actionable. Exclude only a pure informational observation or a selected-scope drop the user
+  explicitly acknowledged for that id; a selected-scope item can never be relabeled info/deferred. Dedup,
+  then `adversarial-verify` the aggregate so only real items enter the fix loop.
+- "Fix all" means that complete actionable register, not the findings from one review pass or one file.
+  Run a BOUNDED fix converge-loop on it — do NOT ask permission: fix the findings
   (slice-scoped, each staying inside its task's write scope), regression-test, re-review, and repeat until
-  the register clears. The loop's termination set is explicit and declared up front (`converge-loop` +
+  the register clears. After every round, persist its resolutions/new findings and re-read the CURRENT
+  durable register before deciding whether it is dry; newly exposed regressions join the same loop. The
+  loop's termination set is explicit and declared up front (`converge-loop` +
   `budget-guard`): a max round cap, the whole-run budget floor, and a no-progress/thrash stop.
 - STOP the loop and return the STILL-OPEN residual ONLY when a termination condition fires — budget/cap
   exhausted without convergence, no progress across a round, or a fix that needs an irreversible or
   ambiguous human decision (that one escalates and asks). Exhausted ≠ converged: report the residual as
   OPEN with the termination reason, never a fabricated green.
 
-**Success criteria:** the register is driven to clean, OR the honestly-open residual is returned WITH the
-termination reason — and no permission question was asked about fixing confirmed findings.
+**Success criteria:** the complete current actionable register is driven to clean, OR the honestly-open
+residual is returned WITH the termination reason — and no permission question was asked about fixing
+confirmed findings.
+
+## Phase 2b: Close every run
+
+1. **After EVERY run, including blocked, exhausted, and aborted runs**, follow the `auto-learn` contract
+   by CONTRACT (it is a dmi skill: read its installed `SKILL.md` and execute it; do not call `Skill()`).
+   Harvest the checkpoint's aggregate register, blocked units, and degradations into verified, routed
+   learnings. Record `auto_learn` as `running`, then `done` only after the contract actually succeeds;
+   missing/dead/red records `blocked` and remains in the actionable register.
+2. **After every non-aborted run**, follow `auto-map` only after `auto_learn` is done. Refresh and verify
+   the disclosure-tiered context map, then record the durable `auto_map` receipt. A blocked `auto_learn`
+   leaves `auto_map` unrun/upstream-blocked; neither receipt may be inferred from report prose.
+3. Re-read the approved plan and durable checkpoint. Refuse final `done` unless every selected-scope id is
+   task-mapped or separately acknowledged as dropped, the whole actionable register is empty, final
+   validation is green, and both required closeout receipts are `done`. Only then call `checkpoint.mjs
+   finalize <file> done`; otherwise finalize `needs_attention` with the exact residual.
+
+**Success criteria:** closeout is attempted in order and durably receipted; a real run cannot report
+converged/done without both receipts. An aborted run still learns and reports that map was inapplicable,
+never that it ran.
 
 ## Phase 3: Report
 
 Read the pipeline checkpoint and report end-to-end (see Output Contract): what each phase produced, which
 gates ran vs. were skipped (by user config), what shipped, and the open register. Fail closed — a run with
-a dead gate or a red end-state is not "done".
+a dead gate, red end-state, uncovered scope, actionable register item, or missing closeout receipt is not
+"done".
 
 **Success criteria:** an honest, phase-by-phase account; the durable checkpoint reflects the final state.
 
@@ -262,31 +295,40 @@ a dead gate or a red end-state is not "done".
 | Rationalization | Reality |
 |---|---|
 | "It's autonomous, so just return the findings and let the user fix them." | Autonomous means it FIXES what it finds — it never asks permission to fix confirmed blockers. It auto-fixes to convergence. |
+| "Fix all meant the 19 review findings; the other register can be follow-up." | Fix all means the entire current actionable register across every phase and severity. Only information or a separately approved scope drop is outside it. |
 | "Auto-fix means loop until everything's perfect." | Auto-fix is BOUNDED: a max round cap + the run budget + a no-progress stop. It converges, or returns the open residual honestly. Unbounded looping is the multi-hour-grind failure mode; the termination set prevents it. |
 | "Build came back with blocked tasks but let's just run review anyway." | A phase that didn't meet its bar hands a false-green downstream. Gates fail closed — pause or escalate. |
 | "The user approved the plan, so I can deploy too." | Plan approval ≠ deploy approval. Irreversible steps in any phase still need explicit sign-off. |
 | "Resume by re-running from spec, it's cleaner." | That redoes finished work and can diverge from what shipped. Resume from the checkpoint at the recorded phase. |
 | "Report it as shipped — most of it worked." | Partial is not done. Report what shipped, which gates ran, and the open register honestly. |
+| "Learn/map are useful follow-ups; the product is already done." | They are required closeout phases. Without both durable receipts the run is not converged/done. |
 | "Skip the budget, the phases have their own." | The lifecycle is long; phase budgets don't bound the whole. Declare a pipeline budget too. |
 
 ## Red Flags
 
 - The auto-fix converge-loop running WITHOUT a declared termination set (max rounds + budget + no-progress) — it must be bounded, or it's the multi-hour-grind failure mode.
 - Returning confirmed, mechanically-fixable blockers UNFIXED and asking the user whether to fix them — autonomous means fix them.
+- Reporting a low-severity/non-review defect outside the fix loop, or deferring a selected-scope item.
 - A downstream phase started while the upstream phase had unresolved blockers.
 - A deploy/irreversible step taken on the strength of the plan approval alone.
 - A resume that restarted from spec and redid integrated work.
 - "Shipped" reported while a gate didn't run or the end-state validate is red.
+- `converged:true` or `done` with an uncovered selected-scope id or without both `auto_learn` and
+  `auto_map` durable receipts.
 - No pipeline-level budget declared for a full lifecycle run.
 
 ## Guardrails
 
 - One approval gate (the plan); every irreversible/ambiguous/unfixable situation still escalates.
 - Auto-fix the confirmed register to convergence, BOUNDED by a termination set (max rounds + budget + no-progress); return only the residual it can't converge or a fix needing an irreversible/ambiguous decision — never ask permission to fix confirmed findings.
+- Treat "fix all" as the current whole-run actionable register, re-read after each round; severity/source
+  never exempts a defect, and selected scope cannot be deferred without its own user-approved drop.
 - Phase gates fail closed; never pass a false-green downstream.
 - Durable resume from the checkpoint; never restart from spec.
 - Declare and enforce a pipeline-level budget.
 - Report the honest end state, caveated by which phases were skipped.
+- Refuse convergence on uncovered selected scope, any actionable register item, or a missing/blocked
+  `auto_learn`/`auto_map` receipt.
 
 ## When To Load References
 
@@ -318,13 +360,17 @@ a dead gate or a red end-state is not "done".
 
 Report:
 
-1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded
+1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded; and
+   **SCOPE COVERAGE: N of M** with covered, explicitly dropped, and UNCOVERED ids
 2. per phase: outcome + gate status (met its bar / blocked / skipped); which specialists the build
    actually routed to (`specialistsUsed`) and any plan-assigned specialist that was absent here and so
    ran generic (`missingAgents` — surface it so the user can install the missing agent/skill)
 3. ship-prep artifacts produced (changelog + PR body draft — OPENING the PR / deploying is the user's explicitly-gated step) and the end-state validate result (honest)
-4. the fix-loop outcome — the count of confirmed findings AUTO-FIXED to convergence, and the STILL-OPEN
+4. the fix-loop outcome — sources/count of the whole actionable register, the count AUTO-FIXED to
+   convergence, informational observations/explicit scope drops reported separately, and the STILL-OPEN
    residual (if any) with its termination reason (budget/cap exhausted, no-progress, or an escalated
    irreversible/ambiguous fix) — never an unfixed register presented as a menu of choices
 5. the pipeline checkpoint path (durable, resumable record) + the one-liner to query it any time
    (`run-status.mjs` for a rendered view, `run-status.mjs --resume` for the relaunch call)
+6. closeout receipts — `auto_learn` and `auto_map` each ran/done or the exact blocker; never report
+   converged/done unless both are durably `done`

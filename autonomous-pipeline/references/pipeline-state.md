@@ -7,39 +7,41 @@ This doc is shared by BOTH backends (see the skill's **Runtime backends** sectio
 axis — what a blocked required gate does mid-run:
 
 - **CANONICAL — the deterministic coordinator CLI (`scripts/pipeline.mjs` + `scripts/lib/`).** A BLOCKED
-  required gate **HARD-STOPS downstream execution**: the phase engine gates every later phase
-  (`upstream-blocked`, never run), the coordinator returns `status:blocked` / `converged:false` at exit
-  `4`, and no subsequent phase touches the tree. This is the runtime the Codex adapter launches; the
-  state machine below (`pipeline-state.mjs`) is its literal source of truth.
+  required ordinary gate **HARD-STOPS ordinary downstream execution** (`upstream-blocked`, never run).
+  Required closeout still attempts `auto_learn` then `auto_map` so a bumpy run pays forward its evidence;
+  those receipts never erase the blocker. The coordinator returns `status:blocked` / `converged:false` at
+  exit `4`. This is the runtime the Codex adapter launches; `pipeline-state.mjs` is its literal source.
 - **LEGACY (Claude-only) — the `Workflow` template (`pipeline-workflow.js`).** A Workflow cannot ask the
   user or hard-pause, so instead of hard-stopping it does ONE FORWARD PASS: downstream phases still run
   over whatever integrated (except `auto-simplify`, skipped when the build is incomplete — no stable base)
-  and it returns the collected findings register at the end. Same fail-closed *bookkeeping* (a missed bar
-  is recorded `blocked`, never `done`; `converged` stays false), different *sequencing*. This paragraph is
-  the ONLY place the two diverge — attribute any "forward pass" statement below to THIS legacy backend.
+  and it returns the collected findings register at the end. The Workflow never reports final convergence;
+  the surrounding skill runs whole-register remediation, then records `auto_learn`/`auto_map`. Same fail-
+  closed *bookkeeping*, different *sequencing*. Attribute "forward pass" statements to this backend only.
 
 ## Phases, artifacts, and gate conditions
 
 | # | Phase | Consumes | Produces | Gate to pass before next phase |
 |---|-------|----------|----------|-------------------------------|
-| 1 | auto-spec | the request | `.ulpi/spec/<name>.md` | spec exists; all acceptance criteria testable; non-goals stated; open questions resolved or flagged |
-| 2 | auto-plan | the spec | `.ulpi/plans/<name>.json` (single canonical artifact; the human view is rendered on demand, never stored) | DAG acyclic + topologically layered; every spec criterion covered; self-review clean |
-| — | **APPROVAL** | the plan | user affirmative | unambiguous "approve/go/yes" (the single human gate) |
+| 1 | auto-spec | request + binding `selectedScope[]` | `.ulpi/spec/<name>.md` | every selected id remains in scope; all criteria testable; non-goals contain no selected item |
+| 2 | auto-plan | spec + binding `selectedScope[]` | `.ulpi/plans/<name>.json` | DAG safe; every selected id task-mapped or separately user-dropped; no UNCOVERED id |
+| — | **APPROVAL** | plan + coverage | user affirmative | render N/M plus each uncovered/drop; every drop separately acknowledged before general plan approval |
 | 3 | auto-build | the plan | integrated commits per task | all tasks `done` (none blocked/dep_blocked); final workspace validate GREEN |
 | 4 | auto-simplify | the build diff | cleaner diff | every kept edit verified behavior-preserving; suite still green |
 | 5 | auto-test | the codebase | added tests, green suite | scoped suite green; added tests mutation-verified; nothing skipped/weakened |
 | 6 | auto-review | the diff | verified findings | every dimension ran (fail closed on gaps); confirmed blockers resolved (or surfaced) |
 | 7 | auto-performance | the target | measured optimizations | (if run) each kept change benchmark-proven + no regression; else skipped |
 | 8 | auto-ship | verified work | PR / staged rollout | pre-launch gates green (fail closed); rollback ready; human sign-off for irreversible deploy |
+| 9 | auto-learn | complete run evidence (clean or bumpy) | routed verified learnings | required receipt `auto_learn: done`; machine defects surfaced, not self-patched |
+| 10 | auto-map | code + learnings | verified context map | runs after learn; required receipt `auto_map: done` |
 
 A gate is fail-closed in BOTH backends: a phase that did not reach its bar (a blocked/unbuilt build task,
 a red validate, an unrun review dimension, a died phase agent) is recorded `blocked` (never `done`) and
 its items go to the open register — so `converged` is false and, critically, a RESUME re-enters that phase
 rather than skipping it. Where they diverge is sequencing:
 
-- **Canonical coordinator:** a blocked required gate HARD-STOPS. The post-build phases run sequentially and
-  the first blocked required phase gates every later one (`upstream-blocked`); the run exits `blocked`
-  without touching downstream. The USER reads the register and re-invokes `resume` after fixing.
+- **Canonical coordinator:** a blocked required ordinary gate HARD-STOPS later ordinary phases. The
+  always-run closeout phases still attempt learn then map and record honest receipts; the run remains
+  blocked. The USER reads the register and re-invokes `resume` after fixing.
 - **Legacy Workflow:** the run is ONE forward pass — downstream phases still execute over whatever
   integrated (except `auto-simplify`, skipped when the build is incomplete — there's no stable base to
   simplify), and the pass returns the register at the end. It does NOT pause mid-run for a blocked gate
@@ -49,20 +51,23 @@ In either backend a hard escalation an engineer raises (a decision only the user
 task with the reason in the register; it does not silently guess past it.
 
 Optional phases (user-configurable at intake): `auto-simplify`, `auto-performance`, and the deploy portion
-of `auto-ship` may be skipped. `auto-build` and `auto-test` are not skippable. A skipped phase is recorded
-as `skipped` (a deliberate choice), not `done`.
+of `auto-ship` may be skipped. `auto-build`, `auto-test`, `auto-review`, `auto-learn`, and (for a real,
+non-aborted run) `auto-map` are not skippable. A skipped phase is recorded as `skipped` (a deliberate
+choice), not `done`.
 
 ## Handoff contract
 
 Each phase hands the next a small, explicit payload — never the whole transcript:
 
-- spec → plan: the spec path.
-- plan → build: the plan path (`{tasks, layers}`).
+- intake → spec/plan: binding `selectedScope[]` ids/titles/sources.
+- spec → plan: the spec path plus the unchanged selected-scope checklist.
+- plan → build: the plan path (`{selectedScope, scopeDrops, tasks, layers}`).
 - build → simplify/test: the working branch + the integrated diff range + the build checkpoint (so
   downstream knows what changed and what's blocked).
 - test/simplify → review: the diff to review.
 - review → performance/ship: the confirmed (verified) findings; performance target if any.
 - ship: the release branch + gate results.
+- run → learn → map: the durable checkpoint/register/resolved evidence, then the verified learnings.
 
 Thread artifacts by PATH/REF, not by inlining content — the phases read what they need.
 
@@ -101,12 +106,14 @@ Canonical state vocabularies (`checkpoint-store.mjs`):
   "phases": {
     "spec":        { "status": "done", "artifact": ".ulpi/spec/x.md" },      // skill-recorded, pre-launch
     "plan":        { "status": "done", "artifact": ".ulpi/plans/x.json" },   // skill-recorded, pre-launch
-    "build":       { "status": "running" },                                  // ── the backend owns these six keys ──
+    "build":       { "status": "running" },                                  // ── backend-owned lifecycle keys ──
     "simplify":    { "status": "pending" },
     "test":        { "status": "pending" },
     "review":      { "status": "pending" },
     "performance": { "status": "skipped" },
-    "ship_prep":   { "status": "pending" }
+    "ship_prep":   { "status": "pending" },
+    "auto_learn":  { "status": "pending" },
+    "auto_map":    { "status": "pending" }
   },
   "units": {                             // one entry per BUILD TASK (auto-plan id), IN THIS SAME FILE
     "T1": { "status": "done" },
@@ -114,6 +121,9 @@ Canonical state vocabularies (`checkpoint-store.mjs`):
   },
   "openItems": [],                       // verified findings persisted as each phase ends (the register)
   "resolvedItems": [],                   // v2: findings cleared from the register (audit trail, stamped resolvedAt)
+  "pipeline": {
+    "scopeCoverage": { "total": 2, "covered": ["SCOPE-001", "SCOPE-002"], "dropped": [], "uncovered": [], "errors": [] }
+  },
   "result": null
 }
 ```
@@ -130,9 +140,13 @@ The single done-condition (`doneCondition: convergence-v1`) is `pipeline-state.m
 1. **every build unit is `done`** (any non-`done` unit → `unit-unfinished`);
 2. **every required phase is `done`**, and every optional phase is `done` or legitimately `skipped` (a
    required phase `skipped` → `required-phase-skipped`; anything else non-green → `phase-not-green`);
-3. **no unresolved blocker** — nothing in `blocked` (`blocked-unit` / `blocked-phase`) AND an empty open
-   register (`open-register`);
-4. **final validation is present AND green** (absent → `final-validation-missing`; red →
+3. **no unresolved blocker** — nothing in `blocked` (`blocked-unit` / `blocked-phase`) AND an empty whole
+   actionable register (`open-register`), independent of source/severity;
+4. **binding selected-scope coverage is present and complete** (absent → `scope-coverage-missing`; each
+   never-mapped id → `scope-uncovered`; invalid drop/mapping → `scope-coverage-invalid`);
+5. **`auto_learn` and `auto_map` are both durably `done`** (they are required phases; missing/blocked is
+   `phase-not-green` / `blocked-phase`);
+6. **final validation is present AND green** (absent → `final-validation-missing`; red →
    `final-validation-red`).
 
 The canonical coordinator evaluates this conjunction over the DURABLE checkpoint as the single gate to
@@ -142,14 +156,15 @@ failures honestly — it never asserts a green verdict to exit.
 ## Resume (any-point)
 
 On resume (canonical `pipeline.mjs resume --run <id>`, or the legacy Workflow relaunched with the same
-args) the backend reads the checkpoint and (a) SKIPS every phase whose key is recorded `done` (the six
-backend-owned keys: `build`, `simplify`, `test`, `review`, `performance`, `ship_prep` — each writes
-`running` when it starts and `done` when it ends), (b) rebuilds the register from the durably-persisted
-`openItems`, and (c) within the build, skips every `done` unit. The canonical coordinator additionally
+args) the runtime reads the checkpoint, rebuilds the actionable register from durable `openItems`, and
+skips every build unit already proved `done`. The legacy Workflow skips its six ordinary phase keys when
+recorded done; the surrounding skill owns the two closeout receipts. The canonical coordinator owns all
+eight lifecycle keys (`build`, `simplify`, `test`, `review`, `performance`, `ship_prep`, `auto_learn`,
+`auto_map`) and may re-enter a pass to revalidate a previously blocked run. It additionally
 reconciles crashed budget segments (never erasing spend or no-progress counters) and NEVER re-consumes or
 re-mints the plan approval. The returned register is identical whether the run was interrupted or not.
 Never restart from `spec`; never overwrite the pipeline checkpoint with a fresh pending doc.
-`spec`/`plan`/approval are SKILL-owned phases (they happen before launch); the backend owns the six keys.
+`spec`/`plan`/approval are SKILL-owned phases (they happen before launch).
 
 ## Escalation ↔ pause
 
@@ -162,8 +177,11 @@ additionally halts at `awaiting_authorization` and requires a fresh action capab
 
 ## Auto-fix to convergence, then stop
 
-After the phases, the pipeline runs a BOUNDED auto-fix converge-loop over the verified `register` (rebuilt
-from the persisted `openItems`): fix → re-review, capped by `maxFixRounds` + the run budget + a no-progress
+After the ordinary lifecycle pass, the surrounding skill runs a BOUNDED auto-fix converge-loop over the complete actionable
+`register` (rebuilt from persisted `openItems` across all sources/severities): fix → persist → re-read the
+current register → re-review, capped by `maxFixRounds` + the run budget + a no-progress
 stop. It never asks the user whether to fix confirmed findings. It then sets `status` (`done` if the
-register converged and everything shipped, else `needs_attention` carrying the honestly-open residual +
-the termination reason). Only a fix that needs an irreversible/ambiguous human decision escalates and pauses.
+register converged, final validation is green, scope is covered, and closeout receipts are done; otherwise
+`needs_attention` carries the honestly-open residual + termination reason). The canonical coordinator's
+durable convergence gate independently prevents publication while any register item remains. Only a fix
+that needs an irreversible/ambiguous human decision escalates and pauses.

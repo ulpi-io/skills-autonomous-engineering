@@ -427,7 +427,10 @@ test('shipPrepReadiness combines panel blockers with the pipeline convergence co
   // panel clean AND pipeline converged ⇒ ready
   const ready = shipPrepReadiness(clean, {
     units: { u1: { status: 'done' } },
-    phases: { build: 'done', simplify: 'skipped', test: 'done', review: 'done', performance: 'skipped', ship_prep: 'done' },
+    phases: {
+      build: 'done', simplify: 'skipped', test: 'done', review: 'done', performance: 'skipped',
+      ship_prep: 'done', auto_learn: 'done', auto_map: 'done',
+    },
     finalValidation: { passed: true },
   });
   assert.equal(ready.ready, true);

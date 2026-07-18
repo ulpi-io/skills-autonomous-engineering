@@ -48,6 +48,8 @@ A spec is a contract; a vague or invented one poisons everything downstream. Non
 5. FAIL CLOSED ON COMPLETENESS. The critic loop exits only when no material gap/ambiguity/untestable
    criterion remains OR it stalls — and a stalled critic reports the open gaps, never a "looks complete"
    it didn't earn.
+6. SELECTED SCOPE OUTRANKS THE DRAFT. Preserve every intake `selectedScope[]` id in scope. Never move one
+   to non-goals or deferred work; reducing selected scope is a per-id user decision, not a spec decision.
 </EXTREMELY-IMPORTANT>
 
 # Auto Spec
@@ -63,6 +65,10 @@ and test against without re-interviewing the user.
 
 - Capture `$request` verbatim as the source of scope. The request IS the scope; don't silently narrow or
   widen it.
+- If the caller supplies `selectedScope[]`, copy its ids/titles/sources verbatim into a **Binding selected
+  scope** checklist. If the user selected a named bundle in this standalone run, itemize it first. The
+  checklist is authoritative over the draft and must not be regenerated from what the spec happens to
+  include.
 - Judge whether it's answerable from the repo + reasonable inference, or whether a genuine product
   decision blocks it (a fork where building the wrong branch is expensive). Only for the latter, ask a
   FEW targeted questions (`AskUserQuestion`) — never a long interview, never scope questions you could
@@ -100,7 +106,9 @@ Write `.ulpi/spec/<name>.md` covering (omit a section only when truly N/A, and s
   and edge paths.
 - **Acceptance criteria** — a checklist, each item TESTABLE (a condition you could assert). These become
   the plan's per-task criteria and the tests' targets.
-- **Scope & non-goals** — explicitly in and explicitly OUT.
+- **Binding selected scope** — every intake id, unchanged, with the behavior/criteria that implement it.
+- **Scope & non-goals** — explicitly in and explicitly OUT. Non-goals may contain only things the intake
+  selection never included. Never put a selected id here.
 - **Constraints & interfaces** — stack, contracts, data shapes, public interfaces affected, backward-compat.
 - **Assumptions & open questions** — everything not grounded, named as such.
 - **Risks** — security, data, irreversibility, performance — with the mitigation direction.
@@ -115,7 +123,8 @@ spec strong:
 
 - each round, `adversarial-verify`-style critics attack the draft: missing behavior/edge/error case? an
   acceptance criterion that isn't testable? an ungrounded requirement? contradictory or ambiguous
-  wording? a non-goal that should be stated? an unstated assumption?
+  wording? a non-goal that should be stated? an unstated assumption? any selected-scope id missing,
+  weakened, deferred, or placed in non-goals?
 - apply the smallest fix per finding (tighten a criterion, add the missing case, mark the assumption, cut
   the invented requirement);
 - re-critique; exit when a round finds no material gap (dry) OR it stalls. A stalled loop reports the
@@ -145,6 +154,7 @@ for the user.
 | "I don't need non-goals, the scope is obvious." | Unstated non-goals are the entry point for scope creep. Name what's out. |
 | "The critic found nothing new, one round is enough." | One round rarely exhausts the gaps. Loop until a round is genuinely dry, then stop. |
 | "I'll reference a config/endpoint that probably exists." | A phantom path in the spec becomes a phantom in the code. Ground it or mark it unknown. |
+| "This selected feature cannot fit this pass, so I will call it a non-goal." | That silently reduces the user's scope. Keep it selected and attempt it; unfinished work is BLOCKED. Only the user may drop its id. |
 
 ## Red Flags
 
@@ -154,12 +164,15 @@ for the user.
 - The critic loop ran exactly once.
 - Long clarification interviews for things readable in the repo.
 - A "complete" verdict with unresolved contradictions still in the text.
+- A selected-scope id missing from the spec, weakened into a non-goal, or pre-emptively deferred.
 
 ## Guardrails
 
 - Never invent requirements/paths/constraints; ground them or mark them assumptions.
 - Never emit an untestable acceptance criterion.
 - Never omit explicit non-goals.
+- Never put a selected-scope id in non-goals or deferred work. If it cannot be completed, keep it selected
+  and surface it as BLOCKED; record a drop only after an explicit user decision naming that id.
 - Never resolve a real product decision silently — ask (briefly) or flag it open.
 - Never report the spec complete while the critic still finds material gaps.
 
@@ -175,6 +188,7 @@ for the user.
 Report:
 
 1. the spec file path (`.ulpi/spec/<name>.md`) and a one-line objective
-2. acceptance criteria count (all testable) and the explicit non-goals
-3. assumptions made + open questions surfaced for the user
+2. selected-scope coverage (`N of M`) with every selected id, then the acceptance-criteria count and
+   explicit non-goals
+3. any per-id user-approved drops, assumptions made, and open questions surfaced for the user
 4. critic-loop outcome (rounds to stable, or the honest remaining gaps)

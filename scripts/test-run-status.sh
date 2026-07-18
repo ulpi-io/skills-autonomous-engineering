@@ -22,7 +22,7 @@ sleep 1
 F=.ulpi/runs/demo.json
 node "$CK" init "$F" --id demo --task "add oauth" --units "a,b,c" \
   --launch '{"scriptPath":"/repo/autonomous-pipeline/references/pipeline-workflow.js","args":{"root":"/repo","workingBranch":"feat","approved":true}}' >/dev/null
-node "$CK" unit "$F" a done >/dev/null
+node "$CK" unit "$F" a done --note "reconciled-from-trailer:abc123" >/dev/null
 node "$CK" unit "$F" b in_progress >/dev/null
 node "$CK" unit "$F" c blocked --note "needs decision" >/dev/null
 node "$CK" phase "$F" build running >/dev/null
@@ -35,6 +35,26 @@ SNAP_BEFORE="$(cd .ulpi/runs && for f in *.json; do printf '%s:%s\n' "$f" "$(cks
 OUT="$(cd src/deep && node "$RS" --no-color)"
 echo "$OUT" | grep -q "demo" && echo "$OUT" | grep -q "1/3" ; ok $? "default render: newest run, progress 1/3, from a subdir"
 echo "$OUT" | grep -q "needs decision" ; ok $? "render shows blocked unit note"
+echo "$OUT" | grep -q "reconciled-from-trailer:abc123" ; ok $? "render surfaces trailer-reconciliation provenance on a done unit"
+echo "$OUT" | grep -qi "no live workflow" && echo "$OUT" | grep -q "/workflows" ; ok $? "render is honest when no live workflow transcript exists"
+
+# Best-effort Claude workflow overlay: seed the observed external journal envelope under an isolated
+# CLAUDE_CONFIG_DIR. Five agents started, two returned → three running; durable progress remains 1/3.
+CLAUDE_FIXTURE="$TMP/claude-fixture"
+PROJECT_SLUG="$(node -e 'process.chdir(process.argv[1]); process.stdout.write(process.cwd().replace(/[^A-Za-z0-9-]/g,"-"))' "$PWD")"
+WF_DIR="$CLAUDE_FIXTURE/projects/$PROJECT_SLUG/session-id/subagents/workflows/wf_status-fixture"
+mkdir -p "$WF_DIR"
+printf '%s\n' \
+  '{"type":"started","key":"k1","agentId":"agent-1"}' \
+  '{"type":"started","key":"k2","agentId":"agent-2"}' \
+  '{"type":"started","key":"k3","agentId":"agent-3"}' \
+  '{"type":"started","key":"k4","agentId":"agent-4"}' \
+  '{"type":"started","key":"k5","agentId":"agent-5"}' \
+  '{"type":"result","key":"k1","agentId":"agent-1","result":{}}' \
+  '{"type":"result","key":"k2","agentId":"agent-2","result":{}}' > "$WF_DIR/journal.jsonl"
+LIVE_OUT="$(CLAUDE_CONFIG_DIR="$CLAUDE_FIXTURE" node "$RS" --no-color)"
+echo "$LIVE_OUT" | grep -q "Live workflow" && echo "$LIVE_OUT" | grep -q "2 done" && echo "$LIVE_OUT" | grep -q "3 running" ; ok $? "render shows live workflow done/running overlay"
+echo "$LIVE_OUT" | grep -q "divergence" && echo "$LIVE_OUT" | grep -q "live agents 5" && echo "$LIVE_OUT" | grep -q "durable units 1/3" ; ok $? "render visibly compares live-agent count with durable progress"
 
 # --list shows both, newest first. NB: only inspect DATA ROWS (they end in " ago") — the header line
 # echoes the runs-dir path, and macOS mktemp's /var/folders/… literally contains the substring "older".
@@ -67,6 +87,13 @@ node "$RS" nope-nope >/dev/null 2>&1; [ "$?" = "3" ] && echo "PASS unknown id ex
 # READ-ONLY: the runs dir is byte-identical after all those reads
 SNAP_AFTER="$(cd .ulpi/runs && for f in *.json; do printf '%s:%s\n' "$f" "$(cksum < "$f")"; done)"
 [ "$SNAP_BEFORE" = "$SNAP_AFTER" ] && echo "PASS reader never wrote (runs dir byte-identical)" || { echo "FAIL reader mutated the runs dir"; fails=$((fails+1)); }
+
+# PURE-FS: put a marker `git` first on PATH. Any accidental git spawn trips the marker and fails this test.
+mkdir -p "$TMP/fake-bin"
+printf '%s\n' '#!/bin/sh' ': > "$GIT_MARKER"' 'exit 97' > "$TMP/fake-bin/git"
+chmod +x "$TMP/fake-bin/git"
+GIT_MARKER="$TMP/git-was-spawned" PATH="$TMP/fake-bin:$PATH" CLAUDE_CONFIG_DIR="$CLAUDE_FIXTURE" node "$RS" --no-color >/dev/null 2>&1
+[ ! -e "$TMP/git-was-spawned" ] ; ok $? "run-status stays pure-fs and never spawns git"
 
 # empty project → graceful "no runs", exit 0
 cd "$TMP" && mkdir -p empty && ( cd empty && node "$RS" --no-color >/dev/null 2>&1 ); ok $? "empty project: no runs, exit 0"
@@ -106,12 +133,15 @@ d["pipeline"]={"run":"full","integrationRef":"refs/heads/ulpi-int-full","targetR
 json.dump(d,open(f,"w"),indent=2)
 PY
 node "$CK" phase .ulpi/runs/full.json build running >/dev/null
+node "$CK" phase .ulpi/runs/full.json auto_learn done >/dev/null
+node "$CK" phase .ulpi/runs/full.json auto_map blocked >/dev/null
 node "$CK" item .ulpi/runs/full.json --json '{"id":"F-KEEP","phase":"review","kind":"finding","why":"open finding stays"}' >/dev/null
 node "$CK" item .ulpi/runs/full.json --json '{"id":"F-GONE","phase":"test","kind":"finding","why":"this one gets resolved"}' >/dev/null
 node "$CK" resolve .ulpi/runs/full.json --ids F-GONE >/dev/null
 node "$CK" validation .ulpi/runs/full.json green --note "all slices green" >/dev/null
 FULL="$(node "$RS" full --no-color)"
 echo "$FULL" | grep -qE 'ulpi-int-full' ; ok $? "render shows the integration branch"
+echo "$FULL" | grep -q 'auto_learn' && echo "$FULL" | grep -q 'auto_map' ; ok $? "render shows durable auto-learn/auto-map closeout receipts"
 echo "$FULL" | grep -qi 'resolved' ; ok $? "render shows resolved findings"
 echo "$FULL" | grep -qiE 'validation.*green|green.*validation' ; ok $? "render shows final validation"
 echo "$FULL" | grep -qF 'open finding stays' ; ok $? "render shows unresolved finding"

@@ -286,6 +286,29 @@ export function resume(file) {
   return { skip, eligible, dep_blocked: depBlocked };
 }
 
+function scopeCoverageProblems(scopeCoverage) {
+  const problems = [];
+  const seen = new Map();
+  if (!Number.isInteger(scopeCoverage.total) || scopeCoverage.total < 1) problems.push('selected-scope coverage total is invalid');
+  for (const group of ['covered', 'dropped', 'uncovered']) {
+    if (!Array.isArray(scopeCoverage[group])) { problems.push(`selected-scope coverage ${group} is not an array`); continue; }
+    for (const id of scopeCoverage[group]) {
+      if (typeof id !== 'string' || id.trim() === '') { problems.push(`${group} contains an invalid selected-scope id`); continue; }
+      if (seen.has(id)) problems.push(`selected-scope item ${id} appears in both ${seen.get(id)} and ${group}`);
+      else seen.set(id, group);
+    }
+  }
+  if (Number.isInteger(scopeCoverage.total) && scopeCoverage.total !== seen.size) {
+    problems.push(`selected-scope coverage accounts for ${seen.size} of ${scopeCoverage.total} item(s)`);
+  }
+  if (!Array.isArray(scopeCoverage.errors)) problems.push('selected-scope coverage errors is not an array');
+  else if (scopeCoverage.errors.length) problems.push(`${scopeCoverage.errors.length} selected-scope coverage error(s)`);
+  if (Array.isArray(scopeCoverage.uncovered) && scopeCoverage.uncovered.length) {
+    problems.push(`${scopeCoverage.uncovered.length} selected-scope item(s) UNCOVERED: ${scopeCoverage.uncovered.join(', ')}`);
+  }
+  return problems;
+}
+
 export function finalize(file, status, { result } = {}) {
   if (!['done', 'needs_attention', 'aborted'].includes(status)) fail('finalize requires <done|needs_attention|aborted>');
   return withLock(file, () => {
@@ -296,11 +319,17 @@ export function finalize(file, status, { result } = {}) {
       const blockedPhases = Object.entries(doc.phases || {}).filter(([, p]) => p && p.status === 'blocked').map(([k]) => k);
       const requiredIncomplete = (doc.requiredPhases || []).filter(p => doc.phases?.[p]?.status !== 'done');
       const openFindings = Array.isArray(doc.openItems) ? doc.openItems.length : 0;
+      const scopeCoverage = doc.pipeline && typeof doc.pipeline === 'object' ? doc.pipeline.scopeCoverage : null;
       const reasons = [];
       if (openUnits.length) reasons.push(`${openUnits.length} unit(s) not done: ${openUnits.join(', ')}`);
       if (blockedPhases.length) reasons.push(`${blockedPhases.length} phase(s) blocked: ${blockedPhases.join(', ')}`);
       if (requiredIncomplete.length) reasons.push(`${requiredIncomplete.length} required phase(s) not done: ${requiredIncomplete.join(', ')}`);
       if (openFindings) reasons.push(`${openFindings} open finding(s) in openItems`);
+      if (doc.pipeline && (!scopeCoverage || typeof scopeCoverage !== 'object' || Array.isArray(scopeCoverage))) {
+        reasons.push('binding selected-scope coverage receipt is absent');
+      } else if (scopeCoverage) {
+        reasons.push(...scopeCoverageProblems(scopeCoverage));
+      }
       if (doc.requireValidation && (!doc.finalValidation || doc.finalValidation.status !== 'green')) {
         reasons.push(doc.finalValidation ? `final validation is ${doc.finalValidation.status} (not green)` : 'final validation is absent');
       }

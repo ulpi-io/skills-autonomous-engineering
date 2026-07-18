@@ -55,6 +55,9 @@ phantom paths) that would otherwise surface as build failures.
 
 - Resolve the spec (`$spec` path, or the newest `.ulpi/spec/*`). If none, or if it's vague/untestable,
   STOP and route back to `auto-spec` — a plan inherits the spec's groundedness.
+- Require the intake **Binding selected scope** checklist (`selectedScope[]`). Treat it as authority over
+  the spec: if the spec omitted or demoted a selected id, keep that id visible as `UNCOVERED` and route the
+  contradiction back for correction. Never silently plan only the smaller spec.
 - Read the repo to ground the plan: existing structure, modules, build/test commands, the workspace
   validate, and the load-bearing invariants.
 - **Honor the prior-run lessons already in your loaded context** — `auto-learn` writes plan-shape
@@ -70,6 +73,8 @@ Break the spec's acceptance criteria into tasks. Each task carries:
 
 - `id` + a one-line title;
 - **acceptance criteria** — from the spec, the subset this task satisfies (testable);
+- **scope mapping** — `scopeItems[]`, the selected-scope ids this task covers (technical support tasks may
+  map none, but every selected id must map to at least one task);
 - **write scope** — the files/dirs it may modify (disjoint from sibling tasks in the same layer);
 - **validate** — the slice-scoped command that proves it (greenable once this slice + deps integrate;
   never a whole-suite e2e that only passes at end-state);
@@ -120,7 +125,10 @@ validate.
   within a layer must be independent (disjoint write scope) so the build can run them in parallel.
 - Verify the graph is acyclic.
 
-Write ONE canonical artifact: `.ulpi/plans/<name>.json`. There is deliberately NO stored markdown
+Write ONE canonical artifact: `.ulpi/plans/<name>.json`, including top-level `selectedScope[]`, task-level
+`scopeItems[]`, and top-level `scopeDrops[]`. A drop record is valid only after the user separately
+acknowledges that exact id and the record contains `acknowledgedByUser: true` plus the acknowledgement
+evidence; general plan approval is not evidence. There is deliberately NO stored markdown
 twin — a second artifact is a drift class (the copies diverge and the validator only gates one). The
 human view is DERIVED on demand: `node <skill-dir>/scripts/validate-plan.mjs <plan.json> --render`
 prints the layered, checklisted markdown — use its OUTPUT in-conversation when presenting the plan
@@ -144,6 +152,10 @@ e2e validates (a bare `playwright test`/`cypress run`). The ambiguous `<runner> 
 non-blocking WARNING — it is the vitest footgun but ALSO canonical for Jest, and the gate can't know the
 runner, so it advises an explicit runner rather than blocking a correct plan. Exit 1 = fix the graph and
 re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
+
+It also owns binding-scope shape and coverage for executable plans: nonempty `selectedScope[]`; valid
+`task.scopeItems[]`; no duplicate/unknown ids; and every selected id task-mapped or separately
+user-acknowledged in `scopeDrops[]`. An unacknowledged proposed drop remains **UNCOVERED** and exit 1.
 
 ### Executable plans (coordinator-run) get HARDENED checks
 
@@ -187,7 +199,9 @@ Run `converge-loop` with `adversarial-verify` critics attacking the plan each ro
   another's output without a `dependsOn`?
 - **atomicity** — is a task actually two changes? Can each task's validate really go green at its slice?
   If two can't validate independently, MERGE them.
-- **coverage** — does the union of task acceptance criteria cover the whole spec? Anything dropped?
+- **coverage** — does the union of `task.scopeItems[]` cover the entire intake `selectedScope[]`, even if
+  the spec under-covered it? Flag every id with no task as `UNCOVERED`. Also check spec criteria, but never
+  use spec coverage as a substitute for intake coverage.
 
 Fix findings in the JSON (the only artifact); re-review; exit clean or report the remaining defects.
 
@@ -210,6 +224,7 @@ allows (widest layer). This plan is the input to `auto-build`.
 | "The validate can be the full e2e suite." | A whole-suite validate only greens at end-state, so every slice looks broken. Make validate slice-scoped. |
 | "The self-review found nothing, one pass is enough." | Cycles and phantom paths hide. Loop until a review pass is genuinely clean. |
 | "Two tasks that can't validate alone is fine, they're logically separate." | If neither is independently greenable, they are one unit of work. Merge them. |
+| "The plan covers the whole spec, so scope is covered." | The spec can be the thing that shrank. Coverage is against the intake selectedScope checklist; every missing id is UNCOVERED. |
 
 ## Red Flags
 
@@ -218,6 +233,7 @@ allows (widest layer). This plan is the input to `auto-build`.
 - A task ordered before something it depends on (or a cycle).
 - A validate command that's the full test suite rather than a slice.
 - Spec acceptance criteria with no task covering them.
+- A selected-scope id with no `task.scopeItems[]` mapping, or a drop inferred from general plan approval.
 - The self-review loop ran once.
 
 ## Guardrails
@@ -228,6 +244,8 @@ allows (widest layer). This plan is the input to `auto-build`.
 - Never put dependent or write-scope-overlapping tasks in the same layer.
 - Never order a task before its dependencies; never ship a cyclic graph.
 - Never leave a spec criterion uncovered by some task.
+- Never leave a selected-scope id uncovered. A drop requires a separate per-id user acknowledgement;
+  approving the plan never implies one.
 - Never sign off a plan the self-review couldn't make clean — report the defects.
 
 ## When To Load References
@@ -245,6 +263,7 @@ Report:
 
 1. plan path (`.ulpi/plans/<name>.json` — single canonical artifact), task count, layer count
 2. the DAG shape — dependency edges and the widest parallel layer
-3. spec-coverage confirmation (every criterion mapped to a task)
+3. **SCOPE COVERAGE: N of M selected-scope items covered**, with covered ids, explicit per-id drops, and
+   every `UNCOVERED` id; then spec-coverage confirmation
 4. self-review outcome (rounds to clean, or the remaining defects)
 5. specialist routing — which installed agents/skills tasks were matched to (and the tasks left generic)
