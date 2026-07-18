@@ -14,6 +14,7 @@
 //   buildBlockedDownstream— a blocked build still runs downstream phases but reports converged:false
 //   trailerPromptContract — no-checkpointCli prompts still emit + reconcile reachable Task-Id trailers
 //   reconciledUnitSkipped — preflight-reconciled doneUnits are skipped and unblock their dependents
+//   intakeScopeShrunk     — plan deletion relative to the independent intake snapshot aborts preflight
 //   wholeRegister         — severity/source cannot hide defects; pure info is reported separately; a
 //                           selected-scope "info/deferred" remains actionable
 //   durableWholeRegister  — checkpoint writes include gate items and every finding (batched, never capped)
@@ -29,9 +30,17 @@ const makeRun = () => new Function(
   `return (async () => {\n${src}\n})()`,
 );
 
-const baseArgs = () => ({
+const intakeFor = (plan) => ({
+  schemaVersion: 1,
+  run: 'legacy-test',
+  selection: 'Full MVP legacy fixture',
+  selectedScope: plan.selectedScope,
+  scopeSha256: 'a'.repeat(64),
+});
+const baseArgs = (plan = PLAN) => ({
   root: '/repo', workingBranch: 'feat', validate: 'npm test',
   planPath: '.ulpi/plans/p.json', statusFile: '.ulpi/runs/r.json',
+  intakePath: '.ulpi/runs/intake/legacy-test.json', intakeScope: intakeFor(plan),
   approved: true, // checkpointCli omitted on purpose → no status/persist agents fire (fewer mock branches)
   config: { simplify: true, performance: true, shipPrep: true },
 });
@@ -85,7 +94,7 @@ function mockRuntime(scn) {
       return scn.phaseAgent ? scn.phaseAgent(label) : { ok: true, summary: '', findings: [] };
     return {}; // any residual (status) writes
   };
-  return { S, run: () => makeRun()(agent, parallel, pipeline, phase, log, scn.args || baseArgs(), budget) };
+  return { S, run: () => makeRun()(agent, parallel, pipeline, phase, log, scn.args || baseArgs(scn.plan || PLAN), budget) };
 }
 
 const scenarios = {
@@ -166,6 +175,25 @@ const scenarios = {
     const scopeGate = r.register.some((x) => x.phase === 'preflight' && String(x.why).includes('SCOPE-002 is UNCOVERED'));
     return { pass: r.aborted === true && r.converged === false && r.workflowConverged === false
         && r.closeoutRequired.join(',') === 'auto_learn' && scopeGate && !S.calls.some((x) => x.startsWith('eng:')),
+      detail: `aborted=${r.aborted} scopeGate=${scopeGate} buildCalls=${S.calls.filter((x) => x.startsWith('eng:')).length}` };
+  },
+  async intakeScopeShrunk() {
+    const plan = {
+      ...PLAN,
+      selectedScope: [PLAN.selectedScope[0]],
+      tasks: [PLAN.tasks[0]],
+      layers: [['T1']],
+    };
+    const { S, run } = mockRuntime({
+      plan,
+      args: baseArgs(PLAN), // independent intake remains the original two-item selection
+      eng: () => ({ built: true, validatePassed: true, files: [], notes: '' }),
+    });
+    const r = await run();
+    const scopeGate = r.register.some((x) => x.phase === 'preflight'
+      && String(x.why).includes('SCOPE-002 is missing from plan.selectedScope[]'));
+    return { pass: r.aborted === true && r.converged === false && scopeGate
+        && !S.calls.some((x) => x.startsWith('eng:')),
       detail: `aborted=${r.aborted} scopeGate=${scopeGate} buildCalls=${S.calls.filter((x) => x.startsWith('eng:')).length}` };
   },
   async wholeRegister() {

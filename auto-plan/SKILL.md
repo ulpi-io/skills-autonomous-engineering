@@ -55,9 +55,9 @@ phantom paths) that would otherwise surface as build failures.
 
 - Resolve the spec (`$spec` path, or the newest `.ulpi/spec/*`). If none, or if it's vague/untestable,
   STOP and route back to `auto-spec` — a plan inherits the spec's groundedness.
-- Require the intake **Binding selected scope** checklist (`selectedScope[]`). Treat it as authority over
-  the spec: if the spec omitted or demoted a selected id, keep that id visible as `UNCOVERED` and route the
-  contradiction back for correction. Never silently plan only the smaller spec.
+- Require the independent, write-once intake snapshot and read its **Binding selected scope** checklist.
+  The plan's `selectedScope[]` is an exact copy, not its own authority. If the spec or plan omitted,
+  changed, or added an id/title/source, keep the mismatch visible and route it back for correction.
 - Read the repo to ground the plan: existing structure, modules, build/test commands, the workspace
   validate, and the load-bearing invariants.
 - **Honor the prior-run lessons already in your loaded context** — `auto-learn` writes plan-shape
@@ -130,7 +130,8 @@ Write ONE canonical artifact: `.ulpi/plans/<name>.json`, including top-level `se
 acknowledges that exact id and the record contains `acknowledgedByUser: true` plus the acknowledgement
 evidence; general plan approval is not evidence. There is deliberately NO stored markdown
 twin — a second artifact is a drift class (the copies diverge and the validator only gates one). The
-human view is DERIVED on demand: `node <skill-dir>/scripts/validate-plan.mjs <plan.json> --render`
+human view is DERIVED on demand:
+`node <skill-dir>/scripts/validate-plan.mjs <plan.json> --intake <absolute-snapshot.json> --render`
 prints the layered, checklisted markdown — use its OUTPUT in-conversation when presenting the plan
 (e.g. the approval gate); it can never disagree with what the build will execute. NEVER write the
 rendering to a file unless the user explicitly asks for one — an unrequested .md on disk is exactly
@@ -142,7 +143,7 @@ intra-layer independent.
 ## Phase 2.5: Run the structural gate — it is CODE
 
 ```bash
-node <skill-dir>/scripts/validate-plan.mjs .ulpi/plans/<name>.json
+node <skill-dir>/scripts/validate-plan.mjs .ulpi/plans/<name>.json --intake <absolute-snapshot.json>
 ```
 
 The DAG's safety properties are deterministic, so they are enforced by script, not prose: acyclicity,
@@ -153,9 +154,10 @@ non-blocking WARNING — it is the vitest footgun but ALSO canonical for Jest, a
 runner, so it advises an explicit runner rather than blocking a correct plan. Exit 1 = fix the graph and
 re-run until 0. The critics below argue SEMANTICS; this script owns STRUCTURE.
 
-It also owns binding-scope shape and coverage for executable plans: nonempty `selectedScope[]`; valid
-`task.scopeItems[]`; no duplicate/unknown ids; and every selected id task-mapped or separately
-user-acknowledged in `scopeDrops[]`. An unacknowledged proposed drop remains **UNCOVERED** and exit 1.
+It also owns intake fidelity plus binding-scope coverage for executable plans: `--intake` is mandatory;
+plan `selectedScope[]` must exactly match the snapshot's ids/titles/sources; `task.scopeItems[]` and
+`scopeDrops[]` may reference only snapshot ids; duplicates fail; and every intake id must be task-mapped
+or separately user-acknowledged in `scopeDrops[]`. Missing/changed intake ids and unacknowledged drops exit 1.
 
 ### Executable plans (coordinator-run) get HARDENED checks
 
@@ -224,7 +226,7 @@ allows (widest layer). This plan is the input to `auto-build`.
 | "The validate can be the full e2e suite." | A whole-suite validate only greens at end-state, so every slice looks broken. Make validate slice-scoped. |
 | "The self-review found nothing, one pass is enough." | Cycles and phantom paths hide. Loop until a review pass is genuinely clean. |
 | "Two tasks that can't validate alone is fine, they're logically separate." | If neither is independently greenable, they are one unit of work. Merge them. |
-| "The plan covers the whole spec, so scope is covered." | The spec can be the thing that shrank. Coverage is against the intake selectedScope checklist; every missing id is UNCOVERED. |
+| "The plan covers the whole spec, so scope is covered." | The spec or plan can be the thing that shrank. Compare both to the independent intake snapshot; every missing/changed id is blocking. |
 
 ## Red Flags
 
@@ -261,7 +263,8 @@ allows (widest layer). This plan is the input to `auto-build`.
 
 Report:
 
-1. plan path (`.ulpi/plans/<name>.json` — single canonical artifact), task count, layer count
+1. plan path (`.ulpi/plans/<name>.json` — single canonical artifact), independent intake snapshot
+   path/hash, task count, layer count
 2. the DAG shape — dependency edges and the widest parallel layer
 3. **SCOPE COVERAGE: N of M selected-scope items covered**, with covered ids, explicit per-id drops, and
    every `UNCOVERED` id; then spec-coverage confirmation

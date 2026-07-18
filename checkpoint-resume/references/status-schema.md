@@ -63,6 +63,13 @@ produces) carries four more durable facts. A v1 run keeps working unchanged; the
   "pipeline": {                               // coordinator metadata (stamped by `approve`)
     "integrationRef": "refs/heads/ulpi-int-<run>",   // the serialized integration branch
     "targetRef": "refs/heads/main",                  // the eventual publish target
+    "intakePath": "<stateDir>/intake/<run>.json",    // independently captured before spec/plan
+    "intakeFileSha": "<sha256 of exact snapshot bytes>",
+    "intakeScopeSha": "<semantic snapshot sha256>",
+    "intakeSelection": "Full MVP = PRD §13.1",
+    "intakeScope": [                          // exact authority copied into the checkpoint at approval
+      { "id": "SCOPE-001", "title": "…", "source": "PRD §13.1" }
+    ],
     "scopeCoverage": {                        // recomputed before approval mutates state
       "total": 2, "covered": ["SCOPE-001", "SCOPE-002"],
       "dropped": [], "uncovered": [], "errors": []
@@ -77,8 +84,11 @@ produces) carries four more durable facts. A v1 run keeps working unchanged; the
 - **finalValidation** — the run's terminal workspace verdict. `finalize done` (with `requireValidation`)
   refuses unless it is present and `green`. `red`/absent is reported honestly, never masked.
 - **integrationRef** — the branch per-task changes are serialized onto before they reach `targetRef`.
-- **scopeCoverage** — the binding intake checklist receipt. Canonical `finalize done` refuses when this is
-  absent/invalid or `uncovered` is nonempty. A drop appears only after a separate per-id user
+- **intakePath / intake hashes / intakeScope** — the independent Phase-0 authority and its approved
+  bindings. Start/resume re-read the file and refuse drift before any executor. The snapshot is created
+  atomically, write-once, before spec/plan; the plan cannot redefine M by shortening its own array.
+- **scopeCoverage** — coverage derived from that intake authority. Canonical `finalize done` refuses when
+  this is absent/invalid or `uncovered` is nonempty. A drop appears only after a separate per-id user
   acknowledgement; general plan approval is not a drop acknowledgement.
 
 ### Git-backed integration durability (coordinator + legacy Workflow)

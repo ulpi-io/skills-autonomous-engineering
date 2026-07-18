@@ -167,6 +167,10 @@ const fullyGreen = () => ({
   units: { T1: { status: 'done' }, T2: { status: 'done' } },
   phases: { build: 'done', simplify: 'done', test: 'done', review: 'done', performance: 'skipped', ship_prep: 'done', auto_learn: 'done', auto_map: 'done' },
   openItems: [],
+  intakeBinding: {
+    fileSha256: 'a'.repeat(64), scopeSha256: 'b'.repeat(64), selection: 'Full MVP',
+    selectedScope: [{ id: 'SCOPE-001', title: 'selected', source: 'user' }],
+  },
   scopeCoverage: { total: 1, covered: ['SCOPE-001'], dropped: [], uncovered: [], errors: [] },
   requireScopeCoverage: true,
   finalValidation: { passed: true },
@@ -228,8 +232,21 @@ test('converged is FALSE when binding selected-scope coverage is missing', () =>
   assert.ok(convergenceFailures(s).some((f) => f.code === 'scope-coverage-missing'));
 });
 
+test('converged is FALSE when the independent intake binding is missing or detached from coverage', () => {
+  const missing = fullyGreen();
+  missing.intakeBinding = null;
+  assert.ok(convergenceFailures(missing).some((f) => f.code === 'intake-binding-missing'));
+
+  const detached = fullyGreen();
+  detached.scopeCoverage = { total: 1, covered: ['SCOPE-GHOST'], dropped: [], uncovered: [], errors: [] };
+  const failures = convergenceFailures(detached);
+  assert.ok(failures.some((f) => f.code === 'scope-coverage-invalid' && /non-intake id SCOPE-GHOST/.test(f.detail)));
+  assert.ok(failures.some((f) => f.code === 'scope-coverage-invalid' && /SCOPE-001 is absent/.test(f.detail)));
+});
+
 test('converged is FALSE for every never-mapped selected-scope item', () => {
   const s = fullyGreen();
+  s.intakeBinding.selectedScope.push({ id: 'SCOPE-002', title: 'second', source: 'user' });
   s.scopeCoverage = { total: 2, covered: ['SCOPE-001'], dropped: [], uncovered: ['SCOPE-002'], errors: [] };
   assert.ok(!converged(s));
   const failures = convergenceFailures(s).filter((f) => f.code === 'scope-uncovered');

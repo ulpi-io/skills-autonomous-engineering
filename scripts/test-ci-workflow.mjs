@@ -28,7 +28,8 @@ const REAL = readFileSync(WORKFLOW, 'utf8');
 // ---- required suites: token = a substring that MUST appear in some step's `run` ----
 // mustInclude / mustNotInclude add per-suite flag assertions.
 const NODE_SUITES = [
-  'test-workflow-journal.mjs', 'test-event-log.mjs', 'test-pipeline-state.mjs', 'test-cli-contract.mjs', 'test-git-workspaces.mjs',
+  'test-workflow-journal.mjs', 'test-event-log.mjs', 'test-intake-scope.mjs', 'test-capture-intake.mjs',
+  'test-pipeline-state.mjs', 'test-cli-contract.mjs', 'test-git-workspaces.mjs',
   'test-git-integration.mjs', 'test-codex-executor.mjs', 'test-budget-ledger.mjs',
   'test-authorization.mjs', 'test-review-panel.mjs', 'test-build-engine.mjs',
   'test-phase-engine.mjs', 'test-pipeline-cli.mjs', 'test-pipeline-e2e.mjs',
@@ -169,6 +170,15 @@ test('the site slice step is preserved (test-site.mjs still wired)', () => {
   assert.ok(steps.some((s) => s.run.includes('test-site.mjs')), 'site slice step (test-site.mjs) must not be removed');
 });
 
+test('intake authority and capture CLI remain distinct, visible CI gates', () => {
+  const steps = parseSteps(REAL);
+  const authority = steps.find((s) => s.run.includes('test-intake-scope.mjs'));
+  const capture = steps.find((s) => s.run.includes('test-capture-intake.mjs'));
+  assert.ok(authority?.name, 'intake authority isolation suite must be a named step');
+  assert.ok(capture?.name, 'capture-intake CLI suite must be a named step');
+  assert.notEqual(authority, capture, 'security-critical module and CLI need independent fail-fast steps');
+});
+
 test('no gate is maskable: no continue-on-error and no shell masking in any run', () => {
   assert.doesNotMatch(stripComments(REAL), /continue-on-error/, 'continue-on-error would let a red gate pass');
   const steps = parseSteps(REAL);
@@ -199,6 +209,15 @@ test('MUTATION — a removed suite is caught', () => {
   const v = auditWorkflow(broken);
   assert.ok(v.some((x) => x.includes('MISSING SUITE') && x.includes('test-pipeline-security.mjs')),
     `dropping a required suite must be caught, got: ${JSON.stringify(v)}`);
+});
+
+test('MUTATION — removing either intake suite is caught', () => {
+  for (const token of ['test-intake-scope.mjs', 'test-capture-intake.mjs']) {
+    const broken = REAL.replace(`scripts/${token}`, 'scripts/deleted-intake-suite.mjs');
+    const v = auditWorkflow(broken);
+    assert.ok(v.some((x) => x.includes('MISSING SUITE') && x.includes(token)),
+      `dropping ${token} must be caught, got: ${JSON.stringify(v)}`);
+  }
 });
 
 test('MUTATION — continue-on-error is caught', () => {

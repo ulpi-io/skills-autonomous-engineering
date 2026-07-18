@@ -22,9 +22,9 @@ axis — what a blocked required gate does mid-run:
 
 | # | Phase | Consumes | Produces | Gate to pass before next phase |
 |---|-------|----------|----------|-------------------------------|
-| 1 | auto-spec | request + binding `selectedScope[]` | `.ulpi/spec/<name>.md` | every selected id remains in scope; all criteria testable; non-goals contain no selected item |
-| 2 | auto-plan | spec + binding `selectedScope[]` | `.ulpi/plans/<name>.json` | DAG safe; every selected id task-mapped or separately user-dropped; no UNCOVERED id |
-| — | **APPROVAL** | plan + coverage | user affirmative | render N/M plus each uncovered/drop; every drop separately acknowledged before general plan approval |
+| 1 | auto-spec | request + write-once intake snapshot | `.ulpi/spec/<name>.md` | every captured id remains in scope; all criteria testable; non-goals contain no selected item |
+| 2 | auto-plan | spec + write-once intake snapshot | `.ulpi/plans/<name>.json` | plan copy exactly matches intake; DAG safe; every intake id task-mapped or separately user-dropped |
+| — | **APPROVAL** | intake snapshot + plan + coverage | user affirmative | independently compare intake→plan; render N/M plus each uncovered/drop; every drop separately acknowledged |
 | 3 | auto-build | the plan | integrated commits per task | all tasks `done` (none blocked/dep_blocked); final workspace validate GREEN |
 | 4 | auto-simplify | the build diff | cleaner diff | every kept edit verified behavior-preserving; suite still green |
 | 5 | auto-test | the codebase | added tests, green suite | scoped suite green; added tests mutation-verified; nothing skipped/weakened |
@@ -59,8 +59,9 @@ choice), not `done`.
 
 Each phase hands the next a small, explicit payload — never the whole transcript:
 
-- intake → spec/plan: binding `selectedScope[]` ids/titles/sources.
-- spec → plan: the spec path plus the unchanged selected-scope checklist.
+- intake → spec/plan: `<stateDir>/intake/<run>.json`, captured before either phase and containing the
+  binding ids/titles/sources plus the verbatim named selection and semantic digest.
+- spec → plan: the spec path plus that unchanged intake snapshot path/content.
 - plan → build: the plan path (`{selectedScope, scopeDrops, tasks, layers}`).
 - build → simplify/test: the working branch + the integrated diff range + the build checkpoint (so
   downstream knows what changed and what's blocked).
@@ -122,6 +123,14 @@ Canonical state vocabularies (`checkpoint-store.mjs`):
   "openItems": [],                       // verified findings persisted as each phase ends (the register)
   "resolvedItems": [],                   // v2: findings cleared from the register (audit trail, stamped resolvedAt)
   "pipeline": {
+    "intakePath": "<stateDir>/intake/<run>.json",
+    "intakeFileSha": "<sha256 of exact snapshot bytes>",
+    "intakeScopeSha": "<semantic snapshot sha256>",
+    "intakeSelection": "Full MVP = PRD §13.1",
+    "intakeScope": [
+      { "id": "SCOPE-001", "title": "…", "source": "PRD §13.1" },
+      { "id": "SCOPE-002", "title": "…", "source": "PRD §13.1" }
+    ],
     "scopeCoverage": { "total": 2, "covered": ["SCOPE-001", "SCOPE-002"], "dropped": [], "uncovered": [], "errors": [] }
   },
   "result": null
@@ -142,8 +151,9 @@ The single done-condition (`doneCondition: convergence-v1`) is `pipeline-state.m
    required phase `skipped` → `required-phase-skipped`; anything else non-green → `phase-not-green`);
 3. **no unresolved blocker** — nothing in `blocked` (`blocked-unit` / `blocked-phase`) AND an empty whole
    actionable register (`open-register`), independent of source/severity;
-4. **binding selected-scope coverage is present and complete** (absent → `scope-coverage-missing`; each
-   never-mapped id → `scope-uncovered`; invalid drop/mapping → `scope-coverage-invalid`);
+4. **binding selected-scope coverage is present and complete**, derived from the independent intake
+   snapshot (missing/shrunk/drifted intake refuses before execution; absent receipt →
+   `scope-coverage-missing`; never-mapped id → `scope-uncovered`; invalid receipt → `scope-coverage-invalid`);
 5. **`auto_learn` and `auto_map` are both durably `done`** (they are required phases; missing/blocked is
    `phase-not-green` / `blocked-phase`);
 6. **final validation is present AND green** (absent → `final-validation-missing`; red →

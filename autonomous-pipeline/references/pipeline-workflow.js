@@ -26,6 +26,8 @@
 //     workingBranch: "<branch>",            // REQUIRED — never a protected branch unconfirmed
 //     validate: "<workspace validate cmd>", // REQUIRED — the end-state truth gate
 //     planPath: ".ulpi/plans/<x>.json",     // REQUIRED — the APPROVED DAG plan
+//     intakePath: ".ulpi/runs/intake/<id>.json", // REQUIRED — write-once Phase-0 authority
+//     intakeScope: { schemaVersion, run, selection, selectedScope, scopeSha256 }, // REQUIRED snapshot
 //     approved: true,                       // REQUIRED — the skill recorded the human approval
 //     statusFile: ".ulpi/runs/<id>.json",   // REQUIRED — created by the skill before launch
 //     checkpointCli: "<abs path to checkpoint-resume/scripts/checkpoint.mjs>", // for status agents
@@ -61,6 +63,7 @@ else if (typeof args === 'string' && args.trim()) { try { CFG = JSON.parse(args)
 const need = (k) => { if (!CFG[k]) throw new Error(`autonomous-pipeline: missing required arg '${k}' — launch from the skill with full args`) ; return CFG[k] }
 const ROOT = need('root'), BRANCH = need('workingBranch'), VALIDATE = need('validate')
 const PLAN_PATH = need('planPath'), STATUS = need('statusFile')
+const INTAKE_PATH = need('intakePath'), INTAKE = need('intakeScope')
 if (CFG.approved !== true) throw new Error('autonomous-pipeline: plan not approved — the single human gate is mandatory')
 const CK = CFG.checkpointCli || ''
 const OPT = { simplify: true, performance: false, shipPrep: true, ...(CFG.config || {}) }
@@ -205,12 +208,12 @@ async function mapAll(items, fn) {           // full-parallel map (per-item caps
 phase('Preflight')
 const pre = await rAgent(
   `Preflight for an autonomous build in ${ROOT} on branch ${BRANCH}.
-   1. Structural gate: ${CFG.planValidator ? `run \`node "${CFG.planValidator}" ${PLAN_PATH} --json\` — its violations are disqualifying (deterministic DAG judge)` : `read ${PLAN_PATH} (JSON) and validate: tasks[] each with id, title, writeScope[], validate, acceptance; layers[][] is a topological order respecting dependsOn (no cycle, nothing before its dependency); intra-layer writeScope disjoint`}.
+   1. Structural + intake gate: ${CFG.planValidator ? `run \`node "${CFG.planValidator}" "${PLAN_PATH}" --intake "${INTAKE_PATH}" --json\` — its violations are disqualifying (deterministic DAG + independent intake judge)` : `read ${PLAN_PATH} and the write-once snapshot ${INTAKE_PATH}; require plan.selectedScope to match the snapshot's ids/titles/sources exactly; then validate tasks[] + layers[][] DAG shape and coverage`}.
    2. Run: git -C ${ROOT} rev-parse --is-inside-work-tree ; git -C ${ROOT} status --porcelain
    3. Read the checkpoint ${STATUS}${CK ? ` via: node "${CK}" get ${STATUS} and node "${CK}" resume ${STATUS}` : ''} — collect: units already done (doneUnits), phases already done (donePhases: keys in the checkpoint's phases map whose status is "done"), and the persisted openItems array (register entries from completed phases).
    4. DURABLE RESUME — ALWAYS do this even when checkpointCli is unset: run \`git -C ${ROOT} log ${BRANCH} --format=%B\`. Parse exact \`Task-Id: <id>\` trailer lines from commits REACHABLE from ${BRANCH}; intersect them with task ids in the approved plan; UNION those ids into doneUnits. This recovers an integration whose checkpoint write was lost. A commit reachable only from task/<id> (not ${BRANCH}) is NOT done and must be re-run.
    ${Object.values(DELEGATE).includes('codex') ? '5. The user delegated role(s) to Codex — probe availability: `command -v codex` (or a codex subagent type). Report codexAvailable: true/false.' : ''}
-   Return JSON: { ok, plan: {selectedScope, scopeDrops, tasks, layers}, doneUnits: [ids], donePhases: [keys], openItems: [objects], codexAvailable: bool, problems: [strings] }. Preserve every task's scopeItems. ok=false if selectedScope is absent/under-covered, a scope drop lacks its own explicit user acknowledgement, the plan is malformed/cyclic/mis-ordered, the tree is not git, or the baseline has unexpected uncommitted changes (anything beyond .ulpi/**).`,
+   Return JSON: { ok, plan: {selectedScope, scopeDrops, tasks, layers}, doneUnits: [ids], donePhases: [keys], openItems: [objects], codexAvailable: bool, problems: [strings] }. Preserve every task's scopeItems. ok=false if plan.selectedScope differs from the independent intake snapshot, scope is under-covered, a drop lacks its own acknowledgement, the plan is malformed/cyclic/mis-ordered, the tree is not git, or the baseline has unexpected uncommitted changes (anything beyond .ulpi/**).`,
   { label: 'preflight', schema: { type: 'object', required: ['ok'], properties: {
       ok: { type: 'boolean' }, plan: { type: 'object' }, doneUnits: { type: 'array', items: { type: 'string' } },
       donePhases: { type: 'array', items: { type: 'string' } }, openItems: { type: 'array', items: { type: 'object' } },
@@ -235,6 +238,8 @@ const taskById = Object.fromEntries((PLAN.tasks || []).map(t => [t.id, t]))
 const selectedScope = Array.isArray(PLAN.selectedScope) ? PLAN.selectedScope : []
 const scopeDrops = Array.isArray(PLAN.scopeDrops) ? PLAN.scopeDrops : []
 const selectedScopeIds = new Set(selectedScope.map(s => s && s.id).filter(Boolean))
+const intakeScope = Array.isArray(INTAKE?.selectedScope) ? INTAKE.selectedScope : []
+const intakeById = new Map(intakeScope.map(s => [s && s.id, s]))
 const approvedDropIds = new Set(scopeDrops
   .filter(d => d && typeof d.reason === 'string' && d.reason.trim() && d.acknowledgedByUser === true
     && typeof d.acknowledgement === 'string' && d.acknowledgement.trim())
@@ -244,6 +249,12 @@ const approvedDropIds = new Set(scopeDrops
 // the Workflow must also reject a truncated return object (for example, {tasks,layers} with the binding
 // intake checklist silently omitted). Plan approval never implies a scope drop.
 const scopeErrors = []
+if (!INTAKE || INTAKE.schemaVersion !== 1 || typeof INTAKE.selection !== 'string' || !INTAKE.selection.trim()
+    || typeof INTAKE.scopeSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(INTAKE.scopeSha256)
+    || !Array.isArray(INTAKE.selectedScope) || INTAKE.selectedScope.length === 0) {
+  scopeErrors.push('independent intake snapshot is missing or malformed')
+}
+if (intakeById.size !== intakeScope.length) scopeErrors.push('intake snapshot ids are missing or duplicated')
 if (!Array.isArray(PLAN.selectedScope) || PLAN.selectedScope.length === 0) scopeErrors.push('selectedScope[] is missing or empty')
 if (PLAN.scopeDrops !== undefined && !Array.isArray(PLAN.scopeDrops)) scopeErrors.push('scopeDrops must be an array')
 if (selectedScopeIds.size !== selectedScope.length) scopeErrors.push('selectedScope ids are missing or duplicated')
@@ -252,6 +263,16 @@ for (const s of selectedScope) {
       || typeof s.title !== 'string' || !s.title.trim() || typeof s.source !== 'string' || !s.source.trim()) {
     scopeErrors.push(`selectedScope item ${s?.id || '<missing>'} needs a safe id plus nonempty title/source`)
   }
+}
+for (const expected of intakeScope) {
+  const actual = selectedScope.find(s => s && s.id === expected?.id)
+  if (!actual) scopeErrors.push(`intake item ${expected?.id || '<missing>'} is missing from plan.selectedScope[]`)
+  else if (actual.title !== expected.title || actual.source !== expected.source) {
+    scopeErrors.push(`plan changed intake title/source for ${expected.id}`)
+  }
+}
+for (const actual of selectedScope) {
+  if (actual?.id && !intakeById.has(actual.id)) scopeErrors.push(`plan selectedScope adds ${actual.id} absent from captured intake`)
 }
 const mappedScopeIds = new Set()
 for (const t of PLAN.tasks) {

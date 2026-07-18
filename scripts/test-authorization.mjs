@@ -48,7 +48,8 @@ function preparedRun(checkpointFile) {
 const OPERATOR = { interactive: true, context: 'coordinator' };
 const PLAN = '{"tasks":[],"layers":[],"budget":{"tokens":1000}}';
 const CONFIG = '{"budget":{"tokens":1000},"sandbox":"workspace-write"}';
-const BIND = { baseSha: 'a'.repeat(40), targetRef: 'main', engineVersion: 'codex-1.2.3' };
+const INTAKE_SHA = contentSha('INTAKE-SNAPSHOT-BYTES');
+const BIND = { intakeSha: INTAKE_SHA, baseSha: 'a'.repeat(40), targetRef: 'main', engineVersion: 'codex-1.2.3' };
 
 function issuePlan(fx, over = {}) {
   return issuePlanApproval({
@@ -82,6 +83,7 @@ test('plan approval: minted from PREPARED, hash-bound, consumed exactly once (re
   assert.equal(cap.status, 'issued');
   assert.equal(cap.bindings.planSha, contentSha(PLAN));
   assert.equal(cap.bindings.configSha, contentSha(CONFIG));
+  assert.equal(cap.bindings.intakeSha, INTAKE_SHA);
   assert.equal(cap.digest, digestBindings(cap.bindings));
 
   // consume once → ok
@@ -90,6 +92,15 @@ test('plan approval: minted from PREPARED, hash-bound, consumed exactly once (re
 
   // consume again → replayed (the single-winner rename already moved it)
   assert.throws(() => consumePlan(fx), (e) => e instanceof AuthorizationError && e.reason === 'replayed');
+});
+
+test('plan approval requires the independent intake snapshot digest', () => {
+  const fx = scratch();
+  preparedRun(fx.checkpointFile);
+  assert.throws(
+    () => issuePlan(fx, { intakeSha: undefined }),
+    (e) => e instanceof AuthorizationError && e.reason === 'mismatched',
+  );
 });
 
 test('plan approval is written O_EXCL mode-0600 and re-issue for the same key is refused (one-use mint)', () => {
@@ -104,10 +115,11 @@ test('plan approval is written O_EXCL mode-0600 and re-issue for the same key is
   assert.throws(() => issuePlan(fx), (e) => e.reason === 'already-issued');
 });
 
-test('plan approval refuses a mismatched plan/config/base/nonce (hash binding)', () => {
+test('plan approval refuses a mismatched intake/plan/config/base/nonce (hash binding)', () => {
   for (const bad of [
     { rawPlan: PLAN + ' ' },           // edited plan
     { config: '{"budget":{"tokens":2}}' }, // changed budget in config
+    { intakeSha: contentSha('DIFFERENT-INTAKE') }, // changed intake authority
     { baseSha: 'b'.repeat(40) },        // moved base
     { targetRef: 'release' },           // different target
     { engineVersion: 'codex-9.9.9' },   // engine drift

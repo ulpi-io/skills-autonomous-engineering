@@ -187,12 +187,19 @@ s.unit(f, "u", "done");
 s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline={}; s.writeDoc(f,d); });
 let missing=false; try { s.finalize(f,"done"); } catch (e) { missing=/coverage receipt is absent/.test(e.message); }
 if (!missing) throw new Error("missing scope receipt did not refuse");
-s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:1,covered:[],dropped:[],uncovered:["SCOPE-001"],errors:[]}; s.writeDoc(f,d); });
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline={
+  intakePath:"/tmp/intake/scope-finalize.json", intakeFileSha:"a".repeat(64), intakeScopeSha:"b".repeat(64),
+  intakeSelection:"Full MVP", intakeScope:[{id:"SCOPE-001",title:"selected",source:"user"}],
+  scopeCoverage:{total:1,covered:[],dropped:[],uncovered:["SCOPE-001"],errors:[]}
+}; s.writeDoc(f,d); });
 let uncovered=false; try { s.finalize(f,"done"); } catch (e) { uncovered=/UNCOVERED: SCOPE-001/.test(e.message); }
 if (!uncovered) throw new Error("uncovered scope did not refuse");
 s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:2,covered:["SCOPE-001"],dropped:[],uncovered:[],errors:[]}; s.writeDoc(f,d); });
 let tampered=false; try { s.finalize(f,"done"); } catch (e) { tampered=/accounts for 1 of 2/.test(e.message); }
 if (!tampered) throw new Error("tampered scope receipt did not refuse");
+s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:1,covered:["SCOPE-GHOST"],dropped:[],uncovered:[],errors:[]}; s.writeDoc(f,d); });
+let ghost=false; try { s.finalize(f,"done"); } catch (e) { ghost=/non-intake id SCOPE-GHOST/.test(e.message); }
+if (!ghost) throw new Error("coverage receipt detached from intake did not refuse");
 s.withLock(f, () => { const d=s.upgradeDoc(s.readDoc(f)); d.pipeline.scopeCoverage={total:1,covered:["SCOPE-001"],dropped:[],uncovered:[],errors:[]}; s.writeDoc(f,d); });
 s.finalize(f,"done");
 '; ok $? "canonical finalize requires a valid, fully covered selected-scope receipt"

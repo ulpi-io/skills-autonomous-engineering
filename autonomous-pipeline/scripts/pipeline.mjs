@@ -12,7 +12,7 @@
 //      to stdout and diagnostics to stderr.
 //   3. RUN LOCATION. `approve` places the run under config.stateDir; the other verbs resolve a run by id
 //      to `<runsDir>/<id>.json` (ULPI_RUNS_DIR or <cwd>/.ulpi/runs). Payloads (plan/config) are re-read
-//      from the paths recorded at approval so an edit is detected as drift by the engine.
+//      from the paths recorded at approval so an intake/plan/config edit is detected as drift by the engine.
 //
 // Heavyweight execution (the Codex executor, per-task/-phase validation, the real integration worktree) is
 // injected as `seams` for tests, and defaults to real wiring built from the plan+config for production.
@@ -159,6 +159,7 @@ function humanLine(r) {
   if (r.command !== 'approve' || !c || typeof c !== 'object') return summary;
   return [
     summary,
+    `intake snapshot: ${r.intakeSha || 'missing'}`,
     `SCOPE COVERAGE: ${(c.covered || []).length} of ${c.total} selected-scope items covered`,
     `covered: ${(c.covered || []).join(', ') || 'none'}`,
     `explicitly dropped: ${(c.dropped || []).join(', ') || 'none'}`,

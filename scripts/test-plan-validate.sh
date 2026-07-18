@@ -5,7 +5,8 @@
 # `test -- <file>` footgun, and whole-suite e2e validates.
 #
 # EXECUTABLE plans (Codex-native, coordinator-run: ids reach `git worktree add -b task/<id>`,
-# validateCommand is executed) get HARDENED checks — including binding selected-scope coverage. This suite
+# validateCommand is executed) get HARDENED checks — including independent intake fidelity and binding
+# selected-scope coverage. This suite
 # also asserts: an unsafe/traversal
 # task id, a missing required execution field, a cycle, a mis-layering, and an end-state-only
 # (whole-suite) validate each FAIL with task-specific evidence; a valid executable plan (whose
@@ -15,11 +16,34 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 V="$ROOT/auto-plan/scripts/validate-plan.mjs"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fails=0
-want()  { local rc=$1 desc=$2 f=$3; node "$V" "$TMP/$f" >/dev/null 2>&1; local got=$?; [ "$got" = "$rc" ] && echo "PASS ($got) $desc" || { echo "FAIL (got $got want $rc) $desc"; fails=$((fails+1)); }; }
-catch() { local desc=$1 pat=$2 f=$3; if node "$V" "$TMP/$f" 2>&1 | grep -q "$pat"; then echo "PASS (caught) $desc"; else echo "FAIL (not caught) $desc"; fails=$((fails+1)); fi; }
+runv() {
+  local f=$1; shift
+  local args=("$TMP/$f")
+  [ -f "$TMP/$f.intake.json" ] && args+=(--intake "$TMP/$f.intake.json")
+  node "$V" "${args[@]}" "$@"
+}
+want()  { local rc=$1 desc=$2 f=$3; runv "$f" >/dev/null 2>&1; local got=$?; [ "$got" = "$rc" ] && echo "PASS ($got) $desc" || { echo "FAIL (got $got want $rc) $desc"; fails=$((fails+1)); }; }
+catch() {
+  local desc=$1 pat=$2 f=$3 out got
+  out="$(runv "$f" 2>&1)"; got=$?
+  if [ "$got" = 1 ] && grep -q "$pat" <<<"$out"; then
+    echo "PASS (caught exit 1) $desc"
+  else
+    echo "FAIL (got exit $got; message pattern '$pat') $desc"; fails=$((fails+1))
+  fi
+}
+warn() {
+  local desc=$1 pat=$2 f=$3 out got
+  out="$(runv "$f" 2>&1)"; got=$?
+  if [ "$got" = 0 ] && grep -q "$pat" <<<"$out"; then
+    echo "PASS (warned exit 0) $desc"
+  else
+    echo "FAIL (got exit $got; warning pattern '$pat') $desc"; fails=$((fails+1))
+  fi
+}
 
 TMP="$TMP" python3 <<'PY'
-import json, os, copy
+import hashlib, json, os, copy
 TMP = os.environ['TMP']
 def task(id, ws=None, dep=None, val=None, acc=None):
     return {"id": id, "title": id, "writeScope": ws or [f"src/{id}.ts"],
@@ -113,6 +137,51 @@ w("xscope-drop-valid.json", {"selectedScope": [SCOPE], "scopeDrops": [VALID_DROP
     "tasks": [xtask("TASK-001", scopes=[])], "layers": [["TASK-001"]]})
 w("xscope-conflict.json", {"selectedScope": [SCOPE], "scopeDrops": [VALID_DROP],
     "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-duplicate.json", {"selectedScope": [SCOPE, dict(SCOPE)], "scopeDrops": [],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-drop-unknown.json", {"selectedScope": [SCOPE],
+    "scopeDrops": [{"scopeId": "SCOPE-GHOST", "reason": "not selected",
+                    "acknowledgedByUser": True, "acknowledgement": "Drop ghost"}],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-shrunk.json", {"selectedScope": [SCOPE], "scopeDrops": [],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-changed.json", {"selectedScope": [{**SCOPE, "title": "rewritten by plan"}], "scopeDrops": [],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+w("xscope-expanded.json", {"selectedScope": [SCOPE, {"id": "SCOPE-002", "title": "plan-only", "source": "plan"}],
+    "scopeDrops": [], "tasks": [xtask("TASK-001", scopes=["SCOPE-001", "SCOPE-002"])], "layers": [["TASK-001"]]})
+w("xscope-no-intake.json", {"selectedScope": [SCOPE], "scopeDrops": [],
+    "tasks": [xtask("TASK-001")], "layers": [["TASK-001"]]})
+
+# The executable validator consumes the independent, canonical Phase-0 snapshot. Generate one per
+# fixture so each negative remains focused. xscope-shrunk deliberately anchors TWO intake ids while its
+# plan declares one; xscope-no-intake deliberately gets no artifact.
+def canonical(v):
+    return json.dumps(v, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+def snapshot(name, scope):
+    payload = {"schemaVersion": 1, "run": "validator-test", "selection": "Full MVP test bundle",
+               "selectedScope": scope}
+    snap = dict(payload)
+    snap["scopeSha256"] = hashlib.sha256(canonical(payload).encode()).hexdigest()
+    path = f"{TMP}/{name}.intake.json"
+    with open(path, "w") as f:
+        json.dump(snap, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.chmod(path, 0o400)
+
+for name in os.listdir(TMP):
+    if not name.startswith("x") or not name.endswith(".json") or name == "xscope-no-intake.json":
+        continue
+    plan = json.load(open(f"{TMP}/{name}"))
+    scope = plan.get("selectedScope")
+    if not isinstance(scope, list) or not scope:
+        scope = [SCOPE]
+    if name == "xscope-duplicate.json":
+        scope = [SCOPE]
+    if name == "xscope-shrunk.json":
+        scope = [SCOPE, {"id": "SCOPE-002", "title": "must survive planning", "source": "user"}]
+    if name in ["xscope-changed.json", "xscope-expanded.json"]:
+        scope = [SCOPE]
+    snapshot(name, scope)
 PY
 
 want 0  "safe plan passes"                        safe.json
@@ -125,7 +194,7 @@ catch   "phantom dependsOn"        "does not exist" ghostdep.json
 catch   "duplicate id"             "duplicate"    dup.json
 catch   "unlayered task"           "never build"  unlayered.json
 catch   "thin acceptance"          "acceptance criteria" thin.json
-catch   "vitest -- footgun warned"  "footgun"      footgun.json
+warn    "vitest -- footgun warned"  "footgun"      footgun.json
 want 0  "footgun is a WARNING, not a build-blocker" footgun.json
 want 0  "Jest-canonical 'npm test -- <file>' not blocked" jestcanon.json
 catch   "whole-suite e2e validate" "end-state"    e2e.json
@@ -153,12 +222,18 @@ catch   "every executable task declares scopeItems" "missing scopeItems"        
 catch   "drop needs per-id user acknowledgement" "explicit per-id"               xscope-drop-unack.json
 want 0  "explicit per-id acknowledged drop passes"                              xscope-drop-valid.json
 catch   "scope id cannot be mapped and dropped" "both task-mapped and dropped"   xscope-conflict.json
-if node "$V" "$TMP/xsafe.json" --render 2>/dev/null | grep -q "SCOPE COVERAGE: 1 of 1"; then
+catch   "duplicate selectedScope id is rejected" "duplicate selectedScope id"     xscope-duplicate.json
+catch   "scope drop cannot reference an unknown intake id" "scopeDrops references unknown" xscope-drop-unknown.json
+catch   "plan cannot delete an id from captured intake" "missing from plan.selectedScope" xscope-shrunk.json
+catch   "plan cannot rewrite captured title/source" "changed intake title/source" xscope-changed.json
+catch   "plan cannot add uncaptured selected scope" "absent from the captured intake" xscope-expanded.json
+catch   "executable plan requires independent intake snapshot" "missing --intake" xscope-no-intake.json
+if runv "xsafe.json" --render 2>/dev/null | grep -q "SCOPE COVERAGE: 1 of 1"; then
   echo "PASS (render) scope coverage block"
 else
   echo "FAIL (render) scope coverage block"; fails=$((fails+1))
 fi
-if node "$V" "$TMP/xsafe.json" --json 2>/dev/null | grep -q '"scopeCoverage"'; then
+if runv "xsafe.json" --json 2>/dev/null | grep -q '"scopeCoverage"'; then
   echo "PASS (json) scope coverage object"
 else
   echo "FAIL (json) scope coverage object"; fails=$((fails+1))

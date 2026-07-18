@@ -32,11 +32,15 @@ The autonomy is not prose — `autonomous-pipeline` is backed by a real, testabl
 - **`autonomous-pipeline/scripts/pipeline.mjs`** — the public CLI entrypoint. It owns only the grammar
   + pinned exit-code table, one-JSON-object-on-stdout in `--json` mode, and run-file location
   (`<runsDir>/<id>.json`, `ULPI_RUNS_DIR` or `<cwd>/.ulpi/runs`). Node 22+, zero external deps.
+- **`autonomous-pipeline/scripts/capture-intake.mjs`** — the pre-plan helper. It atomically captures the
+  write-once selected-scope authority at `<stateDir>/intake/<run>.json`; it is deliberately separate from
+  the five run verbs because it must execute before spec/plan exist.
 - **`autonomous-pipeline/scripts/lib/`** — the engine, split by responsibility and unit-tested in
   isolation: `cli-contract.mjs` (argv/flags/exit codes), `pipeline-engine.mjs` + `pipeline-state.mjs`
   (the state machine and legal/illegal transitions), `phase-engine.mjs` (fail-closed phase gates),
   `build-engine.mjs` (slice-scoped build DAG), `review-panel.mjs` (adversarial verify / majority-refute),
   `budget-ledger.mjs` (token/iteration accounting + caps), `authorization.mjs` (permission boundaries),
+  `intake-scope.mjs` (canonical capture/hash/fidelity),
   `git-workspaces.mjs` + `git-integration.mjs` (worktree isolation + merge safety), `codex-executor.mjs`
   + `process-runner.mjs` (the agent executor seam). Heavyweight execution is injected as `seams` so the
   coordinator runs hermetically under tests with a fake runtime.
@@ -70,9 +74,10 @@ Stated plainly, provider-independent — these are what separate "autonomous" fr
    journal is never a dependency. See `checkpoint-resume`.
 5. **Escalate, don't guess.** Irreversible or ambiguous decisions that are the human's to make stop and
    surface rather than looping or picking silently.
-6. **Bind intake scope.** A named user selection is itemized as `selectedScope[]` before spec. The spec
-   cannot demote an id to non-goals; every id maps to a task or a separately user-acknowledged drop.
-   Approval renders per-id coverage, and uncovered scope blocks convergence.
+6. **Bind intake scope.** A named selection is itemized and atomically captured in an independent,
+   write-once snapshot before spec/plan. Their `selectedScope[]` copies must match its ids/titles/sources
+   exactly; every intake id maps to a task or a separately acknowledged drop. Approval and start/resume
+   recheck the snapshot, and uncovered/shrunk/drifted scope fails closed.
 7. **Close every run.** "Fix all" means the complete actionable register across all phases and severities.
    A successful convergence also requires durable `auto_learn` then `auto_map` receipts; a green build or
    plan approval cannot substitute for either closing phase.
@@ -88,8 +93,8 @@ loop (Claude Code `/goal` + `/loop`; Codex `/goal`), compile the skill's termina
 
 - Skills are **self-contained**: never reference other skill packs or the local `site/` fixtures.
 - Guards are real scripts owned by their skill; hook frontmatter carries only the resolver line.
-- **State** lives under `.ulpi/`: specs in `.ulpi/spec/`, plans in `.ulpi/plans/`, run status in
-  `.ulpi/runs/<id>.json`.
+- **State** lives under `.ulpi/`: specs in `.ulpi/spec/`, plans in `.ulpi/plans/`, write-once intake
+  snapshots in `.ulpi/runs/intake/<id>.json`, and run status in `.ulpi/runs/<id>.json`.
 
 ### Validation (run before every change — this is exactly what CI runs)
 
@@ -123,6 +128,8 @@ bash scripts/test-scheduled-job.sh          # scheduled-job schema/dedup/capabil
 ```
 node --test scripts/test-workflow-journal.mjs       # captured-format best-effort live overlay
 node --test scripts/test-event-log.mjs              # opt-in append log + atomic snapshot recovery
+node --test scripts/test-intake-scope.mjs           # Phase-0 authority schema/atomicity/fidelity
+node --test scripts/test-capture-intake.mjs         # intake helper grammar/paths/exits/JSON contract
 node --test scripts/test-pipeline-state.mjs        # state machine transitions + convergence
 node --test scripts/test-cli-contract.mjs          # argv/flag parsing + fail-closed refusals
 node --test scripts/test-git-workspaces.mjs        # worktree isolation lifecycle

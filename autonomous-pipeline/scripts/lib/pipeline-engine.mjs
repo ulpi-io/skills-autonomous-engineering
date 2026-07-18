@@ -49,13 +49,16 @@ import { publishToTarget } from './git-integration.mjs';
 import { resolveBaseSha, createIntegrationWorktree } from './git-workspaces.mjs';
 import { initBudget, reconcileOpenSegments, stopStatus } from './budget-ledger.mjs';
 import {
+  comparePlanToIntake, intakePathFor, IntakeScopeError, readIntakeSnapshot,
+} from './intake-scope.mjs';
+import {
   init as ckInit, readDoc, writeDoc, upgradeDoc, withLock, finalize as ckFinalize,
 } from '../../../checkpoint-resume/scripts/lib/checkpoint-store.mjs';
 
 // ── pinned engine identity ──────────────────────────────────────────────────────────────────────────
 // Bound into every capability's `engineVersion`. A capability minted by one engine version is refused by
 // another (the digest changes) — resume/authorize can never cross an engine boundary silently.
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION = '1.1.0';
 
 // The checkpoint's required-phase gate (finalize `done` refuses until each is 'done'). These mirror the
 // non-optional phases of pipeline-state.PHASES (build + test + review). Optional phases may be skipped.
@@ -99,30 +102,44 @@ export function defaultGitStatus(root) {
 const integrationRefFor = (run) => `refs/heads/ulpi-int-${run}`;
 
 // ── binding selected-scope coverage ───────────────────────────────────────────────────────────────────
-// Intake selection is the scope authority. This check is intentionally repeated at approval (rather than
-// trusting auto-plan's validator): it runs before checkpoint/capability mutation and is bound into the
-// approved plan hash. A general plan approval is never interpreted as acknowledgement of a proposed drop.
-export function selectedScopeCoverage(plan) {
+// The independent intake snapshot is the scope authority. This check is intentionally repeated at
+// approval rather than trusting auto-plan's validator; it runs before checkpoint/capability mutation.
+// A general plan approval is never interpreted as acknowledgement of a proposed drop.
+export function selectedScopeCoverage(plan, intakeSnapshot) {
   const errors = [];
   const selected = Array.isArray(plan?.selectedScope) ? plan.selectedScope : [];
   const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
   const drops = Array.isArray(plan?.scopeDrops) ? plan.scopeDrops : [];
   const SAFE_SCOPE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-  const scopeById = new Map();
+  const planScopeById = new Map();
   const mapped = new Map();
   const dropped = new Map();
 
+  if (!isPlainObject(intakeSnapshot) || !Array.isArray(intakeSnapshot.selectedScope)) {
+    errors.push({ code: 'intake-missing', detail: 'independent intake snapshot is absent' });
+  }
   if (selected.length === 0) errors.push({ code: 'scope-missing', detail: 'selectedScope[] is absent or empty' });
   if (plan?.scopeDrops !== undefined && !Array.isArray(plan.scopeDrops)) errors.push({ code: 'scope-invalid', detail: 'scopeDrops must be an array' });
   for (const item of selected) {
     const id = item?.id;
     if (typeof id !== 'string' || !SAFE_SCOPE_ID.test(id)) { errors.push({ code: 'scope-invalid', detail: 'selectedScope item has an invalid id' }); continue; }
-    if (scopeById.has(id)) errors.push({ code: 'scope-invalid', scopeId: id, detail: 'duplicate selectedScope id' });
-    else scopeById.set(id, item);
+    if (planScopeById.has(id)) errors.push({ code: 'scope-invalid', scopeId: id, detail: 'duplicate selectedScope id' });
+    else planScopeById.set(id, item);
     if (typeof item?.title !== 'string' || item.title.trim() === '' || typeof item?.source !== 'string' || item.source.trim() === '') {
       errors.push({ code: 'scope-invalid', scopeId: id, detail: 'selectedScope item needs nonempty title and source' });
     }
   }
+  let authority = [];
+  if (isPlainObject(intakeSnapshot) && Array.isArray(intakeSnapshot.selectedScope)) {
+    try {
+      const fidelity = comparePlanToIntake(selected, intakeSnapshot);
+      authority = fidelity.authority.selectedScope;
+      errors.push(...fidelity.errors);
+    } catch (e) {
+      errors.push({ code: 'intake-invalid', detail: e.message });
+    }
+  }
+  const scopeById = new Map(authority.map((item) => [item.id, item]));
   for (const task of tasks) {
     if (!Array.isArray(task?.scopeItems)) {
       errors.push({ code: 'scope-invalid', detail: `task ${task?.id || '(unknown)'} is missing scopeItems[]` });
@@ -228,6 +245,12 @@ export function checkpointConvergence(doc) {
   return convergenceFailures({
     units, phases, phaseDefs: PHASES,
     openItems: Array.isArray(doc.openItems) ? doc.openItems : [],
+    intakeBinding: doc.pipeline ? {
+      fileSha256: doc.pipeline.intakeFileSha,
+      scopeSha256: doc.pipeline.intakeScopeSha,
+      selection: doc.pipeline.intakeSelection,
+      selectedScope: doc.pipeline.intakeScope,
+    } : null,
     scopeCoverage: doc.pipeline?.scopeCoverage || null,
     requireScopeCoverage: !!doc.pipeline,
     finalValidation,
@@ -258,10 +281,17 @@ export function approve(opts) {
     refuse('approval-not-ready', 'plan.base.approvalReady is not true — the plan is not cleared for autonomous execution', EXIT.PREFLIGHT);
   }
 
-  // 1b. SCOPE-COVERAGE GATE. Recompute from the approved plan bytes before ANY durable state/capability
-  // mutation. Proposed drops without their own user acknowledgement remain uncovered; plan approval alone
-  // never clears them.
-  const scopeCoverage = selectedScopeCoverage(plan);
+  // 1b. INDEPENDENT INTAKE + SCOPE-COVERAGE GATE. The canonical intake path is derived from config,
+  // never supplied by the plan. Read the write-once pre-plan artifact and compare exact id/title/source
+  // fidelity before ANY checkpoint/capability mutation.
+  const intakePath = intakePathFor(config);
+  let intake;
+  try { intake = readIntakeSnapshot(intakePath, { expectedRun: config.run }); }
+  catch (e) {
+    if (e instanceof IntakeScopeError) refuse(e.reason, e.message, e.code);
+    throw e;
+  }
+  const scopeCoverage = selectedScopeCoverage(plan, intake.snapshot);
   if (scopeCoverage.errors.length > 0) {
     const first = scopeCoverage.errors[0];
     refuse(first.code, `scope coverage invalid: ${first.detail}`, EXIT.PREFLIGHT);
@@ -292,6 +322,8 @@ export function approve(opts) {
     run, root: config.root, planPath: opts.planPath ?? null, configPath: opts.configPath ?? null,
     planSha, configSha, base: config.base, approvedBaseSha: baseSha, targetRef, integrationRef,
     worktreesDir, capDir, skip: config.skip, engineVersion: ENGINE_VERSION,
+    intakePath, intakeFileSha: intake.fileSha256, intakeScopeSha: intake.snapshot.scopeSha256,
+    intakeSelection: intake.snapshot.selection, intakeScope: intake.snapshot.selectedScope,
     scopeCoverage,
     approvalTtlMs: config.approvalTtlMs, authorizeTtlMs: config.authorizeTtlMs, callTimeoutMs: config.callTimeoutMs,
   });
@@ -299,7 +331,8 @@ export function approve(opts) {
   // 3. ENTER PREPARED, then MINT the one-use plan approval (interactive-operator-only, coordinator-only).
   markPrepared(checkpointFile);
   const cap = issuePlanApproval({
-    capDir, run, rawPlan, config: rawConfig, baseSha, targetRef, engineVersion: ENGINE_VERSION,
+    capDir, run, rawPlan, config: rawConfig, intakeSha: intake.fileSha256,
+    baseSha, targetRef, engineVersion: ENGINE_VERSION,
     ttlMs: config.approvalTtlMs, interactive: opts.interactive, context: opts.context,
     checkpointFile, worktreePaths: [worktreesDir], now,
   });
@@ -308,7 +341,7 @@ export function approve(opts) {
 
   return {
     command: 'approve', ok: true, run, status: 'prepared',
-    planSha, configSha, baseSha, targetRef,
+    planSha, configSha, intakeSha: intake.fileSha256, baseSha, targetRef,
     scopeCoverage,
     capability: { kind: 'plan', expiresAt: cap.expiresAt },
     exitCode: EXIT.SUCCESS,
@@ -336,6 +369,9 @@ function loadRunCtx(opts, { reReadPayload = true } = {}) {
     approvalNonce: meta.approvalNonce,
     planSha: meta.planSha,
     configSha: meta.configSha,
+    intakePath: meta.intakePath,
+    intakeFileSha: meta.intakeFileSha,
+    intakeScopeSha: meta.intakeScopeSha,
     skip: Array.isArray(meta.skip) ? meta.skip : [],
     approvalTtlMs: meta.approvalTtlMs, authorizeTtlMs: meta.authorizeTtlMs, callTimeoutMs: meta.callTimeoutMs || 60_000,
     now: opts.now ?? Date.now(),
@@ -345,6 +381,15 @@ function loadRunCtx(opts, { reReadPayload = true } = {}) {
   if (reReadPayload) {
     ctx.rawPlan = opts.rawPlan ?? readFileOr(opts.planPath ?? meta.planPath, 'plan');
     ctx.rawConfig = opts.rawConfig ?? readFileOr(opts.configPath ?? meta.configPath, 'config');
+    try {
+      const intake = readIntakeSnapshot(meta.intakePath, { expectedRun: run });
+      ctx.rawIntake = intake.raw;
+      ctx.intakeSnapshot = intake.snapshot;
+      ctx.liveIntakeFileSha = intake.fileSha256;
+    } catch (e) {
+      if (e instanceof IntakeScopeError) refuse(e.reason, e.message, e.code);
+      throw e;
+    }
   }
   return ctx;
 }
@@ -353,7 +398,7 @@ const req = (o, k) => { if (o[k] === undefined || o[k] === null) refuse('bad-con
 
 // ── preflight (defense-in-depth; the capability consume is the authoritative gate) ──────────────────────
 // Every check here fires BEFORE any Codex executor is spawned. Independent of the capability, it re-derives
-// the base/plan/config from live inputs and compares to what was approved, verifies the target and a clean
+// the intake/base/plan/config from live inputs and compares to what was approved, verifies the target and a clean
 // tree, and confirms the run is in the expected checkpoint state.
 export function preflight(ctx, { requireStatus }) {
   // checkpoint state gate
@@ -375,6 +420,26 @@ export function preflight(ctx, { requireStatus }) {
   // plan drift — the live plan bytes must hash to the approved plan
   if (typeof ctx.rawPlan === 'string' && contentSha(ctx.rawPlan) !== ctx.planSha) {
     refuse('plan-drift', 'plan changed since approval (plan hash mismatch)', EXIT.PREFLIGHT);
+  }
+  // intake drift + fidelity — independently re-read on every start/resume. A self-consistent rewritten
+  // snapshot still fails its approved byte hash; a plan that somehow shrank fails exact authority compare.
+  if (typeof ctx.rawIntake !== 'string' || ctx.liveIntakeFileSha !== ctx.intakeFileSha) {
+    refuse('intake-drift', 'intake snapshot changed since approval (file hash mismatch)', EXIT.PREFLIGHT);
+  }
+  if (ctx.intakeSnapshot?.scopeSha256 !== ctx.intakeScopeSha) {
+    refuse('intake-drift', 'intake snapshot semantic digest changed since approval', EXIT.PREFLIGHT);
+  }
+  const livePlan = parseCanonicalPlan(ctx.rawPlan);
+  const liveScopeCoverage = selectedScopeCoverage(livePlan, ctx.intakeSnapshot);
+  if (liveScopeCoverage.errors.length) {
+    const first = liveScopeCoverage.errors[0];
+    refuse(first.code, `intake/plan scope fidelity failed: ${first.detail}`, EXIT.PREFLIGHT);
+  }
+  if (liveScopeCoverage.uncovered.length) {
+    refuse('scope-uncovered', `intake/plan scope has UNCOVERED ids: ${liveScopeCoverage.uncovered.join(', ')}`, EXIT.PREFLIGHT);
+  }
+  if (JSON.stringify(liveScopeCoverage) !== JSON.stringify(ctx.meta.scopeCoverage)) {
+    refuse('intake-drift', 'durable scope-coverage receipt no longer matches intake + plan', EXIT.PREFLIGHT);
   }
   // target consistency — the live config's target must match the approved target
   const liveTarget = parseRunConfigObject(ctx.rawConfig).targetRef;
@@ -523,6 +588,7 @@ export async function start(opts) {
   try {
     consumePlanApproval({
       capDir: ctx.capDir, run: ctx.run, rawPlan: ctx.rawPlan, config: ctx.rawConfig,
+      intakeSha: ctx.liveIntakeFileSha,
       baseSha: ctx.approvedBaseSha, targetRef: ctx.targetRef, engineVersion: ENGINE_VERSION,
       nonce: ctx.approvalNonce, now: ctx.now,
     });
@@ -588,6 +654,13 @@ export function status(opts) {
     converged: convFailures.length === 0, convergenceFailures: convFailures,
     units: unitCounts, phases,
     openItems: Array.isArray(doc.openItems) ? doc.openItems.length : 0,
+    intake: doc.pipeline ? {
+      path: doc.pipeline.intakePath || null,
+      fileSha256: doc.pipeline.intakeFileSha || null,
+      scopeSha256: doc.pipeline.intakeScopeSha || null,
+      selection: doc.pipeline.intakeSelection || null,
+      selectedScopeCount: Array.isArray(doc.pipeline.intakeScope) ? doc.pipeline.intakeScope.length : 0,
+    } : null,
     scopeCoverage: doc.pipeline?.scopeCoverage || null,
     finalValidation: doc.finalValidation || null,
     budgetStopped: budget,

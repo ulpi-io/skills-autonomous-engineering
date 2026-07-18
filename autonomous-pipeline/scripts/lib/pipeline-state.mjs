@@ -202,6 +202,7 @@ export function runnableUnits(units) {
  * @param {Record<string,string>} [state.phases] phase name → state
  * @param {ReadonlyArray<{name:string,optional:boolean}>} [state.phaseDefs]
  * @param {Array<any>} [state.openItems] the open register (verified blocking findings)
+ * @param {{fileSha256:string,scopeSha256:string,selection:string,selectedScope:Array<{id:string,title:string,source:string}>}|null} [state.intakeBinding]
  * @param {{total:number,covered:string[],dropped:string[],uncovered:string[],errors?:any[]}|null} [state.scopeCoverage]
  * @param {boolean} [state.requireScopeCoverage] whether absence is itself a failure
  * @param {{passed:boolean}|null|undefined} [state.finalValidation] final workspace validation result
@@ -213,6 +214,7 @@ export function convergenceFailures(state = {}) {
     phases = {},
     phaseDefs = PHASES,
     openItems = [],
+    intakeBinding = null,
     scopeCoverage = null,
     requireScopeCoverage = false,
     finalValidation = null,
@@ -253,8 +255,37 @@ export function convergenceFailures(state = {}) {
     failures.push({ code: 'open-register', detail: `${openItems.length} unresolved open register item(s)` });
   }
 
-  // 4. Binding selected-scope coverage. A mapped-but-blocked task is still covered here; the unit clauses
-  // above keep it non-converged. This clause catches the distinct never-mapped/silently-demoted case.
+  // 4. Independent intake binding + selected-scope coverage. A mapped-but-blocked task is still covered;
+  // unit clauses keep it non-converged. This catches never-mapped scope and a detached/tampered receipt.
+  const authorityIds = new Set();
+  if (requireScopeCoverage && (!intakeBinding || typeof intakeBinding !== 'object' || Array.isArray(intakeBinding))) {
+    failures.push({ code: 'intake-binding-missing', detail: 'independent intake binding is absent' });
+  } else if (intakeBinding && typeof intakeBinding === 'object' && !Array.isArray(intakeBinding)) {
+    for (const [key, value] of [['fileSha256', intakeBinding.fileSha256], ['scopeSha256', intakeBinding.scopeSha256]]) {
+      if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+        failures.push({ code: 'intake-binding-invalid', detail: `${key} is not a valid sha256 digest` });
+      }
+    }
+    if (typeof intakeBinding.selection !== 'string' || intakeBinding.selection.trim() === '') {
+      failures.push({ code: 'intake-binding-invalid', detail: 'intake selection is absent' });
+    }
+    if (!Array.isArray(intakeBinding.selectedScope) || intakeBinding.selectedScope.length === 0) {
+      failures.push({ code: 'intake-binding-invalid', detail: 'intake selectedScope is absent' });
+    } else {
+      for (const item of intakeBinding.selectedScope) {
+        const id = item && item.id;
+        if (typeof id !== 'string' || id.trim() === '') {
+          failures.push({ code: 'intake-binding-invalid', detail: 'intake scope contains an invalid id' });
+          continue;
+        }
+        if (authorityIds.has(id)) failures.push({ code: 'intake-binding-invalid', detail: `intake scope contains duplicate id ${id}` });
+        authorityIds.add(id);
+        if (typeof item.title !== 'string' || item.title.trim() === '' || typeof item.source !== 'string' || item.source.trim() === '') {
+          failures.push({ code: 'intake-binding-invalid', detail: `intake scope item ${id} is missing title/source` });
+        }
+      }
+    }
+  }
   if (requireScopeCoverage && (!scopeCoverage || typeof scopeCoverage !== 'object' || Array.isArray(scopeCoverage))) {
     failures.push({ code: 'scope-coverage-missing', detail: 'binding selected-scope coverage receipt is absent' });
   } else if (scopeCoverage && typeof scopeCoverage === 'object' && !Array.isArray(scopeCoverage)) {
@@ -280,6 +311,17 @@ export function convergenceFailures(state = {}) {
     }
     if (Number.isInteger(scopeCoverage.total) && scopeCoverage.total !== seen.size) {
       failures.push({ code: 'scope-coverage-invalid', detail: `selected-scope coverage accounts for ${seen.size} of ${scopeCoverage.total} item(s)` });
+    }
+    if (authorityIds.size) {
+      if (Number.isInteger(scopeCoverage.total) && scopeCoverage.total !== authorityIds.size) {
+        failures.push({ code: 'scope-coverage-invalid', detail: `coverage total ${scopeCoverage.total} does not match ${authorityIds.size} intake item(s)` });
+      }
+      for (const id of authorityIds) if (!seen.has(id)) {
+        failures.push({ code: 'scope-coverage-invalid', detail: `intake scope item ${id} is absent from coverage receipt` });
+      }
+      for (const id of seen.keys()) if (!authorityIds.has(id)) {
+        failures.push({ code: 'scope-coverage-invalid', detail: `coverage receipt contains non-intake id ${id}` });
+      }
     }
     if (!Array.isArray(scopeCoverage.errors)) {
       failures.push({ code: 'scope-coverage-invalid', detail: 'selected-scope coverage errors must be an array' });

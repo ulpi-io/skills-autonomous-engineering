@@ -1,7 +1,7 @@
 // authorization.mjs — the capability/authorization controller for the Codex-native pipeline
 // coordinator. It answers ONE question, fail-closed, for two privileged transitions:
 //
-//   (1) plan approval  — may the coordinator START executors against THIS plan+config+base?
+//   (1) plan approval  — may the coordinator START executors against THIS intake+plan+config+base?
 //   (2) action capability — may the coordinator perform THIS irreversible action (ship / deploy /
 //       publish / remote-merge) right now?
 //
@@ -103,6 +103,12 @@ function assertSafeId(v, label) {
 function assertKind(kind) {
   if (!CAP_KINDS.includes(kind)) refuse('wrong-kind', `unknown capability kind ${JSON.stringify(kind)} (expected ${CAP_KINDS.join(' | ')})`);
   return kind;
+}
+function assertSha256(value, label) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+    refuse('mismatched', `${label} must be a lowercase sha256 digest`);
+  }
+  return value;
 }
 function keyFor(run, kind) { assertSafeId(run, '--run'); assertKind(kind); return `${run}.${kind}`; }
 function pathFor(capDir, key, status) { return join(capDir, key + SUFFIX[status]); }
@@ -262,16 +268,17 @@ function issueCapability({
   return record;
 }
 
-// Plan approval: bind the RAW plan hash + config hash (budget lives in config) + base SHA + target ref
-// + engine version + nonce. Minted only from PREPARED (before any executor).
+// Plan approval: bind the RAW plan hash + config hash (budget lives in config) + independently captured
+// intake-file hash + base SHA + target ref + engine version + nonce. Minted only from PREPARED.
 export function issuePlanApproval({
-  capDir, run, rawPlan, config, baseSha, targetRef, engineVersion,
+  capDir, run, rawPlan, config, intakeSha, baseSha, targetRef, engineVersion,
   ttlMs, nonce = randomUUID(), interactive, context, checkpointFile, worktreePaths, now = Date.now(),
 }) {
   const bindings = {
     kind: PLAN_KIND,
     planSha: contentSha(rawPlan),
     configSha: contentSha(config),
+    intakeSha: assertSha256(intakeSha, 'intakeSha'),
     baseSha, targetRef, engineVersion, nonce,
   };
   return issueCapability({
@@ -350,13 +357,14 @@ function consumeCapability({ capDir, run, kind, present, now = Date.now() }) {
   return { record: rec, consumedAt: rec.consumedAt };
 }
 
-// `start` consumes the plan approval. The coordinator presents the freshly-recomputed plan/config hashes
-// (so an edited plan no longer matches) plus the base/target/engine/nonce it holds.
+// `start` consumes the plan approval. The coordinator presents freshly-recomputed intake/plan/config
+// hashes (so any edited authority/payload no longer matches) plus base/target/engine/nonce.
 export function consumePlanApproval({
-  capDir, run, rawPlan, config, baseSha, targetRef, engineVersion, nonce, now = Date.now(),
+  capDir, run, rawPlan, config, intakeSha, baseSha, targetRef, engineVersion, nonce, now = Date.now(),
 }) {
   const present = {
     kind: PLAN_KIND, planSha: contentSha(rawPlan), configSha: contentSha(config),
+    intakeSha: assertSha256(intakeSha, 'intakeSha'),
     baseSha, targetRef, engineVersion, nonce,
   };
   return consumeCapability({ capDir, run, kind: PLAN_KIND, present, now });

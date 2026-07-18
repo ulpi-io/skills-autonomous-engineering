@@ -14,14 +14,20 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import {
+  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, lstatSync, symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import * as engine from '../autonomous-pipeline/scripts/lib/pipeline-engine.mjs';
 import { main } from '../autonomous-pipeline/scripts/pipeline.mjs';
+import { main as captureIntakeMain } from '../autonomous-pipeline/scripts/capture-intake.mjs';
 import { EXIT, assertSingleStdoutObject } from '../autonomous-pipeline/scripts/lib/cli-contract.mjs';
 import { reconcileCapability } from '../autonomous-pipeline/scripts/lib/authorization.mjs';
+import {
+  buildIntakeSnapshot, captureIntakeSnapshot, intakePathFor, IntakeScopeError, readIntakeSnapshot,
+} from '../autonomous-pipeline/scripts/lib/intake-scope.mjs';
 import {
   readDoc, writeDoc, withLock, upgradeDoc,
   unit as ckUnit, phase as ckPhase, validation as ckValidation,
@@ -49,17 +55,33 @@ function setup(over = {}) {
     run, root, stateDir, capDir, worktreesDir, targetRef, base: 'HEAD', budget,
     skip: ['simplify', 'performance', 'ship_prep'], ...over.config,
   };
+  const defaultScope = [{ id: 'SCOPE-001', title: 'build the selected feature', source: 'user selected Full MVP' }];
   const plan = {
     planId: 'plan-1', base: { approvalReady: true },
-    selectedScope: [{ id: 'SCOPE-001', title: 'build the selected feature', source: 'user selected Full MVP' }],
+    selectedScope: defaultScope,
     scopeDrops: [],
     tasks: [{ id: 'TASK-001', writeScope: ['src/a.js'], scopeItems: ['SCOPE-001'] }], layers: [['TASK-001']],
     ...over.plan,
   };
   const planPath = join(dir, 'plan.json'); writeFileSync(planPath, JSON.stringify(plan));
   const configPath = join(dir, 'config.json'); writeFileSync(configPath, JSON.stringify(config));
+  const intakePath = intakePathFor(config);
+  const intakeScope = Array.isArray(over.intakeScope)
+    ? over.intakeScope
+    : (Array.isArray(plan.selectedScope) ? plan.selectedScope : defaultScope);
+  const intakeDraft = {
+    run,
+    selection: over.selection || 'Full MVP = selected test bundle',
+    selectedScope: intakeScope,
+  };
+  if (over.captureIntake !== false) {
+    captureIntakeSnapshot(intakePath, JSON.stringify(intakeDraft), { expectedRun: run });
+  }
   const checkpointFile = join(stateDir, `${run}.json`);
-  return { dir, root, stateDir, capDir, worktreesDir, run, targetRef, budget, config, plan, planPath, configPath, checkpointFile };
+  return {
+    dir, root, stateDir, capDir, worktreesDir, run, targetRef, budget, config, plan,
+    planPath, configPath, intakePath, intakeDraft, checkpointFile,
+  };
 }
 
 function approveRun(s, over = {}) {
@@ -163,6 +185,63 @@ test('CLI: human approve renders the per-item SCOPE COVERAGE block', async () =>
   assert.match(out.text(), /UNCOVERED: none/);
 });
 
+test('intake capture: atomic write-once snapshot is idempotent only for identical canonical bytes', () => {
+  const s = setup();
+  assert.equal(lstatSync(s.intakePath).mode & 0o777, 0o400, 'authority snapshot is owner-read-only');
+  const same = captureIntakeSnapshot(s.intakePath, JSON.stringify(s.intakeDraft), { expectedRun: s.run });
+  assert.equal(same.created, false, 'same intake is an idempotent no-op');
+  assert.throws(
+    () => captureIntakeSnapshot(s.intakePath, JSON.stringify({ ...s.intakeDraft, selection: 'quietly changed' }), { expectedRun: s.run }),
+    (e) => e instanceof IntakeScopeError && e.reason === 'intake-already-captured',
+  );
+  const duplicatePath = join(s.stateDir, 'intake', 'duplicate-run.json');
+  const duplicate = {
+    run: 'duplicate-run', selection: 'duplicate fixture',
+    selectedScope: [s.intakeDraft.selectedScope[0], s.intakeDraft.selectedScope[0]],
+  };
+  assert.throws(
+    () => captureIntakeSnapshot(duplicatePath, JSON.stringify(duplicate), { expectedRun: 'duplicate-run' }),
+    (e) => e instanceof IntakeScopeError && e.reason === 'intake-invalid' && /duplicate id/.test(e.message),
+  );
+  assert.equal(existsSync(duplicatePath), false, 'invalid intake creates no authority file');
+});
+
+test('intake authority: writable files and symlinks are refused', () => {
+  const writable = setup();
+  chmodSync(writable.intakePath, 0o600);
+  assert.throws(
+    () => readIntakeSnapshot(writable.intakePath, { expectedRun: writable.run }),
+    (e) => e instanceof IntakeScopeError && e.reason === 'intake-writable',
+  );
+  chmodSync(writable.intakePath, 0o400);
+
+  const linked = setup({ captureIntake: false });
+  const target = join(linked.dir, 'intake-target.json');
+  const snapshot = buildIntakeSnapshot(linked.intakeDraft, { expectedRun: linked.run });
+  writeFileSync(target, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o400 });
+  mkdirSync(join(linked.stateDir, 'intake'), { recursive: true });
+  symlinkSync(target, linked.intakePath);
+  assert.throws(
+    () => readIntakeSnapshot(linked.intakePath, { expectedRun: linked.run }),
+    (e) => e instanceof IntakeScopeError && e.reason === 'intake-invalid' && /symlink/.test(e.message),
+  );
+});
+
+test('capture-intake CLI writes the canonical config-derived path and emits one JSON object', () => {
+  const s = setup({ captureIntake: false });
+  const scopePath = join(s.dir, 'intake-draft.json');
+  writeFileSync(scopePath, JSON.stringify(s.intakeDraft));
+  const out = sink(); const err = sink();
+  const code = captureIntakeMain(['--config', s.configPath, '--scope', scopePath, '--json'], { stdout: out, stderr: err });
+  assert.equal(code, EXIT.SUCCESS, err.text());
+  const result = assertSingleStdoutObject(out.text().trim());
+  assert.equal(result.ok, true);
+  assert.equal(result.created, true);
+  assert.equal(result.file, s.intakePath);
+  assert.equal(result.selectedScopeCount, 1);
+  assert.equal(existsSync(s.intakePath), true);
+});
+
 test('CLI: status after approve → exit 0, one JSON object, converged=false', async () => {
   const s = setup(); approveRun(s);
   const out = sink(); const err = sink();
@@ -174,6 +253,9 @@ test('CLI: status after approve → exit 0, one JSON object, converged=false', a
   assert.equal(obj.command, 'status');
   assert.equal(obj.converged, false);
   assert.equal(obj.run, s.run);
+  assert.equal(obj.intake.path, s.intakePath);
+  assert.equal(obj.intake.selectedScopeCount, 1);
+  assert.match(obj.intake.fileSha256, /^[a-f0-9]{64}$/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -195,6 +277,60 @@ test('approve: missing selectedScope refuses before checkpoint/capability mutati
   );
   assert.equal(existsSync(s.checkpointFile), false, 'scope refusal creates no checkpoint');
   assert.equal(existsSync(s.capDir), false, 'scope refusal mints no capability');
+});
+
+test('approve: missing durable intake snapshot refuses before checkpoint/capability mutation', async () => {
+  const s = setup({ captureIntake: false });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-missing'); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false);
+  assert.equal(existsSync(s.capDir), false);
+});
+
+test('approve: deleting an intake id from plan.selectedScope is a hard scope-shrink refusal', async () => {
+  const intakeScope = [
+    { id: 'SCOPE-001', title: 'build the selected feature', source: 'user selected Full MVP' },
+    { id: 'SCOPE-002', title: 'must survive plan generation', source: 'user selected Full MVP' },
+  ];
+  const s = setup({ intakeScope }); // plan still declares only SCOPE-001
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-scope-shrunk'); assert.match(e.message, /SCOPE-002/); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false, 'scope shrink creates no checkpoint');
+  assert.equal(existsSync(s.capDir), false, 'scope shrink mints no capability');
+});
+
+test('approve: rewriting intake title/source is a hard scope-drift refusal', async () => {
+  const intakeScope = [
+    { id: 'SCOPE-001', title: 'original selected feature', source: 'user selected Full MVP' },
+  ];
+  const s = setup({ intakeScope }); // plan carries the same id but different title/source metadata
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-scope-drift'); assert.match(e.message, /SCOPE-001/); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false, 'scope drift creates no checkpoint');
+  assert.equal(existsSync(s.capDir), false, 'scope drift mints no capability');
+});
+
+test('approve: adding a plan-only selectedScope id is a hard scope-expansion refusal', async () => {
+  const selectedScope = [
+    { id: 'SCOPE-001', title: 'build the selected feature', source: 'user selected Full MVP' },
+    { id: 'SCOPE-002', title: 'invented during planning', source: 'plan' },
+  ];
+  const s = setup({
+    intakeScope: [selectedScope[0]],
+    plan: { selectedScope },
+  });
+  await assert.rejects(
+    async () => approveRun(s),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-scope-expanded'); assert.match(e.message, /SCOPE-002/); return true; },
+  );
+  assert.equal(existsSync(s.checkpointFile), false, 'scope expansion creates no checkpoint');
+  assert.equal(existsSync(s.capDir), false, 'scope expansion mints no capability');
 });
 
 test('approve: every executable task must declare scopeItems[]', async () => {
@@ -286,6 +422,37 @@ test('start: plan drift (edited plan file) refuses (exit 3)', async () => {
     (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'plan-drift'); return true; },
   );
   assert.equal(spies.buildOpts, undefined);
+});
+
+test('start: intake snapshot drift refuses before the build driver', async () => {
+  const s = setup(); approveRun(s);
+  const changed = buildIntakeSnapshot({ ...s.intakeDraft, selection: 'rewritten after approval' }, { expectedRun: s.run });
+  chmodSync(s.intakePath, 0o600);
+  writeFileSync(s.intakePath, `${JSON.stringify(changed, null, 2)}\n`);
+  chmodSync(s.intakePath, 0o400);
+  const spies = {}; const seams = successfulSeams(s, spies);
+  await assert.rejects(
+    () => engine.start({ checkpointFile: s.checkpointFile, ...seams }),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-drift'); return true; },
+  );
+  assert.equal(spies.buildOpts, undefined);
+  assert.equal(spies.execArgs.length, 0);
+});
+
+test('start: semantic intake digest mismatch is independently refused before the build driver', async () => {
+  const s = setup(); approveRun(s);
+  withLock(s.checkpointFile, () => {
+    const doc = readDoc(s.checkpointFile);
+    doc.pipeline.intakeScopeSha = '0'.repeat(64);
+    writeDoc(s.checkpointFile, doc);
+  });
+  const spies = {}; const seams = successfulSeams(s, spies);
+  await assert.rejects(
+    () => engine.start({ checkpointFile: s.checkpointFile, ...seams }),
+    (e) => { assert.equal(e.code, EXIT.PREFLIGHT); assert.equal(e.reason, 'intake-drift'); assert.match(e.message, /semantic digest/); return true; },
+  );
+  assert.equal(spies.buildOpts, undefined);
+  assert.equal(spies.execArgs.length, 0);
 });
 
 test('start: checkpoint-mismatch when the run is not in PREPARED (exit 3)', async () => {
@@ -485,6 +652,29 @@ test('resume: continues from durable state, preserves spend + no-progress barrie
   // the no-progress barrier recorded before resume is preserved (counters not reset).
   assert.ok(afterBudget.barriers.length >= barriersBefore, 'no-progress barriers preserved across resume');
   assert.ok(afterBudget.barriers.some((b) => b.fingerprint === 'fp-preserve-me'));
+});
+
+test('resume: intake snapshot drift refuses before re-entering build/phases', async () => {
+  const s = setup(); approveRun(s);
+  const firstSeams = successfulSeams(s, {});
+  firstSeams.runPhaseEngineFn = async (opts) => {
+    ckPhase(opts.file, 'test', 'blocked');
+    return { status: 'blocked', converged: false, blockedReasons: ['pause-for-resume'] };
+  };
+  const first = await engine.start({ checkpointFile: s.checkpointFile, ...firstSeams });
+  assert.equal(first.exitCode, EXIT.BLOCKED);
+
+  const changed = buildIntakeSnapshot({ ...s.intakeDraft, selection: 'rewritten before resume' }, { expectedRun: s.run });
+  chmodSync(s.intakePath, 0o600);
+  writeFileSync(s.intakePath, `${JSON.stringify(changed, null, 2)}\n`);
+  chmodSync(s.intakePath, 0o400);
+  const spies = {}; const seams = successfulSeams(s, spies);
+  await assert.rejects(
+    () => engine.resume({ checkpointFile: s.checkpointFile, ...seams }),
+    (e) => e.reason === 'intake-drift' && e.code === EXIT.PREFLIGHT,
+  );
+  assert.equal(spies.buildOpts, undefined);
+  assert.equal(spies.phaseOpts, undefined);
 });
 
 test('resume: a durably budget-stopped run is reported as a budget stop (exit 5), never completion', async () => {

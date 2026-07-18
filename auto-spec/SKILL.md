@@ -65,10 +65,11 @@ and test against without re-interviewing the user.
 
 - Capture `$request` verbatim as the source of scope. The request IS the scope; don't silently narrow or
   widen it.
-- If the caller supplies `selectedScope[]`, copy its ids/titles/sources verbatim into a **Binding selected
-  scope** checklist. If the user selected a named bundle in this standalone run, itemize it first. The
-  checklist is authoritative over the draft and must not be regenerated from what the spec happens to
-  include.
+- In a pipeline run, require and read the pre-plan intake snapshot; copy its `selectedScope[]`
+  ids/titles/sources verbatim into a **Binding selected scope** checklist and record the snapshot path/hash.
+  Do not accept the plan/spec's own copy as its authority. In a standalone run, if the caller supplies
+  `selectedScope[]`, preserve it verbatim; if the user selected a named bundle, itemize it first. The
+  checklist is authoritative over the draft and must not be regenerated from what the spec includes.
 - Judge whether it's answerable from the repo + reasonable inference, or whether a genuine product
   decision blocks it (a fork where building the wrong branch is expensive). Only for the latter, ask a
   FEW targeted questions (`AskUserQuestion`) — never a long interview, never scope questions you could
@@ -187,8 +188,8 @@ for the user.
 
 Report:
 
-1. the spec file path (`.ulpi/spec/<name>.md`) and a one-line objective
-2. selected-scope coverage (`N of M`) with every selected id, then the acceptance-criteria count and
+1. the spec file path (`.ulpi/spec/<name>.md`), independent intake snapshot path/hash, and objective
+2. selected-scope coverage (`N of M`) against that snapshot with every selected id, then the acceptance-criteria count and
    explicit non-goals
 3. any per-id user-approved drops, assumptions made, and open questions surfaced for the user
 4. critic-loop outcome (rounds to stable, or the honest remaining gaps)

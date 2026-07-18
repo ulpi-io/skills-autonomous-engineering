@@ -12,20 +12,45 @@
 //   4. INDEPENDENT — within a layer, write scopes are disjoint (prefix-aware: src/api and
 //                    src/api/handlers.ts overlap) — parallel writers must never race.
 //   5. ATOMIC      — ≤3 entries per writeScope (split bigger tasks).
-//   6. SCOPE       — executable plans carry binding selectedScope[]; every id maps to task.scopeItems[]
-//                    or a separately acknowledged scopeDrops[] entry. Unknown/duplicate/uncovered ids fail.
+//   6. SCOPE       — executable plans require an independent intake snapshot; plan selectedScope[] must
+//                    match it exactly, and every intake id maps to a task or acknowledged drop.
 //   7. SLICE VALIDATE — non-empty per task; BLOCKS whole-suite e2e gates (a bare playwright/cypress
 //                    runner that only greens at end-state); WARNS (non-blocking) on the ambiguous
 //                    `<runner> test -- <file>` form — the vitest footgun (`--` drops the positional)
 //                    but ALSO canonical for Jest, so it advises an explicit runner without blocking.
 //
-// Usage:  node validate-plan.mjs <plan.json> [--json] [--render]   (--render prints the derived human view)
+// Usage:  node validate-plan.mjs <plan.json> [--intake <absolute-snapshot.json>] [--json] [--render]
+//         Executable plans REQUIRE --intake; descriptive plans may omit it.
 // Exit:   0 = plan is structurally safe to build · 1 = violations (listed) · 2 = unreadable
 
 import { readFileSync } from 'node:fs';
+import {
+  comparePlanToIntake, readIntakeSnapshot,
+} from '../../autonomous-pipeline/scripts/lib/intake-scope.mjs';
 
-const [file, ...rest] = process.argv.slice(2);
-if (!file) { console.error('usage: validate-plan.mjs <plan.json> [--json] [--render]'); process.exit(2); }
+const argv = process.argv.slice(2);
+const file = argv.shift();
+if (!file) { console.error('usage: validate-plan.mjs <plan.json> [--intake <absolute-snapshot.json>] [--json] [--render]'); process.exit(2); }
+let intakeFile = null;
+let render = false;
+let json = false;
+const seenFlags = new Set();
+for (let i = 0; i < argv.length; i++) {
+  const flag = argv[i];
+  if (!['--intake', '--json', '--render'].includes(flag)) {
+    console.error(`unknown argument: ${flag}`); process.exit(2);
+  }
+  if (seenFlags.has(flag)) { console.error(`duplicate flag: ${flag}`); process.exit(2); }
+  seenFlags.add(flag);
+  if (flag === '--json') json = true;
+  else if (flag === '--render') render = true;
+  else {
+    intakeFile = argv[++i];
+    if (!intakeFile || intakeFile.startsWith('--')) {
+      console.error('--intake requires an absolute snapshot path'); process.exit(2);
+    }
+  }
+}
 let plan;
 try { plan = JSON.parse(readFileSync(file, 'utf8')); }
 catch (e) { console.error(`cannot read/parse ${file}: ${e.message}`); process.exit(2); }
@@ -90,14 +115,34 @@ const isExecutable = plan.executable === true
   || tasks.some((t) => typeof t?.validateCommand === 'string' && t.validateCommand.trim());
 
 // ── binding selected-scope coverage ───────────────────────────────────────────────────
-// The spec is not the scope authority: selectedScope[] is captured at intake and survives spec/plan.
-// A proposed drop is resolved only when the plan records a distinct, per-id user acknowledgement with
-// evidence; general plan approval is deliberately not accepted here as a substitute.
+// The plan does not get to declare its own comparison baseline. Executable plans are compared to the
+// independently captured, write-once intake snapshot. A proposed drop is resolved only when the plan
+// records a distinct, per-id user acknowledgement; general plan approval is not a substitute.
 const selectedScope = Array.isArray(plan.selectedScope) ? plan.selectedScope : [];
 const scopeDrops = Array.isArray(plan.scopeDrops) ? plan.scopeDrops : [];
-const scopeById = new Map();
+const planScopeById = new Map();
 const mappedById = new Map();
 const droppedById = new Map();
+let intakeSnapshot = null;
+
+if (isExecutable && !intakeFile) {
+  p('(scope)', 'executable plan is missing --intake <snapshot> — an independent intake authority is required');
+}
+if (intakeFile) {
+  try {
+    const read = readIntakeSnapshot(intakeFile);
+    intakeSnapshot = read.snapshot;
+    const fidelity = comparePlanToIntake(selectedScope, intakeSnapshot);
+    for (const error of fidelity.errors) p(error.scopeId || '(scope)', error.detail);
+  } catch (e) {
+    p('(scope)', `intake snapshot invalid or unavailable: ${e.message}`);
+  }
+}
+
+// Coverage uses the snapshot's M, never the plan's potentially smaller M. Descriptive plans without a
+// snapshot preserve the legacy self-declared behavior; they are never executable by the coordinator.
+const authorityScope = intakeSnapshot?.selectedScope || selectedScope;
+const scopeById = new Map(authorityScope.map((item) => [item.id, item]));
 
 if (isExecutable && selectedScope.length === 0) {
   p('(scope)', 'executable plan is missing nonempty selectedScope[] — intake scope authority is absent');
@@ -108,8 +153,8 @@ if (plan.scopeDrops !== undefined && !Array.isArray(plan.scopeDrops)) p('(scope)
 for (const item of selectedScope) {
   const id = item?.id;
   if (typeof id !== 'string' || !SAFE_ID.test(id)) { p('(scope)', `selectedScope entry has invalid id ${JSON.stringify(id)}`); continue; }
-  if (scopeById.has(id)) p(id, 'duplicate selectedScope id');
-  else scopeById.set(id, item);
+  if (planScopeById.has(id)) p(id, 'duplicate selectedScope id');
+  else planScopeById.set(id, item);
   if (typeof item?.title !== 'string' || item.title.trim() === '') p(id, 'selectedScope item is missing a nonempty title');
   if (typeof item?.source !== 'string' || item.source.trim() === '') p(id, 'selectedScope item is missing a nonempty source');
 }
@@ -274,10 +319,11 @@ if (isExecutable) {
   }
 }
 
-if (rest.includes('--render')) {
+if (render) {
   // derived human view — rendered on demand from the single canonical JSON; never stored, so it can never drift
   const lines = [`# Plan: ${plan.name || file} — ${tasks.length} tasks, ${layers.length} layers`, ''];
   lines.push(`## SCOPE COVERAGE: ${scopeCoverage.covered.length} of ${scopeCoverage.total} selected-scope items covered`);
+  lines.push(`- intake authority: ${intakeFile || 'MISSING'}`);
   lines.push(`- explicitly dropped: ${scopeCoverage.dropped.length ? scopeCoverage.dropped.join(', ') : 'none'}`);
   lines.push(`- UNCOVERED: ${scopeCoverage.uncovered.length ? scopeCoverage.uncovered.join(', ') : 'none'}`, '');
   layers.forEach((layer, i) => {
@@ -294,8 +340,8 @@ if (rest.includes('--render')) {
   console.log(lines.join('\n'));
 }
 
-const out = { file, tasks: tasks.length, layers: layers.length, scopeCoverage, violations: problems.length, problems, warnings };
-if (rest.includes('--json')) console.log(JSON.stringify(out, null, 2));
+const out = { file, intakeFile, tasks: tasks.length, layers: layers.length, scopeCoverage, violations: problems.length, problems, warnings };
+if (json) console.log(JSON.stringify(out, null, 2));
 else {
   if (warnings.length) console.error(`⚠ ${warnings.length} advisory warning(s) (non-blocking):\n` + warnings.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));
   if (problems.length) console.error(`✗ plan is NOT safe to build: ${problems.length} violation(s)\n` + problems.map(x => `  - [${x.task}] ${x.issue}`).join('\n'));

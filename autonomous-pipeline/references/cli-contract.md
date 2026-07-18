@@ -80,6 +80,20 @@ Grammar rules (each a hard error):
 
 Both `--flag value` and `--flag=value` are accepted; `--json` is a boolean switch defaulting to `false`.
 
+### Pre-plan intake capture (separate helper, not a sixth coordinator verb)
+
+Before spec/plan generation, Phase 0 runs:
+
+```
+node scripts/capture-intake.mjs --config <absolute-run-config.json> --scope <absolute-intake-draft.json> [--json]
+```
+
+The draft is `{run, selection, selectedScope:[{id,title,source}]}`. The helper derives the output path as
+`<stateDir>/intake/<run>.json`, validates unique safe ids and nonempty metadata, adds a semantic SHA-256,
+and publishes canonical owner-read-only mode-0400 bytes without overwrite. Repeating identical input is idempotent;
+changed input for the same run is refused. This is intentionally outside `PIPELINE_COMMANDS`: it creates
+the independent authority before a plan exists, while the five coordinator verbs operate on a run.
+
 ### Payload validators
 
 - `parseRunConfig(text)` → parses JSON, requires a plain object; malformed JSON or a non-object throws
@@ -89,18 +103,20 @@ Both `--flag value` and `--flag=value` are accepted; `--json` is a boolean switc
 
 ### Binding scope at `approve`
 
-`approve` performs a second, pre-mutation gate over the parsed plan. Executable pipeline plans carry:
+`approve` derives and reads the canonical intake snapshot before any mutation, then performs a second gate
+over the parsed plan. Executable pipeline plans carry:
 
-- `selectedScope: [{ id, title, source }]` — the itemized intake selection and scope authority;
+- `selectedScope: [{ id, title, source }]` — an exact copy of the independent snapshot;
 - `tasks[].scopeItems: [id, ...]` — task coverage mappings;
 - `scopeDrops: [{ scopeId, reason, acknowledgedByUser: true, acknowledgement }]` — only after the user
   separately acknowledges that exact drop. General plan approval is not acknowledgement evidence.
 
-The coordinator recomputes `scopeCoverage = { total, covered, dropped, uncovered, errors }` before it
-creates a checkpoint or mints a capability. It refuses with exit `3` on `scope-missing`, `scope-invalid`,
-`scope-drop-unacknowledged`, or `scope-uncovered`. A successful approve returns and durably stores the
-coverage object; the plan hash binds it to the capability. The approval UI/report renders **SCOPE
-COVERAGE: N of M selected-scope items covered** plus every drop and UNCOVERED id.
+The coordinator requires exact intake-to-plan ids/titles/sources and computes M from the snapshot, never
+from the plan's potentially smaller array. It refuses before checkpoint/capability creation on missing,
+invalid, shrunk, expanded, or changed intake; invalid/unacknowledged drops; or uncovered ids. A successful
+approve stores the snapshot path, file/semantic hashes, full selected scope, and coverage receipt. The
+plan capability binds the intake file hash alongside plan/config. Start/resume independently re-read and
+hash the snapshot before any executor. The approval UI renders its hash plus **SCOPE COVERAGE: N of M**.
 
 ### One-object-on-stdout JSON rule
 

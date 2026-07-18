@@ -309,6 +309,43 @@ function scopeCoverageProblems(scopeCoverage) {
   return problems;
 }
 
+function intakeBindingProblems(pipeline, scopeCoverage) {
+  const problems = [];
+  if (typeof pipeline.intakePath !== 'string' || pipeline.intakePath.trim() === '') {
+    problems.push('independent intake snapshot path is absent');
+  }
+  for (const key of ['intakeFileSha', 'intakeScopeSha']) {
+    if (typeof pipeline[key] !== 'string' || !/^[a-f0-9]{64}$/.test(pipeline[key])) {
+      problems.push(`${key} is not a valid sha256 binding`);
+    }
+  }
+  if (typeof pipeline.intakeSelection !== 'string' || pipeline.intakeSelection.trim() === '') {
+    problems.push('intake selection is absent');
+  }
+  const intake = Array.isArray(pipeline.intakeScope) ? pipeline.intakeScope : [];
+  if (!intake.length) problems.push('independent intake scope is absent');
+  const authorityIds = new Set();
+  for (const item of intake) {
+    const id = item && item.id;
+    if (typeof id !== 'string' || id.trim() === '') { problems.push('intake scope contains an invalid id'); continue; }
+    if (authorityIds.has(id)) problems.push(`intake scope contains duplicate id ${id}`);
+    authorityIds.add(id);
+    if (typeof item.title !== 'string' || item.title.trim() === '' || typeof item.source !== 'string' || item.source.trim() === '') {
+      problems.push(`intake scope item ${id} is missing title/source`);
+    }
+  }
+  if (scopeCoverage && typeof scopeCoverage === 'object' && !Array.isArray(scopeCoverage)) {
+    const receiptIds = new Set(['covered', 'dropped', 'uncovered'].flatMap((key) =>
+      Array.isArray(scopeCoverage[key]) ? scopeCoverage[key] : []));
+    for (const id of authorityIds) if (!receiptIds.has(id)) problems.push(`intake scope item ${id} is absent from coverage receipt`);
+    for (const id of receiptIds) if (!authorityIds.has(id)) problems.push(`coverage receipt contains non-intake id ${id}`);
+    if (Number.isInteger(scopeCoverage.total) && scopeCoverage.total !== authorityIds.size) {
+      problems.push(`scope coverage total ${scopeCoverage.total} does not match ${authorityIds.size} intake item(s)`);
+    }
+  }
+  return problems;
+}
+
 export function finalize(file, status, { result } = {}) {
   if (!['done', 'needs_attention', 'aborted'].includes(status)) fail('finalize requires <done|needs_attention|aborted>');
   return withLock(file, () => {
@@ -328,6 +365,7 @@ export function finalize(file, status, { result } = {}) {
       if (doc.pipeline && (!scopeCoverage || typeof scopeCoverage !== 'object' || Array.isArray(scopeCoverage))) {
         reasons.push('binding selected-scope coverage receipt is absent');
       } else if (scopeCoverage) {
+        reasons.push(...intakeBindingProblems(doc.pipeline, scopeCoverage));
         reasons.push(...scopeCoverageProblems(scopeCoverage));
       }
       if (doc.requireValidation && (!doc.finalValidation || doc.finalValidation.status !== 'green')) {

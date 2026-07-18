@@ -107,11 +107,13 @@ other a Claude-only compatibility shim.
   capability-gated authorization, and the convergence conjunction (`pipeline-state.mjs`) are all machinery,
   not prose an LLM can talk its way past. A **BLOCKED required gate HARD-STOPS downstream execution** here
   (fail-closed): the run returns `status:blocked` / `converged:false` and no later phase runs.
+  - `capture-intake.mjs --config <config> --scope <draft>` — separate pre-plan helper that creates the
+    write-once authority. It is not a sixth run verb because it executes before spec/plan exist.
   - `approve --plan <canonical.json> --config <run-config.json>` — validates the base is approval-ready,
-    inits the durable run + immutable budget, enters the `prepared` window, and mints the ONE-USE,
-    hash-bound plan-approval capability. **This IS the recorded human approval.** A human MUST sit between
+    independently compares intake→plan, inits the durable run + immutable budget, enters the `prepared`
+    window, and mints the ONE-USE, intake/plan/config-hash-bound capability. **This IS the recorded human approval.** A human MUST sit between
     `approve` (mint) and `start` (consume) — the coordinator can never auto-chain the gate.
-  - `start --run <id>` — runs every preflight refusal (plan/base/config drift, wrong target, dirty tree)
+  - `start --run <id>` — runs every preflight refusal (intake/plan/base/config drift, wrong target, dirty tree)
     and **consumes the one-use approval BEFORE a single executor spawns**, then drives build → post-build
     phases and publishes ONLY as a fast-forward after the explicit convergence conjunction + a durable
     finalize `done`. `resume --run <id>` continues from durable state (never erasing spend, never
@@ -144,11 +146,15 @@ other a Claude-only compatibility shim.
   intake, load the checkpoint, continue at the recorded phase).
 - New run: capture the request; ask the FEW configuration questions (`AskUserQuestion`): which optional
   phases to run (simplify, performance, go-live/ship-deploy), and any budget/scope steer. Keep it light.
-- **Make the selected scope binding before spec.** When the user selects a named scope (for example,
-  `Full MVP = PRD §13.1`), expand that selection into stable, itemized `selectedScope[]` entries with
-  `id`, `title`, and `source`. This checklist — not the later spec — is the scope authority for the run.
-  Every id must later map to one or more plan tasks or to a drop the user explicitly acknowledges for that
-  id. Never let a downstream phase silently rewrite or shorten this checklist.
+- **Make the selected scope binding before spec — as an independent artifact, not a plan field alone.**
+  Choose the run id/config first. Expand a named selection (for example, `Full MVP = PRD §13.1`) into an
+  intake draft `{run, selection, selectedScope:[{id,title,source}]}`. Then run
+  `node <skill-dir>/scripts/capture-intake.mjs --config <absolute-run-config.json> --scope <absolute-intake-draft.json> --json`.
+  It atomically writes the canonical, write-once snapshot to `<stateDir>/intake/<run>.json`; an identical
+  recapture is idempotent and any changed recapture is refused. Do this **before** auto-spec/auto-plan and
+  pass that snapshot path/content to both. If the initial itemization itself must change, start a new run
+  id (a later per-id reduction remains an acknowledged `scopeDrops[]` record). The snapshot — not the
+  spec or plan's copy — is the scope authority.
 - **Codex delegation (D14 — offer ONLY if detected).** Probe for a Codex integration (`command -v codex`,
   or a `codex`-type subagent in your available agents). If — and only if — one is present, offer the user
   a choice to delegate any of three roles to Codex: **build** (the per-task engineer), **review** (the
@@ -161,11 +167,12 @@ other a Claude-only compatibility shim.
   Next.js task → whatever React/SSR specialist exists, whatever it's named), and you pass that installed
   set to the Workflow as `availableAgents` so a plan-assigned name that isn't present here degrades to a
   general engineer (recorded in `missingAgents`) instead of hard-failing. Never route on a guessed name.
-- Verify a git work tree + working branch; declare the pipeline `budget-guard` contract; create the
-  pipeline `checkpoint-resume` file (one unit per build task (phase statuses live in the same file)).
+- Verify a git work tree + working branch and declare the pipeline `budget-guard` contract. The canonical
+  coordinator creates its checkpoint only at approval, after independently comparing plan to intake.
+  The legacy backend creates its checkpoint after plan approval as described below.
 
-**Success criteria:** run mode determined; selected scope captured as a binding checklist; ultracode
-precheck surfaced (or confirmed on); phase config + budget set; git preflight passed; checkpoint open.
+**Success criteria:** run mode determined; write-once intake snapshot captured before spec; ultracode
+precheck surfaced (or confirmed on); phase config + budget set; git preflight passed.
 
 ## Phase 1: Run the lifecycle (one approved pass)
 
@@ -183,7 +190,8 @@ which the Codex adapter cannot select:
    invocation only), and the docs are explicit that dmi *blocks programmatic invocation* — so a
    `Skill(auto-spec)` from here would fail. Instead read the installed skill's `SKILL.md` (find it under
    `.claude/skills/`, `.agents/skills/`, or the plugin root) and execute its phases directly; if it isn't
-   installed, apply the methodology inline. Pass the intake `selectedScope[]` to both phases. At the
+   installed, apply the methodology inline. Pass the independent intake snapshot path/content to both
+   phases; auto-plan runs its validator with `--intake <snapshot>`. At the
    SINGLE approval gate, render **SCOPE COVERAGE: N of M selected-scope items covered** and list every
    uncovered id. A general plan approval never authorizes a drop: ask for and record a separate,
    unambiguous acknowledgement for each proposed drop id, update the plan, re-run its gate, and only then
@@ -192,12 +200,13 @@ which the Codex adapter cannot select:
    sandbox has no filesystem access, so the skill creates the status file before launch. Pass
    `--required-phases "build,test,review,auto_learn,auto_map" --require-validation` so the store itself
    refuses a premature `done`. Pass
-   `--launch '{"scriptPath":"<pipeline-workflow.js>","args":{…the full launch args…}}'` so the exact
+   `--launch '{"scriptPath":"<pipeline-workflow.js>","args":{…the full launch args including intakePath and intakeScope…}}'` so the exact
    relaunch recipe is persisted IN the status file — then `run-status.mjs --resume` can reconstruct the
    resume with no session memory.
 3. **Launch `references/pipeline-workflow.js` via the Workflow tool** with full args:
    - **required**: `root`, `workingBranch`, `validate` (the whole-workspace end-state gate), `planPath`
-     (the approved DAG plan), `approved: true`, `statusFile`, `checkpointCli` (absolute path to
+     (the approved DAG plan), `intakePath` (the write-once snapshot), `intakeScope` (its parsed complete
+     object), `approved: true`, `statusFile`, `checkpointCli` (absolute path to
      `checkpoint-resume/scripts/checkpoint.mjs` — the status-writer agents call it).
    - **routing/quality**: `availableAgents` (the installed specialist set from Phase 0 — each task's
      plan-assigned agent/reviewer is honored when present, degrades to general when not, recorded in
@@ -332,6 +341,8 @@ a dead gate, red end-state, uncovered scope, actionable register item, or missin
 
 ## When To Load References
 
+- `scripts/capture-intake.mjs` — the deterministic Phase-0 write-once intake capture. Run it before
+  loading auto-spec/auto-plan for a new pipeline run; never recreate the authority from the later plan.
 - `scripts/pipeline.mjs` — the **canonical deterministic coordinator CLI** (the Codex runtime):
   `approve|start|resume|status|authorize`. Run it (after a recorded `approve`) instead of the Workflow
   whenever determinism is wanted or Codex is the host; its `scripts/lib/` modules own Git, the checkpoint,
@@ -360,8 +371,8 @@ a dead gate, red end-state, uncovered scope, actionable register item, or missin
 
 Report:
 
-1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded; and
-   **SCOPE COVERAGE: N of M** with covered, explicitly dropped, and UNCOVERED ids
+1. the run config — which phases ran vs. skipped; the working branch; the single approval recorded; the
+   intake snapshot path/hash; and **SCOPE COVERAGE: N of M** with covered, explicitly dropped, and UNCOVERED ids
 2. per phase: outcome + gate status (met its bar / blocked / skipped); which specialists the build
    actually routed to (`specialistsUsed`) and any plan-assigned specialist that was absent here and so
    ran generic (`missingAgents` — surface it so the user can install the missing agent/skill)

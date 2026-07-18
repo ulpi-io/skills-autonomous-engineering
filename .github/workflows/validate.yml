@@ -47,6 +47,10 @@ jobs:
         run: node --test scripts/test-workflow-journal.mjs
       - name: Opt-in event log (fsynced append + atomic snapshot + crash/torn-tail recovery)
         run: node --test scripts/test-event-log.mjs
+      - name: Intake scope authority (canonical schema + atomic write-once fidelity gate)
+        run: node --test scripts/test-intake-scope.mjs
+      - name: Intake capture CLI (grammar + paths + JSON errors + pinned exit codes)
+        run: node --test scripts/test-capture-intake.mjs
       - name: Pipeline state machine (legal/illegal transitions + convergence conjunction)
         run: node --test scripts/test-pipeline-state.mjs
       - name: CLI contract (argv/flag parsing + fail-closed refusals)

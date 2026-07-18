@@ -40,14 +40,15 @@ with no executor active. Bound to:
 |---|---|
 | `planSha` | SHA-256 of the **raw** canonical plan (exact bytes) |
 | `configSha` | SHA-256 of the run config **including its budget** |
+| `intakeSha` | SHA-256 of the independently captured, write-once intake snapshot |
 | `baseSha` | the recorded base commit |
 | `targetRef` | the integration target ref |
 | `engineVersion` | the executor engine version |
 | `nonce` | a fresh per-issuance nonce |
 | TTL | `expiresAt = issuedAt + ttlMs` |
 
-`start` **consumes it exactly once** by presenting freshly-recomputed hashes; an edited plan, a changed
-budget, a moved base, a different target/engine, or a replayed nonce all **mismatch** and refuse.
+`start` **consumes it exactly once** by presenting freshly-recomputed hashes; an edited plan, changed
+intake snapshot, changed budget, moved base, different target/engine, or replayed nonce all mismatch.
 
 ### (2) Action capability — gates one irreversible action
 
@@ -90,7 +91,7 @@ A capability's status is encoded in its filename suffix under `<capDir>/<run>.<k
 | `expired` | `now ≥ expiresAt` (TTL elapsed) |
 | `replayed` | already consumed/completed, or lost the consume race |
 | `revoked` | the capability was revoked |
-| `mismatched` | presented bindings' digest ≠ the bound digest (plan/config/base/target/engine/nonce/evidence/revision) |
+| `mismatched` | presented bindings' digest ≠ the bound digest (intake/plan/config/base/target/engine/nonce/evidence/revision) |
 | `symlinked` | the capability file is a symlink or not a regular file (never followed) |
 | `unsafe-mode` | the capability file is group/world accessible (mode `& 0o077`) |
 | `child-issued` | the record's `issuerContext` is not `coordinator` |
@@ -124,9 +125,9 @@ markPrepared(checkpointFile)                         → { status:'prepared' }
 haltForAuthorization({ checkpointFile, action, evidence, now? })
                                                      → { status, action, evidenceSha, checkpointRevision, liveChildren:0 }
 
-issuePlanApproval({ capDir, run, rawPlan, config, baseSha, targetRef, engineVersion,
+issuePlanApproval({ capDir, run, rawPlan, config, intakeSha, baseSha, targetRef, engineVersion,
                     ttlMs, nonce?, interactive?, context?, checkpointFile?, worktreePaths?, now? })  → record
-consumePlanApproval({ capDir, run, rawPlan, config, baseSha, targetRef, engineVersion, nonce, now? }) → { record, consumedAt }
+consumePlanApproval({ capDir, run, rawPlan, config, intakeSha, baseSha, targetRef, engineVersion, nonce, now? }) → { record, consumedAt }
 
 issueActionCapability({ capDir, run, action, baseSha, targetRef, engineVersion,
                         ttlMs, nonce?, interactive?, context?, checkpointFile, worktreePaths?, now? })  → record

@@ -147,7 +147,10 @@ function freshAuthEnv(run) {
   ckInit(file, { task: 'sec', id: run, units: ['u'] });
   markPrepared(file);
   const T0 = Date.parse('2026-01-01T00:00:00Z');
-  const bind = { rawPlan: 'PLAN-BYTES', config: 'CONFIG-BYTES', baseSha: 'abc1234def', targetRef: 'refs/heads/main', engineVersion: '1.0.0' };
+  const bind = {
+    rawPlan: 'PLAN-BYTES', config: 'CONFIG-BYTES', intakeSha: shaOf('INTAKE-SNAPSHOT-BYTES'),
+    baseSha: 'abc1234def', targetRef: 'refs/heads/main', engineVersion: '1.1.0',
+  };
   const rec = issuePlanApproval({
     capDir, run, ...bind, ttlMs: 10 * 60 * 1000,
     interactive: true, context: 'coordinator', checkpointFile: file, worktreePaths: [], now: T0,
@@ -160,7 +163,7 @@ const shaOf = (s) => createHash('sha256').update(s).digest('hex');
 function bindPresent(a) {
   return {
     kind: 'plan',
-    planSha: shaOf(a.bind.rawPlan), configSha: shaOf(a.bind.config),
+    planSha: shaOf(a.bind.rawPlan), configSha: shaOf(a.bind.config), intakeSha: a.bind.intakeSha,
     baseSha: a.bind.baseSha, targetRef: a.bind.targetRef, engineVersion: a.bind.engineVersion, nonce: a.nonce,
   };
 }
@@ -430,8 +433,9 @@ test('AC1: a SURVIVING child (unit in_progress) blocks every privileged transiti
     );
     assert.throws(
       () => issuePlanApproval({
-        capDir: join(fx.dir, 'caps2'), run: fx.run, rawPlan: 'p', config: 'c', baseSha: 'abc1234', targetRef: 'refs/heads/main',
-        engineVersion: '1.0.0', ttlMs: 1000, interactive: true, context: 'coordinator', checkpointFile: fx.checkpointFile, worktreePaths: [],
+        capDir: join(fx.dir, 'caps2'), run: fx.run, rawPlan: 'p', config: 'c', intakeSha: shaOf('intake'),
+        baseSha: 'abc1234', targetRef: 'refs/heads/main', engineVersion: '1.1.0', ttlMs: 1000,
+        interactive: true, context: 'coordinator', checkpointFile: fx.checkpointFile, worktreePaths: [],
       }),
       (e) => e instanceof AuthorizationError && e.reason === 'executor-active',
     );

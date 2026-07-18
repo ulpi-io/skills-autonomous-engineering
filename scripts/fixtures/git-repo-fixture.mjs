@@ -21,6 +21,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import {
+  captureIntakeSnapshot, intakePathFor,
+} from '../../autonomous-pipeline/scripts/lib/intake-scope.mjs';
+
 export function raw(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
@@ -84,13 +88,19 @@ export function makeGitRepo({ layers, redTasks = [], run } = {}) {
 
   const planPath = join(dir, 'plan.json'); writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`);
   const configPath = join(dir, 'config.json'); writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  const intakePath = intakePathFor(config);
+  captureIntakeSnapshot(intakePath, JSON.stringify({
+    run: runId,
+    selection: 'E2E fixture selected bundle',
+    selectedScope,
+  }), { expectedRun: runId });
   const checkpointFile = join(stateDir, `${runId}.json`);
   const controlPath = join(controlDir, 'control.json');
   const schemaPath = join(controlDir, 'schema.json'); writeFileSync(schemaPath, `${JSON.stringify({ type: 'object' })}\n`);
 
   const fx = {
     dir, root, worktreesDir, stateDir, capDir, controlDir, controlPath, schemaPath,
-    base, run: runId, targetRef, integrationRef, intBranch, plan, config, planPath, configPath,
+    base, run: runId, targetRef, integrationRef, intBranch, plan, config, planPath, configPath, intakePath,
     checkpointFile, allIds, layers,
     // Rewrite the fake-codex control file. This is fixture state, NOT plan/config bytes — flipping it
     // between start and resume does not perturb the coordinator's plan/config drift hashes.
