@@ -100,15 +100,27 @@ live-run guards, a `Stop` honest-termination backstop, and a `SessionEnd` checkp
 ```
 /plugin marketplace add ulpi-io/skills-autonomous-engineering
 /plugin install autonomous-engineering@ulpi-autonomous-engineering
+/reload-plugins     # load the skills into THIS session (or just start a new session)
 ```
+
+`/reload-plugins` is not optional: a session that was already open when you installed will **not** see
+the skills until you reload or restart. Then invoke a skill by its **plugin-namespaced** command —
+`/autonomous-engineering:autonomous-pipeline "<feature>"`, `/autonomous-engineering:auto-test src/auth`,
+… — or just describe the task and Claude routes to the skill by its `description`. Note the namespace: as
+a plugin the command is `/autonomous-engineering:auto-test`, **not** the bare `/auto-test` (that bare form
+only exists when the skill is installed under `.claude/skills/`). Type `/autonomous-engineering:` and Tab
+to list them all.
 
 ## How routing actually works (verified, not assumed)
 
 - **Claude Code** reads each skill's `description` + `when_to_use` (≤1,536 chars combined — CI-enforced
   here, because past that it silently truncates and routing degrades) for model-invocation, and every
-  skill is a `/skill-name` slash command. Skills must be *installed* — any of the five layouts the
-  guard resolvers also cover: project `.claude/skills/` or `.agents/skills/`, user `~/.claude/skills/`
-  or `~/.agents/skills/`, or a plugin — a raw clone is not discovered.
+  skill is also a typeable slash command. The exact command depends on the install layout: as a **plugin**
+  it is namespaced — `/autonomous-engineering:auto-test`, and you must run `/reload-plugins` (or restart)
+  after installing before it resolves; under `.claude/skills/` or `.agents/skills/` it is the bare
+  `/auto-test`. Skills must be *installed* — any of the five layouts the guard resolvers also cover:
+  project `.claude/skills/` or `.agents/skills/`, user `~/.claude/skills/` or `~/.agents/skills/`, or a
+  plugin — a raw clone is not discovered.
 - **Other agents (Codex, Cursor, …)**: the same skills install through **skills.sh**, which adapts the
   single SKILL.md source per agent; the `name` + `description` frontmatter routes natively wherever the
   agent supports skills. (A Codex-native plugin — adapters, manifest, and a reproducible marketplace
