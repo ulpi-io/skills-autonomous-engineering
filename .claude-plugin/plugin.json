@@ -5,8 +5,8 @@
     "name": "ulpi.io",
     "url": "https://github.com/ulpi-io"
   },
-  "homepage": "https://github.com/ulpi-io/skills-autonomous-engineering",
-  "repository": "https://github.com/ulpi-io/skills-autonomous-engineering",
+  "homepage": "https://github.com/ulpi-io/autonomous-engineering",
+  "repository": "https://github.com/ulpi-io/autonomous-engineering",
   "license": "MIT",
   "skills": "./",
   "hooks": "./hooks/hooks.claude.json"
