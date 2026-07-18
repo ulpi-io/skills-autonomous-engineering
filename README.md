@@ -335,6 +335,10 @@ anything irreversible. Fail-closed gates between phases, a durable pipeline chec
 phase/task), a whole-run budget, and a verified findings register at the end. It runs one pass and stops —
 no autonomous whole-lifecycle recursion; a fix round is the user's call.
 
+For the fastest run on Claude Code, enable **ultracode** (the max effort level) so build, review, and
+verify fan out across parallel agents — `/effort ultracode`, or include `ultracode` in your request. It's
+optional: without it the pipeline still completes with the same gates and findings, just sequentially.
+
 ### auto-map
 
 ```bash

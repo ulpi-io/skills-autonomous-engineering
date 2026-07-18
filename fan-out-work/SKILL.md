@@ -59,6 +59,13 @@ through its stages concurrently with caps and isolation, optionally reduce to a 
 faithfully — including what was dropped. The win is wall-clock (the slowest single item's chain, not the
 sum), *without* the usual parallel sins: silent truncation, hidden failures, and write races.
 
+On Claude Code, that wall-clock win is real only when the session runs at the **`ultracode`** effort level
+(the mode that makes the `Workflow` tool / concurrent agents the default) — a runtime harness setting,
+distinct from this skill's static `effort: high` frontmatter. Without it the map runs **sequentially**:
+every item is still covered with the same results, isolation, and honest accounting — only slower. A
+sequential run is NOT a truncation (rule 1), so never report it as reduced coverage. If throughput
+matters and ultracode is off, tell the user they can enable it (`/effort ultracode`) — then proceed.
+
 ## Phase 0: Scout the work-list inline (before any fan-out)
 
 Discover the items in the coordinator FIRST — you usually can't know the fan-out's shape until you've

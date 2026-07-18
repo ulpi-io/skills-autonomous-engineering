@@ -14,7 +14,9 @@ marketplace packager — is developed on the `codex-native-plugin` branch, not o
   `auto-spec → auto-plan → auto-build → auto-simplify → auto-test → auto-review → auto-performance → auto-ship`
 - **Primitives** — `converge-loop` (bounded until-green/until-dry loops), `adversarial-verify`
   (majority-refute skeptic panels), `checkpoint-resume` (durable skip-done state), `fan-out-work`
-  (capped parallel map), `budget-guard` (the five stop conditions every unattended run declares).
+  (capped parallel map — on Claude Code its concurrency needs the `ultracode` effort level, else it runs
+  sequentially with identical results; the deterministic CLI coordinator parallelizes via its own config),
+  `budget-guard` (the five stop conditions every unattended run declares).
 - **Autonomy layer** — `autonomous-pipeline` (chains the phases; single human approval; runnable
   deterministic coordinator), `watch-and-act` (bounded external polling), `schedule-recurring-agent`
   (idempotent recurring routines), `auto-map` (verified disclosure-tiered context maps), `auto-learn`

@@ -153,8 +153,8 @@ other a Claude-only compatibility shim.
 - Verify a git work tree + working branch; declare the pipeline `budget-guard` contract; create the
   pipeline `checkpoint-resume` file (one unit per build task (phase statuses live in the same file)).
 
-**Success criteria:** run mode determined; phase config + budget set; git preflight passed; checkpoint
-open.
+**Success criteria:** run mode determined; ultracode precheck surfaced (or confirmed on); phase config +
+budget set; git preflight passed; checkpoint open.
 
 ## Phase 1: Run the lifecycle (one approved pass)
 

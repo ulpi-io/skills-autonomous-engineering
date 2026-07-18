@@ -75,7 +75,9 @@ you have to triage for hallucinations.
 ## Phase 1: Fan out the review dimensions
 
 Launch one reviewer per dimension over the diff (`fan-out-work`), each an independent lens with the actual
-code in hand:
+code in hand. (On Claude Code the dimensions run truly in parallel only at the **`ultracode`** effort
+level; with it off they run sequentially — same dimensions, same findings, just slower. If speed matters
+and it's off, mention `/effort ultracode` once, then proceed — never block the review on it.)
 
 - **correctness** — logic errors, edge/error paths, off-by-one, null/empty, concurrency/races, wrong
   assumptions;

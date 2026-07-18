@@ -48,6 +48,12 @@ real autonomy primitives** — this is why the collection is Claude-first:
 - the **`/schedule`** skill + **`RemoteTrigger`** (durable recurring cloud Routines),
 - **`CronCreate`** (session-only, in-process cron).
 
+The **`Workflow`** and concurrent **`Agent`** fan-out (used by `autonomous-pipeline`, `auto-review`,
+`fan-out-work`) run tasks *concurrently* only when the session is at the **`ultracode`** effort level — a
+runtime harness mode (ultrathink-style), NOT the per-skill `effort:` frontmatter. With ultracode off they
+degrade to **sequential** (same gates, isolation, and results — only slower). Skills that fan out surface
+a one-line "enable `/effort ultracode`" nudge at intake and proceed; they never require it.
+
 On a native goal loop, compile a skill's termination set into **`/goal` + `/loop`** — see
 `converge-loop/references/native-goal-loop.md`. (Codex offers `/goal`; the provider-neutral path is the
 deterministic coordinator in `AGENTS.md`.)

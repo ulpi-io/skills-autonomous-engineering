@@ -104,6 +104,12 @@ const skillBrief = (t, engType) => {
 const MAX_FIX = CFG.maxFix ?? 3
 const MAX_BUILD_PARALLEL = CFG.maxBuildParallel ?? 4   // worktree engineers are heavy (full checkout)
 const MAX_PARALLEL = CFG.maxParallel ?? 6              // read-only reviewers/verifiers
+// ── PARALLELISM ↔ ultracode: these caps are >1 and the fan-out below (mapAll / buildGate / agentGate)
+//    awaits all its promises, so concurrency is REAL only when the Claude Code session runs at the
+//    `ultracode` effort level (its multi-agent orchestration mode). With ultracode off the SAME code path
+//    executes serially through the SAME gates, checkpoints and register — identical outcome, only slower
+//    wall-clock. This backend cannot prompt the user; the "enable ultracode" nudge lives in the SKILL's
+//    Phase 0 intake, never here.
 
 // ── whole-run budget (SKILL rule #5: "BUDGET THE WHOLE RUN") — the Workflow `budget` global is the
 //    turn's token target and a HARD ceiling. Stop-and-report at the next phase boundary once the run
